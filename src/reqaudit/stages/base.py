@@ -17,6 +17,7 @@ from reqaudit.models import (
     Coverage,
     DocumentIR,
     DocumentProfile,
+    FactTable,
     Finding,
     IntakeResult,
     Question,
@@ -39,6 +40,7 @@ class RunState(BaseModel):
     profile: DocumentProfile | None = None
     units: list[Unit] = Field(default_factory=list)
     coverage: Coverage | None = None
+    facts: FactTable | None = None
     cells: list[Cell] = Field(default_factory=list)
     candidates: list[Finding] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)

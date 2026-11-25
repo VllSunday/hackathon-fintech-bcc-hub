@@ -23,6 +23,7 @@ SET_CRITERIA = {
                             C.RANKED, C.TRACEABLE, C.MODIFIABLE, C.DOCUMENT_INTEGRITY],
     CellKind.API_CONTRACT: [C.SET_CONSISTENT, C.COMPLETE, C.UNAMBIGUOUS, C.VERIFIABLE,
                             C.CONFORMING],
+    CellKind.VALUES: [C.SET_CONSISTENT, C.UNAMBIGUOUS],
 }
 SET_TITLES = {
     CellKind.CONSISTENCY: "Непротиворечивость набора",
@@ -30,6 +31,7 @@ SET_TITLES = {
     CellKind.ACCEPTANCE: "Критерии приёмки",
     CellKind.COMPLETENESS: "Полнота и документ целиком",
     CellKind.API_CONTRACT: "Спецификация интерфейса",
+    CellKind.VALUES: "Сверка значений",
 }
 
 
@@ -45,7 +47,7 @@ def requirement_batches(units: list[Unit], size: int = BATCH_SIZE) -> list[list[
 
 
 def plan_cells(ctx_units: list[Unit], has_child_spec: bool, has_acceptance: bool,
-               has_api: bool) -> CellPlan:
+               has_api: bool, has_facts: bool = False) -> CellPlan:
     cells: list[Cell] = []
     notes: list[str] = []
 
@@ -68,6 +70,8 @@ def plan_cells(ctx_units: list[Unit], has_child_spec: bool, has_acceptance: bool
                      "полноты.")
     if has_api:
         kinds.append(CellKind.API_CONTRACT)
+    if has_facts:
+        kinds.append(CellKind.VALUES)
 
     for kind in kinds:
         cells.append(Cell(id=kind.value, kind=kind, title=SET_TITLES[kind],
@@ -88,6 +92,7 @@ class PlanStage(Stage):
             has_child_spec=any(p.role == PartRole.CHILD_SPEC for p in profile.parts),
             has_acceptance=profile.has_acceptance_criteria,
             has_api=profile.has_api_spec,
+            has_facts=bool(ctx.state.facts and ctx.state.facts.facts),
         )
         ctx.state.cells = plan.cells
         ctx.trace.event("plan_summary", stage=self.code,

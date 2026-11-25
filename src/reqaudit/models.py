@@ -218,6 +218,39 @@ class Segmentation(BaseModel):
     coverage: Coverage
 
 
+# --- s3: facts --------------------------------------------------------------------------
+
+
+class Fact(BaseModel):
+    id: str = Field(description="Report id, e.g. 'F-001'.")
+    entity: str
+    entity_label: str
+    attribute: str
+    value: str
+    normalized: str = Field(description="Value after code normalisation, used for comparing.")
+    condition: str | None = None
+    block_id: str
+    quote: str
+
+
+class FactConflict(BaseModel):
+    """A discrepancy code found between facts. A candidate only: a model judges it in s5."""
+
+    kind: str = Field(description="different_values or unit_mismatch")
+    entity: str
+    attribute: str
+    fact_ids: list[str]
+    summary: str = Field(description="Russian, one line, what differs.")
+
+
+class FactTable(BaseModel):
+    """Artifact of s3."""
+
+    facts: list[Fact]
+    conflicts: list[FactConflict]
+    dropped: int = 0
+
+
 # --- s4: cells --------------------------------------------------------------------------
 
 
@@ -228,6 +261,7 @@ class CellKind(StrEnum):
     ACCEPTANCE = "acceptance"
     COMPLETENESS = "completeness"
     API_CONTRACT = "api_contract"
+    VALUES = "values"
 
 
 class Cell(BaseModel):

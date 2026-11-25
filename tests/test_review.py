@@ -140,7 +140,8 @@ def test_unavailable_opponent_keeps_findings_and_says_so(tmp_path):
             raise ModelQuotaExceededError("fake", "quota")
         return model.function(messages, info)
 
-    _, state, report, _ = run(tmp_path, lambda _id: FunctionModel(opponent_down))
+    result, state, report, _ = run(tmp_path, lambda _id: FunctionModel(opponent_down))
+    assert result.exit_code == 3 and result.status == "checks_incomplete"
     assert state["findings"]
     assert all("opponent:unavailable" in f["trail"] for f in state["findings"]
                if f["trail"][0] == "reviewer")
@@ -192,7 +193,7 @@ def test_editor_failure_falls_back_to_reviewer_questions(tmp_path):
         return model.function(messages, info)
 
     result, state, report, _ = run(tmp_path, lambda _id: FunctionModel(editor_down))
-    assert result.exit_code == 0
+    assert result.exit_code == 3  # the report is usable, but the run says what did not run
     assert state["questions"]
     assert "редактор отчёта" in report and "Дубли не сведены" in report
 

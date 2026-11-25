@@ -104,6 +104,21 @@ def test_quota_falls_back_to_next_model(tmp_path):
     assert '"llm_fallback"' in events
 
 
+def test_exhausted_model_is_not_asked_again_in_the_run(tmp_path):
+    primary, primary_calls = answering(ModelQuotaExceededError("fake:a", "credit balance"))
+    backup, backup_calls = answering(RU)
+    client, _ = client_for(tmp_path, {"fake:a": primary, "fake:b": backup},
+                           chain=("fake:a", "fake:b"))
+
+    ask(client, prompt="первый")
+    ask(client, prompt="второй")
+    ask(client, prompt="третий")
+
+    assert primary_calls["calls"] == 1  # asked once, then skipped
+    assert backup_calls["calls"] == 3
+    assert '"llm_model_disabled"' in (tmp_path / "trace.jsonl").read_text(encoding="utf-8")
+
+
 def test_all_models_failing_raises(tmp_path):
     primary, _ = answering(ModelQuotaExceededError("fake:a", "daily quota"))
     client, _ = client_for(tmp_path, {"fake:a": primary})

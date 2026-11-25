@@ -20,6 +20,7 @@ from reqaudit.stages.base import RunContext, RunState, Stage, StageError
 from reqaudit.stages.s0_intake import IntakeStage
 from reqaudit.stages.s1_read import ReadStage
 from reqaudit.stages.s2_segment import SegmentStage
+from reqaudit.stages.s3_facts import FactsStage
 from reqaudit.stages.s4_plan import PlanStage
 from reqaudit.stages.s5_candidates import CandidatesStage
 from reqaudit.stages.s6_review import ReviewStage
@@ -32,7 +33,7 @@ STAGE_PLAN: list[tuple[str, str]] = [
     ("s0", "Приёмка"),
     ("s1", "Чтение"),
     ("s2", "Профиль и нарезка"),
-    ("s3", "Факты и глоссарий"),
+    ("s3", "Факты"),
     ("s4", "План ячеек"),
     ("s5", "Кандидаты в дефекты"),
     ("s6", "Оппонент и арбитр"),
@@ -41,8 +42,9 @@ STAGE_PLAN: list[tuple[str, str]] = [
     ("s9", "Отчёт"),
 ]
 
-IMPLEMENTED: list[Stage] = [IntakeStage(), ReadStage(), SegmentStage(), PlanStage(),
-                            CandidatesStage(), ReviewStage(), GatesStage(), QuestionsStage()]
+IMPLEMENTED: list[Stage] = [IntakeStage(), ReadStage(), SegmentStage(), FactsStage(),
+                            PlanStage(), CandidatesStage(), ReviewStage(), GatesStage(),
+                            QuestionsStage()]
 
 EXIT_OK = 0
 EXIT_INPUT_ERROR = 2
@@ -114,6 +116,9 @@ def run_pipeline(input_path: Path, output_path: Path, settings: Settings,
         passport.input_sha256 = state.intake.sha256
     if state.document and state.document.title:
         passport.document_title = state.document.title
+    if status == "completed" and state.check_failures:
+        # All stages ran, but some checks inside them did not: the report is incomplete.
+        status, exit_code = "checks_incomplete", EXIT_PARTIAL
     passport.status = status
     passport.llm_calls = llm.requests
     passport.llm_cache_hits = llm.cache_hits

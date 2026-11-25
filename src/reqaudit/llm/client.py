@@ -86,6 +86,8 @@ class LLMClient:
         self._factory = model_factory or to_library_model_id
         self._sleep = sleep
         self._last_request: dict[str, float] = {}
+        # Models that ran out of quota or rejected the key; skipped for the rest of the run.
+        self._unavailable: dict[str, str] = {}
         self.requests = 0
         self.cache_hits = 0
         self.models_used: list[str] = []
@@ -166,6 +168,9 @@ class LLMClient:
 
         failures: list[str] = []
         for model_id in chain:
+            if model_id in self._unavailable:
+                failures.append(f"{model_id}: {self._unavailable[model_id]} ранее в этом прогоне")
+                continue
             try:
                 output, usage, attempts, seconds = await self._call(
                     model_id, instructions, content, output_type, check, soft_check, settings,
@@ -271,6 +276,15 @@ class LLMClient:
                 except _FALL_THROUGH as err:
                     self.requests += 1
                     self._trace_rejections(messages, step, model_id)
+                    if isinstance(err, pai.ModelQuotaExceededError | pai.ModelAuthenticationError):
+                        # No point asking this model again in this run.
+                        reason = ("квота или баланс исчерпаны"
+                                  if isinstance(err, pai.ModelQuotaExceededError)
+                                  else "ключ отклонён провайдером")
+                        self._unavailable[model_id] = reason
+                        self.trace.event("llm_model_disabled", step=step, model=model_id,
+                                         reason=reason, detail=str(err)[:500])
+                        raise _ModelGaveUp(f"{reason} ({err})") from err
                     raise _ModelGaveUp(f"{type(err).__name__}: {err}") from err
             usage = result.usage
             self.requests += max(usage.requests, 1)

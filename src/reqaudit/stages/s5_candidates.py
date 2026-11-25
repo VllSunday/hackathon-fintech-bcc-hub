@@ -33,6 +33,7 @@ from reqaudit.stages.review_common import (
     profile_view,
     requirement_index,
 )
+from reqaudit.stages.s3_facts import fact_table_view
 
 ROLE = "judge"
 _MAX_COMPLAINTS = 25
@@ -120,6 +121,8 @@ def _prompt(ctx: RunContext, cell: Cell) -> str:
                            ctx.settings.window_chars),
              profile_view(state.profile),
              requirement_index(state.units)]
+    if cell.kind == CellKind.VALUES and state.facts is not None:
+        parts.append(fact_table_view(state.facts))
     if cell.kind == CellKind.REQUIREMENTS:
         listed = "\n".join(
             f"{u.id} ({u.kind.value}, {u.doc_label or 'без номера'}, blocks "

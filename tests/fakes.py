@@ -121,14 +121,15 @@ def fake_team(mutate_segment: Mutate | None = None,
               keep_disputed: bool = False,
               editor: Callable[[str], dict] = honest_editor,
               page: Callable[[str], dict] = honest_page,
-              picture: Callable[[str], dict] = honest_picture):
+              picture: Callable[[str], dict] = honest_picture,
+              facts: Callable[[str], dict] = lambda prompt: {"facts": []}):
     """A model that plays every role. Returns the model and per-role call counters.
 
     `refute(title)` decides which findings the opponent refutes; `keep_disputed` is the
     arbiter's answer for them.
     """
     calls = {"profile": 0, "segment": 0, "review": 0, "opponent": 0, "arbiter": 0,
-             "editor": 0, "page": 0, "picture": 0}
+             "editor": 0, "page": 0, "picture": 0, "facts": 0}
 
     def respond(messages, info: AgentInfo) -> ModelResponse:
         tool = info.output_tools[0]
@@ -168,6 +169,9 @@ def fake_team(mutate_segment: Mutate | None = None,
         elif "duplicates" in fields:
             calls["editor"] += 1
             args = editor(prompt)
+        elif fields == {"facts"}:
+            calls["facts"] += 1
+            args = facts(prompt)
         elif fields == {"blocks"}:
             calls["page"] += 1
             args = page(prompt)

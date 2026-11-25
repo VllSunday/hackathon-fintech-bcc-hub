@@ -39,6 +39,7 @@ _SKIP_RU = {"goal": "цели", "context": "пояснения", "metadata": "с
 _STATUS_RU = {
     "completed": "завершён",
     "partial": "завершён частично: один из этапов упал, отчёт собран из того, что успели",
+    "checks_incomplete": "завершён, но часть проверок не выполнена; список — в разделе «Сводка»",
     "input_rejected": "документ не принят",
     "running": "не завершён",
 }
@@ -223,6 +224,21 @@ def _finding(f: Finding, blocks: dict[str, Block]) -> str:
     return "\n".join(lines).rstrip()
 
 
+def _facts_note(state: RunState) -> str:
+    """How code lined up the document's facts, before the reviewers judged them."""
+    table = state.facts
+    if table is None:
+        return "Сверка значений не выполнялась."
+    head = (f"Агент выписал из документа {plural(len(table.facts), 'факт', 'факта', 'фактов')} "
+            "(значения, единицы, типы, диапазоны, сравнения) и сверил их кодом. ")
+    if not table.conflicts:
+        return head + "Расхождений между ними код не нашёл."
+    lines = [head + "Расхождения, найденные кодом; решение по каждому принимал рецензент, "
+                    "подтверждённые вошли в находки ниже:", ""]
+    lines += [f"- {c.summary}" for c in table.conflicts]
+    return "\n".join(lines)
+
+
 def _per_requirement(state: RunState, confirmed: list[Finding],
                      blocks: dict[str, Block]) -> str:
     own: dict[str, list[str]] = {}
@@ -334,6 +350,7 @@ def render_markdown(p: Passport, state: RunState, plan: list[tuple[str, str]]) -
     set_level = [f for f in confirmed if f.scope != Scope.REQUIREMENT]
     out += ["## Проверка всего набора требований", ""]
     if checks_ran:
+        out += [_facts_note(state), ""]
         out.append("\n\n".join(_finding(f, blocks) for f in set_level)
                    or "Дефектов набора требований не найдено.")
     else:

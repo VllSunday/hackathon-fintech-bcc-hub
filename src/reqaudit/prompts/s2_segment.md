@@ -1,6 +1,6 @@
 ---
 id: s2_segment
-version: 1
+version: 2
 ---
 ## Your role: requirements analyst, segmentation
 
@@ -39,6 +39,8 @@ A unit is one statement of what the system, product or process must do, be or pr
    - `approval`: sign-off and approval tables;
    - `empty`: blocks with no meaningful text, such as empty table rows;
    - `other`: anything else, rarely.
+
+   Unit kinds and skip reasons are two separate lists. A block that states no obligation goes into `skipped`; it never becomes a unit with a skip reason as its kind.
 8. `notes` comes first: in Russian, two or three sentences on how this part of the document expresses requirements (numbered list, tables, prose, process description). Use it to plan before listing units.
 
 ### Example

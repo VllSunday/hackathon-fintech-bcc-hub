@@ -3,8 +3,9 @@
 .env.*
 !.env.example
 
-# Run artifacts and model response cache
+# Run artifacts, default report folder and model response cache
 runs/
+reports/
 .cache/
 
 # Python

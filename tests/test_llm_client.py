@@ -125,6 +125,7 @@ def test_missing_role_model_is_explained(tmp_path):
     with pytest.raises(LLMUnavailable) as info:
         ask(client)
     assert "REQAUDIT_MODEL_JUDGE" in info.value.message
+    assert "OPENAI_API_KEY" in info.value.message
 
 
 def test_model_id_mapping():

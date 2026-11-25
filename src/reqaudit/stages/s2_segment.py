@@ -34,6 +34,7 @@ from reqaudit.models import (
     DocumentProfile,
     Segmentation,
     SkippedBlock,
+    SkipReason,
     Unit,
     UnitKind,
 )
@@ -48,7 +49,9 @@ _MAX_COMPLAINTS = 25
 class UnitDraft(BaseModel):
     block_ids: list[str] = Field(min_length=1)
     doc_label: str | None = None
-    kind: UnitKind
+    # A skip reason here means the model judged the block not to be a requirement but put it
+    # in the wrong list; code moves it to `skipped` instead of rejecting the whole answer.
+    kind: UnitKind | SkipReason
     quote: str
     summary: str
 
@@ -80,8 +83,9 @@ def unit_problems(draft: UnitDraft, by_id: dict[str, Block]) -> list[str]:
     if has_ellipsis(draft.quote):
         problems.append("the quote uses an ellipsis; quote the statement whole")
     elif len(match_key(draft.quote)) < MIN_KEY_LENGTH:
-        problems.append("the quote is too short to identify a statement; a block without "
-                        "meaningful text goes to skipped with reason 'empty'")
+        problems.append("the quote is too short to locate reliably; quote the whole sentence "
+                        "or the whole table row including its field name, e.g. "
+                        "'REST type | GET' rather than 'GET'")
     elif not quote_in(draft.quote, blocks):
         found = locate(draft.quote, list(by_id.values()))
         hint = f"; this text occurs in {found}" if found else "; this text is not in the document"
@@ -212,6 +216,12 @@ def assemble(document: DocumentIR, profile: DocumentProfile,
         by_id = {b.id: b for b in visible(window)}
         needed.extend(_needed(window))
         for draft in answer.units:
+            if isinstance(draft.kind, SkipReason):
+                for block_id in draft.block_ids:
+                    if block_id in by_id:
+                        skipped.setdefault(block_id, SkippedBlock(block_id=block_id,
+                                                                  reason=draft.kind))
+                continue
             fixed, reason = _repair(draft, by_id)
             if fixed is None:
                 dropped.append(reason)

@@ -19,8 +19,9 @@ from typing import Any, TypeVar
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
 from pydantic import BaseModel, ValidationError  # noqa: E402
-from pydantic_ai import Agent, ModelRetry, RunContext  # noqa: E402
+from pydantic_ai import Agent, ModelRetry, RunContext, capture_run_messages  # noqa: E402
 from pydantic_ai import exceptions as pai  # noqa: E402
+from pydantic_ai.messages import RetryPromptPart, ToolReturnPart  # noqa: E402
 from pydantic_ai.models import Model  # noqa: E402
 
 from reqaudit.config import Settings  # noqa: E402
@@ -111,8 +112,8 @@ class LLMClient:
         chain = self.settings.chain_for(role)
         if not chain:
             raise LLMUnavailable(
-                f"Для роли «{role}» не задана модель. Укажите REQAUDIT_MODEL_{role.upper()} "
-                "или REQAUDIT_MODEL_JUDGE в файле .env, пример есть в .env.example.")
+                "Нет модели для проверки: задайте OPENAI_API_KEY или GEMINI_API_KEY в файле "
+                f".env (модель выберется сама) или укажите её в REQAUDIT_MODEL_{role.upper()}.")
 
         settings = {"timeout": self.settings.request_timeout_s, **(model_settings or {})}
         schema = output_type.model_json_schema()
@@ -223,26 +224,46 @@ class LLMClient:
             self._reserve()
             await self._throttle(model_id)
             started = time.perf_counter()
-            try:
-                result = await agent.run(prompt, model_settings=settings)
-            except _RETRYABLE as err:
-                self.requests += 1
-                if attempt >= self.settings.max_attempts:
-                    raise _ModelGaveUp(f"{type(err).__name__} после {attempt} попыток") from err
-                delay = getattr(err, "retry_after", None)
-                if delay is None:
-                    delay = self.settings.backoff_base_s * 2 ** (attempt - 1)
-                    delay *= 1 + random.random() / 4
-                self.trace.event("llm_retry", step=step, model=model_id, attempt=attempt,
-                                 error=type(err).__name__, delay=round(delay, 2))
-                await self._sleep(delay)
-                continue
-            except _FALL_THROUGH as err:
-                self.requests += 1
-                raise _ModelGaveUp(f"{type(err).__name__}: {err}") from err
+            with capture_run_messages() as messages:
+                try:
+                    result = await agent.run(prompt, model_settings=settings)
+                except _RETRYABLE as err:
+                    self.requests += 1
+                    if attempt >= self.settings.max_attempts:
+                        raise _ModelGaveUp(f"{type(err).__name__} после {attempt} попыток") from err
+                    await self._backoff(err, attempt, step, model_id)
+                    continue
+                except _FALL_THROUGH as err:
+                    self.requests += 1
+                    self._trace_rejections(messages, step, model_id)
+                    raise _ModelGaveUp(f"{type(err).__name__}: {err}") from err
             usage = result.usage
             self.requests += max(usage.requests, 1)
             return result.output, usage, attempt, time.perf_counter() - started
+
+    async def _backoff(self, err: Exception, attempt: int, step: str, model_id: str) -> None:
+        delay = getattr(err, "retry_after", None)
+        if delay is None:
+            delay = self.settings.backoff_base_s * 2 ** (attempt - 1) * (1 + random.random() / 4)
+        self.trace.event("llm_retry", step=step, model=model_id, attempt=attempt,
+                         error=type(err).__name__, delay=round(delay, 2))
+        await self._sleep(delay)
+
+    def _trace_rejections(self, messages: list, step: str, model_id: str) -> None:
+        """Record why the model's answers were rejected; otherwise the cause is invisible.
+
+        Schema errors come back to the model as the output tool's return value, checks as
+        retry prompts; both are collected.
+        """
+        feedback = []
+        for message in messages:
+            for part in getattr(message, "parts", []):
+                if isinstance(part, RetryPromptPart):
+                    feedback.append(part.model_response()[:1500])
+                elif isinstance(part, ToolReturnPart):
+                    feedback.append(str(part.content)[:1500])
+        if feedback:
+            self.trace.event("llm_invalid_output", step=step, model=model_id, feedback=feedback)
 
 
 class _ModelGaveUp(Exception):

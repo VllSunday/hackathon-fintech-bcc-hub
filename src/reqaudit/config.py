@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 PROFILES = ("quick", "thorough")
 ROLES = ("analyst", "judge", "opponent", "vision")
@@ -15,6 +15,19 @@ ROLE_FALLBACK = {"analyst": "judge", "opponent": "judge"}
 
 # Model request budget per run when REQAUDIT_MAX_LLM_CALLS is not set.
 _DEFAULT_BUDGET = {"quick": 60, "thorough": 400}
+
+# Which environment variable holds the key for each provider. Ollama needs none.
+PROVIDER_KEYS: dict[str, tuple[str, ...]] = {
+    "openai": ("OPENAI_API_KEY",),
+    "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    "google": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    "anthropic": ("ANTHROPIC_API_KEY",),
+}
+
+# Used when no model is configured: the first ones whose key is present, in this order.
+# gpt-5.5 was chosen by a live comparison on the organisers' document (2026-11-26).
+# The Gemini default has not been tried live yet.
+AUTO_MODELS = ("openai:gpt-5.5", "gemini:gemini-3.5-flash-lite")
 
 
 @dataclass(frozen=True)
@@ -35,6 +48,8 @@ class Settings:
     output_retries: int = 2
     # Characters of rendered document per model call; longer documents are split by sections.
     window_chars: int = 40_000
+    # Decisions taken while reading the configuration, shown in the console and the passport.
+    notes: list[str] = field(default_factory=list)
 
     def chain_for(self, role: str) -> list[str]:
         return self.models.get(role) or self.models.get(ROLE_FALLBACK.get(role, ""), [])
@@ -43,6 +58,36 @@ class Settings:
 def _env(name: str) -> str | None:
     value = os.environ.get(name, "").strip()
     return value or None
+
+
+def has_key(model_id: str) -> bool:
+    provider = model_id.partition(":")[0]
+    keys = PROVIDER_KEYS.get(provider)
+    return keys is None or any(_env(k) for k in keys)
+
+
+def _resolve_models(notes: list[str]) -> dict[str, list[str]]:
+    """Configured chains minus models without a key; an automatic choice if nothing is left."""
+    models: dict[str, list[str]] = {}
+    for role in ROLES:
+        configured = parse_chain(_env(f"REQAUDIT_MODEL_{role.upper()}"))
+        usable = [m for m in configured if has_key(m)]
+        for missing in (m for m in configured if m not in usable):
+            keys = " или ".join(PROVIDER_KEYS[missing.partition(':')[0]])
+            notes.append(f"Модель {missing} (роль {role}) пропущена: не задан {keys}.")
+        if usable:
+            models[role] = usable
+
+    if "judge" not in models:
+        auto = [m for m in AUTO_MODELS if has_key(m)]
+        if auto:
+            models["judge"] = auto
+            notes.append(f"Модель выбрана автоматически по ключу в .env: {auto[0]}"
+                         + (f", запасная {', '.join(auto[1:])}." if auto[1:] else "."))
+        else:
+            notes.append("Не найден ключ модели: задайте OPENAI_API_KEY или GEMINI_API_KEY "
+                         "в файле .env. Без модели агент прочитает документ, но не проверит его.")
+    return models
 
 
 def parse_chain(value: str | None) -> list[str]:
@@ -54,17 +99,16 @@ def load_settings(
     runs_dir: Path | None = None,
     cache_read: bool = True,
 ) -> Settings:
-    load_dotenv(override=False)
+    # Search from the working directory, not from this file: an installed package lives in
+    # site-packages, while the user's .env sits where they run the command.
+    load_dotenv(find_dotenv(usecwd=True), override=False)
 
     chosen = profile or _env("REQAUDIT_PROFILE") or "quick"
     if chosen not in PROFILES:
         raise ValueError(f"Неизвестный профиль '{chosen}'. Допустимо: {', '.join(PROFILES)}.")
 
-    models = {
-        role: chain
-        for role in ROLES
-        if (chain := parse_chain(_env(f"REQAUDIT_MODEL_{role.upper()}")))
-    }
+    notes: list[str] = []
+    models = _resolve_models(notes)
     rpm = _env("REQAUDIT_RPM")
 
     return Settings(
@@ -76,4 +120,5 @@ def load_settings(
         cache_read=cache_read,
         max_llm_calls=int(_env("REQAUDIT_MAX_LLM_CALLS") or _DEFAULT_BUDGET[chosen]),
         requests_per_minute=float(rpm) if rpm else None,
+        notes=notes,
     )

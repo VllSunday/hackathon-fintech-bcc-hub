@@ -68,6 +68,7 @@ def run_pipeline(input_path: Path, output_path: Path, settings: Settings,
                      state=state, trace=trace, llm=llm)
     passport = passport_mod.start(input_path.name, settings.profile, settings.models, run_id,
                                   run_dir)
+    passport.setup_notes = list(settings.notes)
 
     trace.event("run_start", run_id=run_id, input=str(input_path), profile=settings.profile)
     status = "completed"

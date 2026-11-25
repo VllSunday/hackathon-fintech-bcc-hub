@@ -214,6 +214,8 @@ def render_markdown(p: Passport, state: RunState, plan: list[tuple[str, str]]) -
         out += [f"> **Документ не принят.** {err.message}", ""]
 
     out += ["## Паспорт прогона", "", _passport(p), ""]
+    if p.setup_notes:
+        out += ["Настройка прогона:", ""] + [f"- {n}" for n in p.setup_notes] + [""]
     out += ["## Чтение документа", "", _reading(state), ""]
 
     out += ["## Как агент нарезал требования", "", _segmentation(state), ""]

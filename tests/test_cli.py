@@ -19,7 +19,7 @@ def test_run_without_model_reads_document_and_explains(tmp_path):
         assert section in text
     assert "requirements.md" in text
     assert "Блоков текста | 124" in text
-    assert "REQAUDIT_MODEL_JUDGE" in text
+    assert "Нет модели для проверки: задайте OPENAI_API_KEY или GEMINI_API_KEY" in text
     # Until checks exist, the report must not suggest the document is fine.
     assert "не означает, что документ без дефектов" in text
 
@@ -45,6 +45,16 @@ def test_unsupported_reader_gives_partial_report(tmp_path):
     text = report.read_text(encoding="utf-8")
     assert "Чтение формата pdf ещё не реализовано" in text
     assert "| s0 | Приёмка | выполнен |" in text
+
+
+def test_report_path_defaults_to_reports_folder(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    doc = tmp_path / "spec.md"
+    doc.write_text("# ТЗ\n\n* Клиент задаёт порог расходов.\n", encoding="utf-8")
+
+    main([str(doc), "--runs-dir", str(tmp_path / "runs")])
+
+    assert (tmp_path / "reports" / "spec.report.md").exists()
 
 
 def test_rejected_input_still_writes_report(tmp_path):

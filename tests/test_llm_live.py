@@ -3,6 +3,7 @@
 Needs REQAUDIT_MODEL_JUDGE and the matching API key in .env.
 """
 
+import sys
 from dataclasses import replace
 
 import pytest
@@ -40,4 +41,6 @@ def test_judge_model_answers_in_schema_and_russian(tmp_path):
 
     assert result.requirement_count == 2
     assert client.requests >= 1
-    print(f"\nmodel: {client.models_used}, summary: {result.summary}")
+    line = f"\nmodel: {client.models_used}, summary: {result.summary}"
+    encoding = sys.stdout.encoding or "utf-8"
+    print(line.encode(encoding, "replace").decode(encoding))  # Windows consoles lack '₸'

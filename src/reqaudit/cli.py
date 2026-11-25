@@ -26,7 +26,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("input", type=Path,
                         help="путь к документу требований: PDF, DOCX, MD, TXT, HTML, RTF")
-    parser.add_argument("output", type=Path, help="путь к файлу отчёта, например report.md")
+    parser.add_argument("output", type=Path, nargs="?",
+                        help="путь к файлу отчёта; по умолчанию reports/<имя документа>.report.md")
     parser.add_argument("--profile", choices=PROFILES,
                         help="профиль запуска; по умолчанию из REQAUDIT_PROFILE или quick")
     parser.add_argument("--runs-dir", type=Path,
@@ -47,7 +48,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Ошибка настройки: {err}", file=sys.stderr)
         return 2
 
-    result = run_pipeline(args.input, args.output, settings)
+    for note in settings.notes:
+        print(note)
+    output = args.output or Path("reports") / f"{args.input.stem}.report.md"
+    print(f"Проверяю {args.input} ...")
+    result = run_pipeline(args.input, output, settings)
     print(f"Отчёт: {result.report_path}")
     print(f"Артефакты прогона: {result.run_dir}")
     if result.status != "completed":

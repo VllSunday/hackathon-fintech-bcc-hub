@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from reqaudit.criteria import Criterion
 
@@ -162,6 +162,13 @@ class SkipReason(StrEnum):
 class SkippedBlock(BaseModel):
     block_id: str
     reason: SkipReason
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _unknown_reason_is_other(cls, value: object) -> object:
+        # A model inventing a reason should not cost the whole answer.
+        known = {r.value for r in SkipReason}
+        return value if value in known else SkipReason.OTHER.value
 
 
 class Coverage(BaseModel):

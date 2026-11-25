@@ -148,6 +148,27 @@ def test_unfixable_answer_is_accepted_and_cleaned_by_code(tmp_path):
     assert "Не удалось классифицировать 2 блока**" in report
 
 
+def test_unit_with_skip_reason_as_kind_becomes_skipped(tmp_path):
+    # Observed with a real model: a metadata row returned as a unit of kind "metadata".
+    def misfile(answer, n):
+        answer["units"][0]["kind"] = "metadata"
+        answer["skipped"][0]["reason"] = "invented-reason"
+        return answer
+
+    model, calls = fake_analyst(misfile)
+    result, _, state, trace = run(tmp_path, model)
+
+    assert calls["segment"] == 1
+    assert '"llm_check_retry"' not in trace
+    artifact = json.loads((result.run_dir / "s2_units.json").read_text(encoding="utf-8"))
+    skipped = {s["block_id"]: s["reason"] for s in artifact["skipped"]}
+    assert skipped["b0002"] == "other"
+    assert skipped["b0006"] == "metadata"
+    assert state["coverage"]["dropped_units"] == []
+    assert state["coverage"]["unclassified"] == []
+    assert all(u["block_ids"] != ["b0006"] for u in state["units"])
+
+
 def test_long_document_is_split_into_windows(tmp_path):
     model, calls = fake_analyst()
     _, _, state, trace = run(tmp_path, model, window_chars=3000)

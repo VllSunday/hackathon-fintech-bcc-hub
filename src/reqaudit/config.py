@@ -82,7 +82,7 @@ def _resolve_models(notes: list[str]) -> dict[str, list[str]]:
         auto = [m for m in AUTO_MODELS if has_key(m)]
         if auto:
             models["judge"] = auto
-            notes.append(f"Модель выбрана автоматически по ключу в .env: {auto[0]}"
+            notes.append(f"Модель выбрана автоматически по найденному ключу API: {auto[0]}"
                          + (f", запасная {', '.join(auto[1:])}." if auto[1:] else "."))
         else:
             notes.append("Не найден ключ модели: задайте OPENAI_API_KEY или GEMINI_API_KEY "

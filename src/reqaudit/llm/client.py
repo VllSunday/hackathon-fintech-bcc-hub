@@ -1,0 +1,233 @@
+"""One place for every model call: cache, trace, budget, throttling, retries and fallback.
+
+Model ids use our own format `provider:model`, where provider is gemini, openai,
+anthropic or ollama. A role maps to an ordered chain of model ids; the first one that
+answers wins. The library underneath is PydanticAI, hidden behind this class so it can
+be replaced without touching the stages.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import random
+import time
+from collections.abc import Awaitable, Callable, Sequence
+from datetime import datetime
+from typing import Any, TypeVar
+
+os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
+
+from pydantic import BaseModel, ValidationError  # noqa: E402
+from pydantic_ai import Agent, ModelRetry  # noqa: E402
+from pydantic_ai import exceptions as pai  # noqa: E402
+from pydantic_ai.models import Model  # noqa: E402
+
+from reqaudit.config import Settings  # noqa: E402
+from reqaudit.llm.cache import DiskCache, cache_key  # noqa: E402
+from reqaudit.llm.checks import Check  # noqa: E402
+from reqaudit.trace import Trace  # noqa: E402
+
+T = TypeVar("T", bound=BaseModel)
+ModelFactory = Callable[[str], "Model | str"]
+
+_PROVIDER_ALIASES = {"gemini": "google"}
+
+# Transient: wait and try the same model again.
+_RETRYABLE = (pai.ModelRateLimitError, pai.ModelUnavailableError, pai.ModelServerError,
+              pai.ModelConnectionError, pai.ModelRequestTimeout)
+# Persistent for this model: move on to the next model in the chain.
+_FALL_THROUGH = (pai.ModelAPIError, pai.UnexpectedModelBehavior)
+
+
+class LLMError(Exception):
+    """A model problem the run cannot work around. `message` is user-facing Russian text."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
+class BudgetExceeded(LLMError):
+    pass
+
+
+class LLMUnavailable(LLMError):
+    pass
+
+
+def to_library_model_id(model_id: str) -> str:
+    provider, sep, name = model_id.partition(":")
+    if not sep or not name:
+        raise LLMUnavailable(f"Имя модели «{model_id}» должно иметь вид provider:model, "
+                             "например gemini:gemini-3.5-flash-lite.")
+    return f"{_PROVIDER_ALIASES.get(provider, provider)}:{name}"
+
+
+class LLMClient:
+    def __init__(
+        self,
+        settings: Settings,
+        trace: Trace,
+        model_factory: ModelFactory | None = None,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
+        self.settings = settings
+        self.trace = trace
+        self.cache = DiskCache(settings.cache_dir)
+        self._factory = model_factory or to_library_model_id
+        self._sleep = sleep
+        self._last_request: dict[str, float] = {}
+        self.requests = 0
+        self.cache_hits = 0
+        self.models_used: list[str] = []
+
+    # --- public -------------------------------------------------------------------------
+
+    def structured(self, **kwargs: Any) -> Any:
+        """Synchronous wrapper around `astructured` for sequential stages."""
+        return asyncio.run(self.astructured(**kwargs))
+
+    async def astructured(
+        self,
+        *,
+        step: str,
+        role: str,
+        instructions: str,
+        prompt: str,
+        output_type: type[T],
+        prompt_ids: Sequence[str] = (),
+        check: Check | None = None,
+        model_settings: dict[str, Any] | None = None,
+    ) -> T:
+        chain = self.settings.models.get(role)
+        if not chain:
+            raise LLMUnavailable(
+                f"Для роли «{role}» не задана модель. Укажите REQAUDIT_MODEL_{role.upper()} "
+                "в файле .env, пример есть в .env.example.")
+
+        settings = {"timeout": self.settings.request_timeout_s, **(model_settings or {})}
+        schema = output_type.model_json_schema()
+        keys = {m: cache_key(m, instructions, prompt, schema, settings) for m in chain}
+
+        if self.settings.cache_read:
+            for model_id in chain:
+                cached = self._from_cache(keys[model_id], output_type)
+                if cached is not None:
+                    self.cache_hits += 1
+                    self._note_model(model_id)
+                    self.trace.event("llm_call", step=step, role=role, model=model_id,
+                                     cache_hit=True, key=keys[model_id][:16],
+                                     prompt_ids=list(prompt_ids))
+                    return cached
+
+        failures: list[str] = []
+        for model_id in chain:
+            try:
+                output, usage, attempts, seconds = await self._call(
+                    model_id, instructions, prompt, output_type, check, settings, step)
+            except _ModelGaveUp as err:
+                failures.append(f"{model_id}: {err}")
+                self.trace.event("llm_fallback", step=step, role=role, model=model_id,
+                                 reason=str(err))
+                continue
+
+            self.cache.put(keys[model_id], {
+                "model": model_id,
+                "step": step,
+                "prompt_ids": list(prompt_ids),
+                "created": datetime.now().astimezone().isoformat(timespec="seconds"),
+                "output": output.model_dump(mode="json"),
+                "usage": {"requests": usage.requests, "input_tokens": usage.input_tokens,
+                          "output_tokens": usage.output_tokens},
+            })
+            self._note_model(model_id)
+            self.trace.event("llm_call", step=step, role=role, model=model_id, cache_hit=False,
+                             key=keys[model_id][:16], prompt_ids=list(prompt_ids),
+                             attempts=attempts, seconds=round(seconds, 2),
+                             requests=usage.requests, input_tokens=usage.input_tokens,
+                             output_tokens=usage.output_tokens)
+            return output
+
+        raise LLMUnavailable(f"Ни одна модель для роли «{role}» не ответила. "
+                             + "; ".join(failures))
+
+    # --- internals ----------------------------------------------------------------------
+
+    def _from_cache(self, key: str, output_type: type[T]) -> T | None:
+        record = self.cache.get(key)
+        if record is None:
+            return None
+        try:
+            return output_type.model_validate(record["output"])
+        except (ValidationError, KeyError):
+            return None
+
+    def _note_model(self, model_id: str) -> None:
+        if model_id not in self.models_used:
+            self.models_used.append(model_id)
+
+    def _reserve(self) -> None:
+        if self.requests >= self.settings.max_llm_calls:
+            raise BudgetExceeded(
+                f"Исчерпан бюджет запросов к модели на прогон: {self.settings.max_llm_calls}. "
+                "Поднимите REQAUDIT_MAX_LLM_CALLS или повторите прогон: готовые ответы "
+                "возьмутся из кэша.")
+
+    async def _throttle(self, model_id: str) -> None:
+        rpm = self.settings.requests_per_minute
+        if not rpm:
+            return
+        provider = model_id.partition(":")[0]
+        wait = self._last_request.get(provider, 0.0) + 60.0 / rpm - time.monotonic()
+        if wait > 0:
+            await self._sleep(wait)
+        self._last_request[provider] = time.monotonic()
+
+    async def _call(self, model_id: str, instructions: str, prompt: str, output_type: type[T],
+                    check: Check | None, settings: dict[str, Any], step: str):
+        try:
+            model = self._factory(model_id)
+            agent = Agent(model, output_type=output_type, instructions=instructions,
+                          retries=self.settings.output_retries)
+        except (pai.UserError, LLMUnavailable, ValueError) as err:
+            raise _ModelGaveUp(f"модель не создана: {getattr(err, 'message', err)}") from err
+
+        if check is not None:
+            @agent.output_validator
+            def _validate(output: T) -> T:
+                complaint = check(output)
+                if complaint:
+                    raise ModelRetry(complaint)
+                return output
+
+        attempt = 0
+        while True:
+            attempt += 1
+            self._reserve()
+            await self._throttle(model_id)
+            started = time.perf_counter()
+            try:
+                result = await agent.run(prompt, model_settings=settings)
+            except _RETRYABLE as err:
+                self.requests += 1
+                if attempt >= self.settings.max_attempts:
+                    raise _ModelGaveUp(f"{type(err).__name__} после {attempt} попыток") from err
+                delay = getattr(err, "retry_after", None)
+                if delay is None:
+                    delay = self.settings.backoff_base_s * 2 ** (attempt - 1)
+                    delay *= 1 + random.random() / 4
+                self.trace.event("llm_retry", step=step, model=model_id, attempt=attempt,
+                                 error=type(err).__name__, delay=round(delay, 2))
+                await self._sleep(delay)
+                continue
+            except _FALL_THROUGH as err:
+                self.requests += 1
+                raise _ModelGaveUp(f"{type(err).__name__}: {err}") from err
+            usage = result.usage
+            self.requests += max(usage.requests, 1)
+            return result.output, usage, attempt, time.perf_counter() - started
+
+
+class _ModelGaveUp(Exception):
+    """This model cannot answer right now; try the next one in the chain."""

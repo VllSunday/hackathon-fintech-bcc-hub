@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
     "charset-normalizer>=3.3",
     "pydantic>=2.9",
+    "pydantic-ai-slim[anthropic,google,openai]>=2.75.0",
     "python-dotenv>=1.0",
 ]
 
@@ -28,6 +29,8 @@ packages = ["src/reqaudit"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not live'"
+markers = ["live: calls a real model API; needs keys in .env"]
 
 [tool.ruff]
 line-length = 100

@@ -89,11 +89,25 @@ class Block(BaseModel):
     table_header: list[str] | None = None
 
 
+class ReadIssue(BaseModel):
+    """A defect of the file itself found while reading: broken markup, hidden text, bad encoding.
+
+    Issues are evidence for `document_integrity` and `suspicious_content` findings later.
+    """
+
+    kind: str
+    message: str
+    line: int | None = None
+    block_id: str | None = None
+
+
 class DocumentIR(BaseModel):
     title: str | None = None
     format: SourceFormat
     blocks: list[Block]
+    line_count: int | None = None
     reader_chain: list[str] = Field(default_factory=list)
+    issues: list[ReadIssue] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 

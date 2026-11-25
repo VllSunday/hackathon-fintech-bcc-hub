@@ -20,14 +20,30 @@ def test_run_writes_report_and_artifacts(tmp_path):
     # Until checks exist, the report must not suggest the document is fine.
     assert "не означает, что документ без дефектов" in text
 
+    assert "Блоков текста | 124" in text
+
     run_dir = next((tmp_path / "runs").iterdir())
     assert (run_dir / "s0_intake.json").exists()
+    assert (run_dir / "s1_blocks.json").exists()
     passport = json.loads((run_dir / "passport.json").read_text(encoding="utf-8"))
     assert passport["status"] == "completed"
     assert len(passport["input_sha256"]) == 64
     events = [json.loads(line)["event"]
               for line in (run_dir / "trace.jsonl").read_text(encoding="utf-8").splitlines()]
     assert events[0] == "run_start" and events[-1] == "run_end"
+
+
+def test_unsupported_reader_gives_partial_report(tmp_path):
+    pdf = tmp_path / "spec.pdf"
+    pdf.write_bytes(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
+    report = tmp_path / "report.md"
+
+    code = main([str(pdf), str(report), "--runs-dir", str(tmp_path / "runs")])
+
+    assert code == 3
+    text = report.read_text(encoding="utf-8")
+    assert "Чтение формата pdf ещё не реализовано" in text
+    assert "| s0 | Приёмка | выполнен |" in text
 
 
 def test_rejected_input_still_writes_report(tmp_path):

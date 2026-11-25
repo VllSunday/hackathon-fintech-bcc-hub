@@ -31,6 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="профиль запуска; по умолчанию из REQAUDIT_PROFILE или quick")
     parser.add_argument("--runs-dir", type=Path,
                         help="папка для артефактов прогона; по умолчанию runs/")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="не брать ответы модели из кэша; новые ответы всё равно сохраняются")
     parser.add_argument("--version", action="version", version=f"reqaudit {__version__}")
     return parser
 
@@ -39,7 +41,8 @@ def main(argv: list[str] | None = None) -> int:
     _utf8_console()
     args = build_parser().parse_args(argv)
     try:
-        settings = load_settings(profile=args.profile, runs_dir=args.runs_dir)
+        settings = load_settings(profile=args.profile, runs_dir=args.runs_dir,
+                                 cache_read=not args.no_cache)
     except ValueError as err:
         print(f"Ошибка настройки: {err}", file=sys.stderr)
         return 2

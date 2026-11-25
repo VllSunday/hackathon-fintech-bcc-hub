@@ -10,6 +10,7 @@ from typing import ClassVar
 from pydantic import BaseModel, Field
 
 from reqaudit.config import Settings
+from reqaudit.llm import LLMClient
 from reqaudit.models import DocumentIR, Finding, IntakeResult, Question, Unit
 from reqaudit.trace import Trace
 
@@ -39,6 +40,7 @@ class RunContext:
     settings: Settings
     state: RunState
     trace: Trace
+    llm: LLMClient
 
 
 class Stage(ABC):

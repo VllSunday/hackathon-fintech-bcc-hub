@@ -46,9 +46,11 @@ def _passport(p: Passport) -> str:
             version += " (есть незакоммиченные изменения)"
     else:
         version = f"{p.agent_version}, коммит неизвестен"
-    models = ", ".join(f"{_ROLE_RU.get(r, r)}: `{m}`" for r, m in p.models.items())
-    if p.llm_calls == 0:
-        models = (models + "; " if models else "") + "модель в этом прогоне не вызывалась"
+    if p.models_used:
+        models = ", ".join(f"`{m}`" for m in p.models_used)
+        models += f"; запросов к модели: {p.llm_calls}, ответов из кэша: {p.llm_cache_hits}"
+    else:
+        models = "модель в этом прогоне не вызывалась"
     title = p.document_name + (f" — «{p.document_title}»" if p.document_title else "")
     rows = [
         ["Документ", title],
@@ -80,6 +82,10 @@ def _reading(state: RunState) -> str:
     warnings = intake.warnings + (state.document.warnings if state.document else [])
     if warnings:
         parts.append("Предупреждения:\n\n" + "\n".join(f"- {w}" for w in warnings))
+    if state.document and state.document.issues:
+        parts.append("Замечания к самому файлу:\n\n" + "\n".join(
+            f"- строка {i.line}: {i.message}" if i.line else f"- {i.message}"
+            for i in state.document.issues))
     if state.document is None and "s1" not in {e.stage for e in state.errors}:
         parts.append(_not_done("s1", state))
     return "\n\n".join(parts)

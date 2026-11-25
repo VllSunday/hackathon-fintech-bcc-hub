@@ -13,9 +13,11 @@ from pathlib import Path
 from reqaudit import passport as passport_mod
 from reqaudit.config import Settings
 from reqaudit.errors import InputError
+from reqaudit.llm import LLMClient, LLMError
 from reqaudit.report.render import render_markdown
 from reqaudit.stages.base import RunContext, RunState, Stage, StageError
 from reqaudit.stages.s0_intake import IntakeStage
+from reqaudit.stages.s1_read import ReadStage
 from reqaudit.trace import Trace
 
 # The full plan. Stages without an implementation are listed so the report can say so.
@@ -32,7 +34,7 @@ STAGE_PLAN: list[tuple[str, str]] = [
     ("s9", "Отчёт"),
 ]
 
-IMPLEMENTED: list[Stage] = [IntakeStage()]
+IMPLEMENTED: list[Stage] = [IntakeStage(), ReadStage()]
 
 EXIT_OK = 0
 EXIT_INPUT_ERROR = 2
@@ -51,14 +53,16 @@ def _new_run_id() -> str:
     return f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(2)}"
 
 
-def run_pipeline(input_path: Path, output_path: Path, settings: Settings) -> RunResult:
+def run_pipeline(input_path: Path, output_path: Path, settings: Settings,
+                 llm: LLMClient | None = None) -> RunResult:
     run_id = _new_run_id()
     run_dir = settings.runs_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     trace = Trace(run_dir / "trace.jsonl")
     state = RunState()
+    llm = llm or LLMClient(settings, trace)
     ctx = RunContext(input_path=input_path, run_dir=run_dir, settings=settings,
-                     state=state, trace=trace)
+                     state=state, trace=trace, llm=llm)
     passport = passport_mod.start(input_path.name, settings.profile, settings.models, run_id,
                                   run_dir)
 
@@ -75,6 +79,13 @@ def run_pipeline(input_path: Path, output_path: Path, settings: Settings) -> Run
             state.errors.append(StageError(stage=stage.code, kind=err.code, message=err.message))
             trace.event("stage_error", stage=stage.code, kind=err.code, message=err.message)
             status, exit_code = "input_rejected", EXIT_INPUT_ERROR
+            break
+        except LLMError as err:
+            state.errors.append(StageError(stage=stage.code, kind=type(err).__name__,
+                                           message=err.message))
+            trace.event("stage_error", stage=stage.code, kind=type(err).__name__,
+                        message=err.message)
+            status, exit_code = "partial", EXIT_PARTIAL
             break
         except Exception as err:  # noqa: BLE001 - the report must be written regardless
             state.errors.append(StageError(stage=stage.code, kind=type(err).__name__,
@@ -94,6 +105,9 @@ def run_pipeline(input_path: Path, output_path: Path, settings: Settings) -> Run
     if state.document and state.document.title:
         passport.document_title = state.document.title
     passport.status = status
+    passport.llm_calls = llm.requests
+    passport.llm_cache_hits = llm.cache_hits
+    passport.models_used = list(llm.models_used)
     passport.finished_at = datetime.now().astimezone().isoformat(timespec="seconds")
 
     # s9 is the report itself; it runs on every outcome.

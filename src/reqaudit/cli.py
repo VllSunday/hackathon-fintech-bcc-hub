@@ -55,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     result = run_pipeline(args.input, output, settings)
     print(f"Отчёт: {result.report_path}")
     print(f"Артефакты прогона: {result.run_dir}")
+    print(f"Расход модели: {result.spend}")
     if result.status != "completed":
         print(f"Статус прогона: {result.status}", file=sys.stderr)
     return result.exit_code

@@ -29,6 +29,11 @@ class Passport(BaseModel):
     models_used: list[str] = Field(default_factory=list)
     llm_calls: int = 0
     llm_cache_hits: int = 0
+    llm_input_tokens: int = 0
+    llm_cached_tokens: int = 0
+    llm_output_tokens: int = 0
+    llm_cost_usd: float = 0.0
+    llm_unpriced_calls: int = 0
     setup_notes: list[str] = Field(default_factory=list)
     prompts_fingerprint: str
     python: str = platform.python_version()

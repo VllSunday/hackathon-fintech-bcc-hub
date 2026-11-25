@@ -15,7 +15,7 @@ from reqaudit.config import Settings
 from reqaudit.errors import InputError
 from reqaudit.llm import LLMClient, LLMError
 from reqaudit.llm.client import ModelFactory
-from reqaudit.report.render import render_markdown
+from reqaudit.report.render import render_markdown, spend_line
 from reqaudit.stages.base import RunContext, RunState, Stage, StageError
 from reqaudit.stages.s0_intake import IntakeStage
 from reqaudit.stages.s1_read import ReadStage
@@ -57,6 +57,7 @@ class RunResult:
     report_path: Path
     run_dir: Path
     status: str
+    spend: str = ""
 
 
 def _new_run_id() -> str:
@@ -122,6 +123,11 @@ def run_pipeline(input_path: Path, output_path: Path, settings: Settings,
     passport.status = status
     passport.llm_calls = llm.requests
     passport.llm_cache_hits = llm.cache_hits
+    passport.llm_input_tokens = llm.input_tokens
+    passport.llm_cached_tokens = llm.cached_tokens
+    passport.llm_output_tokens = llm.output_tokens
+    passport.llm_cost_usd = round(llm.cost_usd, 4)
+    passport.llm_unpriced_calls = llm.unpriced_calls
     passport.models_used = list(llm.models_used)
     passport.finished_at = datetime.now().astimezone().isoformat(timespec="seconds")
 
@@ -135,4 +141,5 @@ def run_pipeline(input_path: Path, output_path: Path, settings: Settings,
     (run_dir / "state.json").write_text(state.model_dump_json(indent=2), encoding="utf-8")
     trace.event("run_end", status=status, exit_code=exit_code)
 
-    return RunResult(exit_code=exit_code, report_path=output_path, run_dir=run_dir, status=status)
+    return RunResult(exit_code=exit_code, report_path=output_path, run_dir=run_dir, status=status,
+                     spend=spend_line(passport))

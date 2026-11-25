@@ -104,6 +104,32 @@ def test_rows_of_one_example_table_are_not_conflicts():
     assert len(find_conflicts(facts, {"b0001": "t1", "b0002": "t2"})) == 1
 
 
+def test_failed_fact_extraction_does_not_stop_the_other_checks(tmp_path):
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
+    from pydantic_ai.models.function import FunctionModel
+
+    model, calls = fake_team()
+
+    def facts_down(messages, info):
+        # A bad answer for this step only; quota errors would rightly disable the whole model.
+        if set(info.output_tools[0].parameters_json_schema["properties"]) == {"facts"}:
+            raise UnexpectedModelBehavior("unusable answer")
+        return model.function(messages, info)
+
+    source = tmp_path / "spec.md"
+    source.write_text(DOC, encoding="utf-8")
+    settings = replace(Settings(), runs_dir=tmp_path / "runs", cache_dir=tmp_path / "cache",
+                       models={"judge": ["fake:team"]})
+    result = run_pipeline(source, tmp_path / "report.md", settings,
+                          model_factory=lambda _id: FunctionModel(facts_down))
+    state = json.loads((result.run_dir / "state.json").read_text(encoding="utf-8"))
+
+    assert result.exit_code == 3 and result.status == "checks_incomplete"
+    assert calls["review"] > 0 and state["findings"]  # the rest of the checks ran
+    assert any(f["cell"] == "Таблица фактов и сверка значений" for f in state["check_failures"])
+    assert all(c["kind"] != "values" for c in state["cells"])
+
+
 def _facts_from_prompt(prompt: str) -> dict:
     """A fake extractor that reads the test document the way a model would."""
     ids = {text: bid for bid, _, text in _BLOCK_LINE.findall(prompt)}

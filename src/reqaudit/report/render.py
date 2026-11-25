@@ -77,6 +77,19 @@ def _not_done(stage: str, state: RunState) -> str:
             "Раздел будет заполнен после его подключения.")
 
 
+def spend_line(p: Passport) -> str:
+    """Tokens and catalogue cost of the run, in one line for the passport and the console."""
+    if p.llm_calls == 0:
+        return "запросов к модели не было" + (
+            f" (все {p.llm_cache_hits} ответов из кэша)" if p.llm_cache_hits else "")
+    line = (f"вход {p.llm_input_tokens / 1000:.1f} тыс. токенов (из кэша провайдера "
+            f"{p.llm_cached_tokens / 1000:.1f} тыс.), выход {p.llm_output_tokens / 1000:.1f} "
+            f"тыс.; стоимость ≈ ${p.llm_cost_usd:.2f} по справочнику цен genai-prices")
+    if p.llm_unpriced_calls:
+        line += f", без учёта {p.llm_unpriced_calls} вызовов моделей, которых нет в справочнике"
+    return line
+
+
 def _passport(p: Passport) -> str:
     if p.git_commit:
         version = f"{p.agent_version}, коммит `{p.git_commit[:12]}`"
@@ -95,6 +108,7 @@ def _passport(p: Passport) -> str:
         ["SHA-256 входного файла", f"`{p.input_sha256}`" if p.input_sha256 else None],
         ["Дата прогона", p.started_at],
         ["Модель", models],
+        ["Расход модели", spend_line(p)],
         ["Версия агента", version],
         ["Профиль", p.profile],
         ["Отпечаток промптов", f"`{p.prompts_fingerprint}`"],

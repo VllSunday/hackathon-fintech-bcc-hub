@@ -23,7 +23,8 @@ from pydantic import BaseModel, field_validator
 
 from reqaudit import prompt_store
 from reqaudit.llm.checks import Check, combine
-from reqaudit.models import Block, Fact, FactConflict, FactTable
+from reqaudit.llm.client import LLMError
+from reqaudit.models import Block, CheckFailure, Fact, FactConflict, FactTable
 from reqaudit.reading.render import LEGEND, render_blocks, split_windows, visible
 from reqaudit.stages.base import RunContext, Stage
 from reqaudit.stages.review_common import EvidenceDraft, evidence_problem, verify_evidence
@@ -284,10 +285,19 @@ class FactsStage(Stage):
             instructions, ids = prompt_store.compose("s3_facts", legend=LEGEND,
                                                      known_entities=listed)
             scope = "" if len(windows) == 1 else f"Part {k} of {len(windows)}. "
-            answer = ctx.llm.structured(
-                step=f"s3_facts[{k}/{len(windows)}]", role=ROLE, instructions=instructions,
-                prompt=f"{scope}<document>\n{render_blocks(window)}\n</document>\n",
-                output_type=FactsAnswer, prompt_ids=ids, check=facts_check(blocks, known))
+            try:
+                answer = ctx.llm.structured(
+                    step=f"s3_facts[{k}/{len(windows)}]", role=ROLE, instructions=instructions,
+                    prompt=f"{scope}<document>\n{render_blocks(window)}\n</document>\n",
+                    output_type=FactsAnswer, prompt_ids=ids, check=facts_check(blocks, known))
+            except LLMError as err:
+                # Facts are an extra check: without them the other checks still run, and the
+                # report lists the value check as not done.
+                ctx.state.check_failures.append(CheckFailure(
+                    stage=self.code, cell="Таблица фактов и сверка значений",
+                    message=err.message))
+                ctx.state.facts = None
+                return FactTable(facts=[], conflicts=[])
             drafts.extend(answer.facts)
             known |= {f.entity for f in answer.facts}
 

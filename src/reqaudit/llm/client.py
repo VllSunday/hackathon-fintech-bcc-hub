@@ -34,6 +34,7 @@ from pydantic_ai.models import Model  # noqa: E402
 from reqaudit.config import Settings  # noqa: E402
 from reqaudit.llm.cache import DiskCache, cache_key  # noqa: E402
 from reqaudit.llm.checks import Check  # noqa: E402
+from reqaudit.llm.pricing import price_usd  # noqa: E402
 from reqaudit.trace import Trace  # noqa: E402
 
 T = TypeVar("T", bound=BaseModel)
@@ -91,6 +92,12 @@ class LLMClient:
         self.requests = 0
         self.cache_hits = 0
         self.models_used: list[str] = []
+        # Spend of this run: tokens as providers report them, and the catalogue price.
+        self.input_tokens = 0
+        self.cached_tokens = 0
+        self.output_tokens = 0
+        self.cost_usd = 0.0
+        self.unpriced_calls = 0
 
     # --- public -------------------------------------------------------------------------
 
@@ -107,16 +114,39 @@ class LLMClient:
         return asyncio.run(self._amany(requests))
 
     async def _amany(self, requests: Sequence[dict[str, Any]]) -> list[Any]:
-        gate = asyncio.Semaphore(self.settings.concurrency)
+        """Parallel calls, ordered so the provider's prompt cache can work.
 
-        async def one(kwargs: dict[str, Any]) -> Any:
+        Providers cache a prompt's prefix only after a request with it has been processed;
+        requests sent at the same moment all miss. Requests that share instructions and the
+        start of the prompt (cells of one kind over the same document) form a group: with
+        three or more, one goes first and the rest follow, reading the prefix from the cache.
+        The requests themselves are unchanged; only their order and a routing hint differ.
+        """
+        gate = asyncio.Semaphore(self.settings.concurrency)
+        results: list[Any] = [None] * len(requests)
+
+        groups: dict[str, list[int]] = {}
+        for i, r in enumerate(requests):
+            groups.setdefault(_prefix_key(r), []).append(i)
+        first_wave, second_wave = [], []
+        for key, members in groups.items():
+            if len(members) >= _WARM_UP_MIN_GROUP:
+                first_wave.append((members[0], key))
+                second_wave += [(i, key) for i in members[1:]]
+            else:
+                first_wave += [(i, None) for i in members]
+
+        async def one(index: int, group: str | None) -> None:
             async with gate:
                 try:
-                    return await self.astructured(**kwargs)
+                    results[index] = await self.astructured(**requests[index],
+                                                            provider_cache_key=group)
                 except LLMError as err:
-                    return err
+                    results[index] = err
 
-        return list(await asyncio.gather(*(one(r) for r in requests)))
+        await asyncio.gather(*(one(i, g) for i, g in first_wave))
+        await asyncio.gather(*(one(i, g) for i, g in second_wave))
+        return results
 
     async def astructured(
         self,
@@ -131,6 +161,7 @@ class LLMClient:
         soft_check: bool = True,
         model_settings: dict[str, Any] | None = None,
         images: Sequence[bytes] = (),
+        provider_cache_key: str | None = None,
     ) -> T:
         """Ask the role's model for a typed answer.
 
@@ -171,10 +202,15 @@ class LLMClient:
             if model_id in self._unavailable:
                 failures.append(f"{model_id}: {self._unavailable[model_id]} ранее в этом прогоне")
                 continue
+            call_settings = dict(settings)
+            if provider_cache_key and model_id.startswith("openai:"):
+                # Routing hint only: sends requests with one prefix to where it is cached.
+                # Not part of the disk cache key, because it does not change the answer.
+                call_settings["openai_prompt_cache_key"] = provider_cache_key
             try:
                 output, usage, attempts, seconds = await self._call(
-                    model_id, instructions, content, output_type, check, soft_check, settings,
-                    step)
+                    model_id, instructions, content, output_type, check, soft_check,
+                    call_settings, step)
             except _ModelGaveUp as err:
                 failures.append(f"{model_id}: {err}")
                 self.trace.event("llm_fallback", step=step, role=role, model=model_id,
@@ -191,11 +227,21 @@ class LLMClient:
                           "output_tokens": usage.output_tokens},
             })
             self._note_model(model_id)
+            cached = usage.cache_read_tokens or 0
+            cost = price_usd(model_id, usage.input_tokens, cached, usage.output_tokens)
+            self.input_tokens += usage.input_tokens
+            self.cached_tokens += cached
+            self.output_tokens += usage.output_tokens
+            if cost is None:
+                self.unpriced_calls += 1
+            else:
+                self.cost_usd += cost
             self.trace.event("llm_call", step=step, role=role, model=model_id, cache_hit=False,
                              key=keys[model_id][:16], prompt_ids=list(prompt_ids),
                              attempts=attempts, seconds=round(seconds, 2),
                              requests=usage.requests, input_tokens=usage.input_tokens,
-                             output_tokens=usage.output_tokens)
+                             cached_tokens=cached, output_tokens=usage.output_tokens,
+                             cost_usd=round(cost, 4) if cost is not None else None)
             return output
 
         raise LLMUnavailable(f"Ни одна модель для роли «{role}» не ответила. "
@@ -217,6 +263,12 @@ class LLMClient:
             self.models_used.append(model_id)
 
     def _reserve(self) -> None:
+        limit = self.settings.max_cost_usd
+        if limit is not None and self.cost_usd >= limit:
+            raise BudgetExceeded(
+                f"Достигнут потолок стоимости прогона ${limit:.2f} (потрачено "
+                f"${self.cost_usd:.2f}). Поднимите REQAUDIT_MAX_COST_USD или повторите прогон: "
+                "готовые ответы возьмутся из кэша.")
         if self.requests >= self.settings.max_llm_calls:
             raise BudgetExceeded(
                 f"Исчерпан бюджет запросов к модели на прогон: {self.settings.max_llm_calls}. "
@@ -313,6 +365,16 @@ class LLMClient:
                     feedback.append(str(part.content)[:1500])
         if feedback:
             self.trace.event("llm_invalid_output", step=step, model=model_id, feedback=feedback)
+
+
+_WARM_UP_MIN_GROUP = 3
+_PREFIX_CHARS = 4000
+
+
+def _prefix_key(request: dict[str, Any]) -> str:
+    """Requests with equal keys share instructions and the start of the prompt."""
+    head = request["instructions"] + "\0" + request["prompt"][:_PREFIX_CHARS]
+    return "reqaudit-" + hashlib.sha256(head.encode("utf-8")).hexdigest()[:24]
 
 
 class _ModelGaveUp(Exception):

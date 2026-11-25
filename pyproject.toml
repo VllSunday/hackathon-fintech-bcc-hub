@@ -5,11 +5,19 @@ description = "Агент проверки качества требований
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "beautifulsoup4>=4.12",
     "charset-normalizer>=3.3",
     "pydantic>=2.9",
     "pydantic-ai-slim[anthropic,google,openai]>=2.75.0",
+    "pymupdf>=1.26,<2",
+    "python-docx>=1.1",
     "python-dotenv>=1.0",
+    "striprtf>=0.0.26",
 ]
+
+[project.optional-dependencies]
+# Structural PDF reading with Docling: about 1.2 GB with torch, models download on first use.
+docling = ["docling>=2.150"]
 
 [project.scripts]
 reqaudit = "reqaudit.cli:main"

@@ -75,6 +75,8 @@ class Anchor(BaseModel):
     page: int | None = None
     line_start: int | None = None
     line_end: int | None = None
+    paragraph: int | None = Field(default=None, description="Paragraph number in formats "
+                                  "without pages or lines, e.g. DOCX.")
     section_path: list[str] = Field(default_factory=list)
 
 

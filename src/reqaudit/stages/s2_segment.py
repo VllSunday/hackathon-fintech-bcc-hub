@@ -42,7 +42,7 @@ from reqaudit.reading.render import LEGEND, render_blocks, render_outline, split
 from reqaudit.stages.base import RunContext, Stage
 
 ROLE = "analyst"
-_STRUCTURAL = {BlockKind.HEADING, BlockKind.TABLE}
+_STRUCTURAL = {BlockKind.HEADING, BlockKind.TABLE, BlockKind.HEADER_FOOTER}
 _MAX_COMPLAINTS = 25
 
 

@@ -5,7 +5,16 @@ from __future__ import annotations
 import re
 
 from reqaudit import criteria
-from reqaudit.models import Block, Finding, FindingStatus, PartRole, Scope, Severity, UnitKind
+from reqaudit.models import (
+    Block,
+    BlockSource,
+    Finding,
+    FindingStatus,
+    PartRole,
+    Scope,
+    Severity,
+    UnitKind,
+)
 from reqaudit.passport import Passport
 from reqaudit.stages.base import RunState
 
@@ -133,15 +142,26 @@ def display_quote(quote: str) -> str:
 
 
 def _place(block_ids: list[str], blocks: dict[str, Block]) -> str:
-    anchors = [blocks[i].anchor for i in block_ids if i in blocks]
-    if not anchors:
+    found = [blocks[i] for i in block_ids if i in blocks]
+    if not found:
         return "—"
+    anchors = [b.anchor for b in found]
+    note = (", распознано по изображению"
+            if any(b.source == BlockSource.VLM for b in found) else "")
     pages = sorted({a.page for a in anchors if a.page})
     if pages:
-        return "стр. " + ", ".join(map(str, pages))
-    start = min(a.line_start for a in anchors if a.line_start)
-    end = max(a.line_end for a in anchors if a.line_end)
-    return f"строка {start}" if start == end else f"строки {start}–{end}"
+        return "стр. " + ", ".join(map(str, pages)) + note
+    paragraphs = sorted({a.paragraph for a in anchors if a.paragraph})
+    if paragraphs:
+        span = (str(paragraphs[0]) if len(paragraphs) == 1
+                else f"{paragraphs[0]}–{paragraphs[-1]}")
+        return f"фрагмент {span}{note}"
+    lines = [a for a in anchors if a.line_start]
+    if not lines:
+        return "—" + note
+    start = min(a.line_start for a in lines)
+    end = max(a.line_end or a.line_start for a in lines)
+    return (f"строка {start}" if start == end else f"строки {start}–{end}") + note
 
 
 def _segmentation(state: RunState) -> str:

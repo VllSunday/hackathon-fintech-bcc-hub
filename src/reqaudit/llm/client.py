@@ -9,6 +9,7 @@ be replaced without touching the stages.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import random
 import time
@@ -19,7 +20,13 @@ from typing import Any, TypeVar
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
 from pydantic import BaseModel, ValidationError  # noqa: E402
-from pydantic_ai import Agent, ModelRetry, RunContext, capture_run_messages  # noqa: E402
+from pydantic_ai import (  # noqa: E402
+    Agent,
+    BinaryContent,
+    ModelRetry,
+    RunContext,
+    capture_run_messages,
+)
 from pydantic_ai import exceptions as pai  # noqa: E402
 from pydantic_ai.messages import RetryPromptPart, ToolReturnPart  # noqa: E402
 from pydantic_ai.models import Model  # noqa: E402
@@ -121,6 +128,7 @@ class LLMClient:
         check: Check | None = None,
         soft_check: bool = True,
         model_settings: dict[str, Any] | None = None,
+        images: Sequence[bytes] = (),
     ) -> T:
         """Ask the role's model for a typed answer.
 
@@ -137,7 +145,13 @@ class LLMClient:
 
         settings = {"timeout": self.settings.request_timeout_s, **(model_settings or {})}
         schema = output_type.model_json_schema()
-        keys = {m: cache_key(m, instructions, prompt, schema, settings) for m in chain}
+        # Images are PNG bytes; their hashes make the cache key depend on the pictures too.
+        image_keys = "".join(f"\n<image {hashlib.sha256(i).hexdigest()}>" for i in images)
+        keys = {m: cache_key(m, instructions, prompt + image_keys, schema, settings)
+                for m in chain}
+        content: str | list[Any] = prompt
+        if images:
+            content = [prompt, *(BinaryContent(data=i, media_type="image/png") for i in images)]
 
         if self.settings.cache_read:
             for model_id in chain:
@@ -154,7 +168,7 @@ class LLMClient:
         for model_id in chain:
             try:
                 output, usage, attempts, seconds = await self._call(
-                    model_id, instructions, prompt, output_type, check, soft_check, settings,
+                    model_id, instructions, content, output_type, check, soft_check, settings,
                     step)
             except _ModelGaveUp as err:
                 failures.append(f"{model_id}: {err}")
@@ -214,7 +228,8 @@ class LLMClient:
             await self._sleep(wait)
         self._last_request[provider] = time.monotonic()
 
-    async def _call(self, model_id: str, instructions: str, prompt: str, output_type: type[T],
+    async def _call(self, model_id: str, instructions: str, prompt: str | list[Any],
+                    output_type: type[T],
                     check: Check | None, soft_check: bool, settings: dict[str, Any],
                     step: str):
         try:

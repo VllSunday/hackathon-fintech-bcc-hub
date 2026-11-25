@@ -155,6 +155,9 @@ class GatesStage(Stage):
                 continue
             criterion, severity, title, explanation = spec
             quote = block.text.split("\n")[0][:200]
+            if issue.kind == "hidden_text":
+                short = quote if len(quote) <= 50 else quote[:50].rsplit(" ", 1)[0] + "…"
+                title = f"Скрытый текст: «{short}»"
             found.append(Finding(
                 id=f"read#{len(found) + 1}", scope=_scope(criterion, []), criterion=criterion,
                 title=title, explanation=f"{explanation} {issue.message}",

@@ -96,19 +96,39 @@ def honest_editor(prompt: str) -> dict:
     return {"duplicates": groups, "questions": questions}
 
 
+def honest_page(prompt: str) -> dict:
+    """What a transcriber would return for a scanned page of a small specification."""
+    return {"blocks": [
+        {"kind": "heading", "text": "Требования к уведомлениям", "level": 1},
+        {"kind": "list_item", "text": "Ф-1. Клиент задаёт порог расходов в тенге."},
+        {"kind": "table_row", "text": "Поле | Значение"},
+        {"kind": "table_row", "text": "Порог | от 1 000 до 1 000 000 ₸"},
+    ]}
+
+
+def honest_picture(prompt: str) -> dict:
+    return {"kind": "diagram",
+            "description": "Схема взаимодействия процессинга, сервиса расходов и сервиса push.",
+            "text_in_image": "Процессинг / Сервис расходов / Push / Push отправляется не позднее "
+                             "60 секунд после события",
+            "statements": ["Push отправляется не позднее 60 секунд после события"]}
+
+
 def fake_team(mutate_segment: Mutate | None = None,
               review: Callable[[str], dict] = honest_review,
               set_review: Callable[[str], dict] = honest_set_review,
               refute: Callable[[str], bool] = lambda title: False,
               keep_disputed: bool = False,
-              editor: Callable[[str], dict] = honest_editor):
+              editor: Callable[[str], dict] = honest_editor,
+              page: Callable[[str], dict] = honest_page,
+              picture: Callable[[str], dict] = honest_picture):
     """A model that plays every role. Returns the model and per-role call counters.
 
     `refute(title)` decides which findings the opponent refutes; `keep_disputed` is the
     arbiter's answer for them.
     """
     calls = {"profile": 0, "segment": 0, "review": 0, "opponent": 0, "arbiter": 0,
-             "editor": 0}
+             "editor": 0, "page": 0, "picture": 0}
 
     def respond(messages, info: AgentInfo) -> ModelResponse:
         tool = info.output_tools[0]
@@ -148,6 +168,12 @@ def fake_team(mutate_segment: Mutate | None = None,
         elif "duplicates" in fields:
             calls["editor"] += 1
             args = editor(prompt)
+        elif fields == {"blocks"}:
+            calls["page"] += 1
+            args = page(prompt)
+        elif "statements" in fields:
+            calls["picture"] += 1
+            args = picture(prompt)
         else:
             raise AssertionError(f"unexpected schema: {sorted(fields)}")
         return ModelResponse(parts=[ToolCallPart(tool_name=tool.name, args=args)])

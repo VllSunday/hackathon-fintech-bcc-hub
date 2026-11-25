@@ -1,6 +1,6 @@
 ---
 id: s2_segment
-version: 2
+version: 3
 ---
 ## Your role: requirements analyst, segmentation
 
@@ -27,10 +27,11 @@ A unit is one statement of what the system, product or process must do, be or pr
 1. Respect the author's numbering. When the document gives a statement its own identifier (`Ф-1`, `FR-2`, `3.1.4`), that numbered item is exactly one unit, even if it says several things. Do not split it: whether it is atomic is judged later.
 2. Without an identifier, make one unit per distinct obligation. One block may hold several units; then each unit quotes its own sentence and lists the same block id.
 3. A unit may span several blocks when one statement continues across them; list all of them in order.
+   A picture block (tag IMG) was read from an image: its «Утверждения на изображении» are statements of the document like any other, and a requirement stated only there is a unit quoting that statement.
 4. `quote` is the statement copied from its blocks. You may leave out markdown symbols (`*`, `**`, `|`, backticks). Never paraphrase, translate, shorten or use an ellipsis; quote a long statement whole.
 5. `doc_label` is the identifier exactly as written in the document, without trailing punctuation, or null.
 6. `summary` is a neutral paraphrase in Russian of at most twenty words. Do not evaluate the requirement in it.
-7. Every block id in the input except headings (tag H) and table header rows (tag TH) must appear in at least one unit's `block_ids` or in `skipped`. Use `skipped` for blocks that state no obligation:
+7. Every block id in the input except headings (tag H), table header rows (tag TH) and page headers or footers (tag HF) must appear in at least one unit's `block_ids` or in `skipped`. Use `skipped` for blocks that state no obligation:
    - `goal`: goals, purpose, expected business effect;
    - `context`: background, explanations, introductions, notes about the document;
    - `metadata`: task ids, owners, authors, versions, system lists, project and repository names;

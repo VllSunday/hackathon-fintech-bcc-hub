@@ -11,7 +11,7 @@ from dotenv import find_dotenv, load_dotenv
 PROFILES = ("quick", "thorough")
 ROLES = ("analyst", "judge", "opponent", "vision")
 # A role without its own model borrows this role's chain.
-ROLE_FALLBACK = {"analyst": "judge", "opponent": "judge"}
+ROLE_FALLBACK = {"analyst": "judge", "opponent": "judge", "vision": "judge"}
 
 # Model request budget per run when REQAUDIT_MAX_LLM_CALLS is not set.
 _DEFAULT_BUDGET = {"quick": 60, "thorough": 400}
@@ -50,6 +50,14 @@ class Settings:
     window_chars: int = 40_000
     # Model calls running at the same time within one stage.
     concurrency: int = 6
+    # Vision: "auto" reads scanned pages and pictures; "all" also re-reads every PDF page by
+    # image and replaces a text layer that lost text; "off" never sends images.
+    vision: str = "auto"
+    max_vision_pages: int = 40
+    max_pictures: int = 40
+    # PDF reader: "pymupdf" (text layer), "docling" (structure; needs the docling extra),
+    # "auto" uses Docling when it is installed and the profile is thorough.
+    pdf_reader: str = "auto"
     # Decisions taken while reading the configuration, shown in the console and the passport.
     notes: list[str] = field(default_factory=list)
 
@@ -92,6 +100,13 @@ def _resolve_models(notes: list[str]) -> dict[str, list[str]]:
     return models
 
 
+def _choice(name: str, allowed: tuple[str, ...], default: str) -> str:
+    value = (_env(name) or default).lower()
+    if value not in allowed:
+        raise ValueError(f"{name}={value}: допустимо {', '.join(allowed)}.")
+    return value
+
+
 def parse_chain(value: str | None) -> list[str]:
     return [item.strip() for item in (value or "").split(",") if item.strip()]
 
@@ -123,5 +138,8 @@ def load_settings(
         max_llm_calls=int(_env("REQAUDIT_MAX_LLM_CALLS") or _DEFAULT_BUDGET[chosen]),
         requests_per_minute=float(rpm) if rpm else None,
         concurrency=max(1, int(_env("REQAUDIT_CONCURRENCY") or 6)),
+        vision=_choice("REQAUDIT_VISION", ("auto", "all", "off"),
+                       "all" if chosen == "thorough" else "auto"),
+        pdf_reader=_choice("REQAUDIT_PDF_READER", ("auto", "pymupdf", "docling"), "auto"),
         notes=notes,
     )

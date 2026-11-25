@@ -1,0 +1,109 @@
+"""Runs the stages in order, persists each artifact, and always writes a report."""
+
+from __future__ import annotations
+
+import secrets
+import shutil
+import time
+import traceback
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+
+from reqaudit import passport as passport_mod
+from reqaudit.config import Settings
+from reqaudit.errors import InputError
+from reqaudit.report.render import render_markdown
+from reqaudit.stages.base import RunContext, RunState, Stage, StageError
+from reqaudit.stages.s0_intake import IntakeStage
+from reqaudit.trace import Trace
+
+# The full plan. Stages without an implementation are listed so the report can say so.
+STAGE_PLAN: list[tuple[str, str]] = [
+    ("s0", "Приёмка"),
+    ("s1", "Чтение"),
+    ("s2", "Профиль и нарезка"),
+    ("s3", "Факты и глоссарий"),
+    ("s4", "План ячеек"),
+    ("s5", "Кандидаты в дефекты"),
+    ("s6", "Оппонент и арбитр"),
+    ("s7", "Гейты доказательств"),
+    ("s8", "Вопросы автору"),
+    ("s9", "Отчёт"),
+]
+
+IMPLEMENTED: list[Stage] = [IntakeStage()]
+
+EXIT_OK = 0
+EXIT_INPUT_ERROR = 2
+EXIT_PARTIAL = 3
+
+
+@dataclass
+class RunResult:
+    exit_code: int
+    report_path: Path
+    run_dir: Path
+    status: str
+
+
+def _new_run_id() -> str:
+    return f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(2)}"
+
+
+def run_pipeline(input_path: Path, output_path: Path, settings: Settings) -> RunResult:
+    run_id = _new_run_id()
+    run_dir = settings.runs_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    trace = Trace(run_dir / "trace.jsonl")
+    state = RunState()
+    ctx = RunContext(input_path=input_path, run_dir=run_dir, settings=settings,
+                     state=state, trace=trace)
+    passport = passport_mod.start(input_path.name, settings.profile, settings.models, run_id,
+                                  run_dir)
+
+    trace.event("run_start", run_id=run_id, input=str(input_path), profile=settings.profile)
+    status = "completed"
+    exit_code = EXIT_OK
+
+    for stage in IMPLEMENTED:
+        trace.event("stage_start", stage=stage.code)
+        started = time.perf_counter()
+        try:
+            artifact = stage.run(ctx)
+        except InputError as err:
+            state.errors.append(StageError(stage=stage.code, kind=err.code, message=err.message))
+            trace.event("stage_error", stage=stage.code, kind=err.code, message=err.message)
+            status, exit_code = "input_rejected", EXIT_INPUT_ERROR
+            break
+        except Exception as err:  # noqa: BLE001 - the report must be written regardless
+            state.errors.append(StageError(stage=stage.code, kind=type(err).__name__,
+                                           message=str(err)))
+            trace.event("stage_error", stage=stage.code, kind=type(err).__name__,
+                        message=str(err), traceback=traceback.format_exc())
+            status, exit_code = "partial", EXIT_PARTIAL
+            break
+        (run_dir / stage.artifact).write_text(
+            artifact.model_dump_json(indent=2), encoding="utf-8")
+        state.completed.append(stage.code)
+        trace.event("stage_end", stage=stage.code,
+                    seconds=round(time.perf_counter() - started, 3))
+
+    if state.intake:
+        passport.input_sha256 = state.intake.sha256
+    if state.document and state.document.title:
+        passport.document_title = state.document.title
+    passport.status = status
+    passport.finished_at = datetime.now().astimezone().isoformat(timespec="seconds")
+
+    # s9 is the report itself; it runs on every outcome.
+    state.completed.append("s9")
+    report = render_markdown(passport, state, STAGE_PLAN)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(report, encoding="utf-8")
+    shutil.copyfile(output_path, run_dir / "report.md")
+    (run_dir / "passport.json").write_text(passport.model_dump_json(indent=2), encoding="utf-8")
+    (run_dir / "state.json").write_text(state.model_dump_json(indent=2), encoding="utf-8")
+    trace.event("run_end", status=status, exit_code=exit_code)
+
+    return RunResult(exit_code=exit_code, report_path=output_path, run_dir=run_dir, status=status)

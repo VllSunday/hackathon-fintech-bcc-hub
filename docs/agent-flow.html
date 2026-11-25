@@ -1,0 +1,519 @@
+<title>Карта агента проверки ТЗ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@600;700&display=swap">
+<style>
+/* Layout: one column of figures, each a schematic that scrolls sideways on narrow screens; stage registry table between the overview and the detail figures. */
+:root {
+  --bg: #F6F8F6; --surface: #FFFFFF; --fg: #18211D; --muted: #586760; --line: #D3DAD6; --edge: #7C8A83;
+  --code-bg: #EDF0EE; --code-line: #8C9892; --code-ink: #47554E;
+  --model-bg: #E2F2E6; --model-line: #3D9159; --model-ink: #1E6238;
+  --agent-bg: #EAE8FA; --agent-line: #6B60C4; --agent-ink: #3F3599;
+  --gate-bg: #FFF3D3; --gate-line: #B5871B; --gate-ink: #725400;
+  --ext-bg: #FCE9E1; --ext-line: #D0684A; --ext-ink: #983D23;
+  --font-display: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111614; --surface: #19201D; --fg: #E5ECE8; --muted: #9BA9A2; --line: #2F3A35; --edge: #7F8E87;
+    --code-bg: #212925; --code-line: #6E7B74; --code-ink: #B4C0BA;
+    --model-bg: #173423; --model-line: #5CB67C; --model-ink: #A6E0BA;
+    --agent-bg: #242149; --agent-line: #928AE8; --agent-ink: #CAC5F7;
+    --gate-bg: #3A2F10; --gate-line: #D8AD45; --gate-ink: #F0D58C;
+    --ext-bg: #43211A; --ext-line: #E48A6D; --ext-ink: #F6C5B5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111614; --surface: #19201D; --fg: #E5ECE8; --muted: #9BA9A2; --line: #2F3A35; --edge: #7F8E87;
+  --code-bg: #212925; --code-line: #6E7B74; --code-ink: #B4C0BA;
+  --model-bg: #173423; --model-line: #5CB67C; --model-ink: #A6E0BA;
+  --agent-bg: #242149; --agent-line: #928AE8; --agent-ink: #CAC5F7;
+  --gate-bg: #3A2F10; --gate-line: #D8AD45; --gate-ink: #F0D58C;
+  --ext-bg: #43211A; --ext-line: #E48A6D; --ext-ink: #F6C5B5;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font: 400 15px/1.6 var(--font-body); }
+.page { max-width: 1240px; margin: 0 auto; padding-block: 32px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 40px; }
+h1 { font: 700 30px/1.2 var(--font-display); margin: 0; text-wrap: balance; }
+h2 { font: 600 20px/1.3 var(--font-display); margin: 0; text-wrap: balance; }
+p { margin: 0; max-width: 72ch; }
+.lead { color: var(--muted); }
+header, section { display: flex; flex-direction: column; gap: 14px; }
+.state { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.state b { font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 16px; height: 12px; border-radius: 3px; border: 1.5px solid; }
+.sw.pill { border-radius: 8px; }
+.sw-code { background: var(--code-bg); border-color: var(--code-line); }
+.sw-model { background: var(--model-bg); border-color: var(--model-line); }
+.sw-agent { background: var(--agent-bg); border-color: var(--agent-line); }
+.sw-gate { background: var(--gate-bg); border-color: var(--gate-line); }
+.sw-ext { background: var(--ext-bg); border-color: var(--ext-line); }
+figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.scroll svg { display: block; width: 100%; min-width: 1000px; height: auto; }
+figcaption { color: var(--muted); font-size: 14px; max-width: 80ch; }
+svg text { font-family: var(--font-body); }
+.n-code { fill: var(--code-bg); stroke: var(--code-line); }
+.n-model { fill: var(--model-bg); stroke: var(--model-line); }
+.n-agent { fill: var(--agent-bg); stroke: var(--agent-line); }
+.n-gate { fill: var(--gate-bg); stroke: var(--gate-line); }
+.n-ext { fill: var(--ext-bg); stroke: var(--ext-line); }
+.n-code, .n-model, .n-agent, .n-gate, .n-ext { stroke-width: 1.3; }
+.t { font-size: 13.5px; font-weight: 600; fill: var(--fg); }
+.s { font-size: 11.5px; fill: var(--muted); }
+.k { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); }
+.lbl { font-size: 11.5px; font-weight: 500; fill: var(--muted); }
+.tag { font-size: 11px; font-weight: 600; letter-spacing: .02em; }
+.tg-code { fill: var(--code-ink); } .tg-model { fill: var(--model-ink); } .tg-agent { fill: var(--agent-ink); } .tg-gate { fill: var(--gate-ink); } .tg-ext { fill: var(--ext-ink); }
+.pt { font-size: 13.5px; font-weight: 600; fill: var(--ext-ink); }
+.edge { stroke: var(--edge); stroke-width: 1.4; fill: none; }
+.dash { stroke-dasharray: 5 5; }
+.ah { fill: var(--edge); }
+.band { fill: none; stroke: var(--edge); stroke-width: 1; stroke-dasharray: 4 5; }
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; min-width: 900px; font-size: 13.5px; line-height: 1.45; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+th { font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td.code, code { font-family: var(--font-mono); font-size: 12px; }
+td.code { color: var(--muted); white-space: nowrap; }
+td.name { font-weight: 600; white-space: nowrap; }
+.who { display: inline-block; padding: 1px 8px; border-radius: 10px; border: 1px solid; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.who-code { background: var(--code-bg); border-color: var(--code-line); color: var(--code-ink); }
+.who-model { background: var(--model-bg); border-color: var(--model-line); color: var(--model-ink); }
+.who-agent { background: var(--agent-bg); border-color: var(--agent-line); color: var(--agent-ink); }
+.who-gate { background: var(--gate-bg); border-color: var(--gate-line); color: var(--gate-ink); }
+.st { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; white-space: nowrap; background: var(--code-bg); color: var(--code-ink); border: 1px solid var(--code-line); }
+.st-work { background: var(--gate-bg); color: var(--gate-ink); border-color: var(--gate-line); }
+.st-done { background: var(--model-bg); color: var(--model-ink); border-color: var(--model-line); }
+.st-eval { background: var(--agent-bg); color: var(--agent-ink); border-color: var(--agent-line); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.card h3 { font: 600 15px/1.3 var(--font-display); margin: 0; }
+.card ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
+dl { margin: 0; display: grid; grid-template-columns: minmax(170px, 240px) 1fr; gap: 8px 20px; }
+dt { font-weight: 600; } dd { margin: 0; color: var(--muted); }
+@media (max-width: 560px) { dl { grid-template-columns: 1fr; gap: 2px; } dd { margin-bottom: 10px; } h1 { font-size: 25px; } }
+</style>
+
+<div class="page">
+
+<header>
+  <h1>Карта агента проверки ТЗ</h1>
+  <p class="lead">Весь путь документа от файла до отчёта: десять этапов, кто на каждом работает, какой артефакт остаётся на диске и что проверяет код. Ниже три укрупнения: чтение файла, устройство одной ячейки проверки и внешний цикл улучшения.</p>
+  <div class="state"><span><b>Состояние на 26 ноября:</b> проектирование, код не написан.</span><span>Статусы этапов в таблице обновляются по мере работы.</span></div>
+  <div class="legend" aria-label="Обозначения">
+    <span><i class="sw sw-code"></i>код</span>
+    <span><i class="sw sw-model"></i>вызов модели по схеме</span>
+    <span><i class="sw sw-agent"></i>агент с инструментами</span>
+    <span><i class="sw sw-gate"></i>гейт: вычисляется, а не утверждается</span>
+    <span><i class="sw sw-ext pill"></i>внешнее: файл, человек, результат</span>
+  </div>
+</header>
+
+<section>
+  <h2>Общий поток</h2>
+  <figure>
+    <div class="scroll">
+      <svg viewBox="0 0 1180 700" role="img" aria-label="Десять этапов от документа до отчёта. Первые пять строят базу документа, следующие пять проверяют и доказывают. Ответы автора ТЗ возвращаются на этап оппонента и арбитра. Сквозные механизмы оборачивают каждый вызов модели.">
+        <defs><marker id="ah1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+
+        <rect class="n-ext" x="38" y="20" width="160" height="40" rx="20"/>
+        <text class="pt" x="118" y="45" text-anchor="middle">Документ ТЗ</text>
+        <text class="lbl" x="212" y="44">PDF, MD, DOCX, скан, формат заранее неизвестен</text>
+        <line class="edge" x1="118" y1="60" x2="118" y2="92" marker-end="url(#ah1)"/>
+
+        <rect class="n-code" x="20" y="96" width="196" height="100" rx="8"/>
+        <text class="k" x="32" y="117">s0</text><text class="tag tg-code" x="204" y="117" text-anchor="end">код</text>
+        <text class="t" x="118" y="144" text-anchor="middle">Приёмка</text>
+        <text class="s" x="118" y="163" text-anchor="middle">тип, кодировка, ремонт</text>
+        <text class="k" x="118" y="184" text-anchor="middle">s0_intake.json</text>
+
+        <rect class="n-code" x="256" y="96" width="196" height="100" rx="8"/>
+        <text class="k" x="268" y="117">s1</text><text class="tag tg-model" x="440" y="117" text-anchor="end">код + VLM</text>
+        <text class="t" x="354" y="144" text-anchor="middle">Чтение</text>
+        <text class="s" x="354" y="163" text-anchor="middle">три прочтения и сверка</text>
+        <text class="k" x="354" y="184" text-anchor="middle">s1_blocks.json</text>
+
+        <rect class="n-model" x="492" y="96" width="196" height="100" rx="8"/>
+        <text class="k" x="504" y="117">s2</text><text class="tag tg-model" x="676" y="117" text-anchor="end">модель</text>
+        <text class="t" x="590" y="144" text-anchor="middle">Профиль и нарезка</text>
+        <text class="s" x="590" y="163" text-anchor="middle">единицы, реестр требований</text>
+        <text class="k" x="590" y="184" text-anchor="middle">s2_units.json</text>
+
+        <rect class="n-model" x="728" y="96" width="196" height="100" rx="8"/>
+        <text class="k" x="740" y="117">s3</text><text class="tag tg-model" x="912" y="117" text-anchor="end">модель</text>
+        <text class="t" x="826" y="144" text-anchor="middle">Факты и глоссарий</text>
+        <text class="s" x="826" y="163" text-anchor="middle">сущность, атрибут, значение</text>
+        <text class="k" x="826" y="184" text-anchor="middle">s3_facts.json</text>
+
+        <rect class="n-code" x="964" y="96" width="196" height="100" rx="8"/>
+        <text class="k" x="976" y="117">s4</text><text class="tag tg-code" x="1148" y="117" text-anchor="end">код</text>
+        <text class="t" x="1062" y="144" text-anchor="middle">План ячеек</text>
+        <text class="s" x="1062" y="163" text-anchor="middle">ячейки из профиля</text>
+        <text class="k" x="1062" y="184" text-anchor="middle">s4_cells.json</text>
+
+        <line class="edge" x1="216" y1="146" x2="252" y2="146" marker-end="url(#ah1)"/>
+        <line class="edge" x1="452" y1="146" x2="488" y2="146" marker-end="url(#ah1)"/>
+        <line class="edge" x1="688" y1="146" x2="724" y2="146" marker-end="url(#ah1)"/>
+        <line class="edge" x1="924" y1="146" x2="960" y2="146" marker-end="url(#ah1)"/>
+
+        <path class="edge" d="M1062 196 V248 H118 V296" marker-end="url(#ah1)"/>
+        <text class="lbl" x="590" y="238" text-anchor="middle">база готова: дальше агенты не ищут по файлу, а проверяют и доказывают</text>
+
+        <rect class="n-agent" x="20" y="300" width="196" height="100" rx="8"/>
+        <text class="k" x="32" y="321">s5</text><text class="tag tg-agent" x="204" y="321" text-anchor="end">агенты</text>
+        <text class="t" x="118" y="348" text-anchor="middle">Кандидаты в дефекты</text>
+        <text class="s" x="118" y="367" text-anchor="middle">агент на ячейку + словарь</text>
+        <text class="k" x="118" y="388" text-anchor="middle">s5_candidates.json</text>
+
+        <rect class="n-agent" x="256" y="300" width="196" height="100" rx="8"/>
+        <text class="k" x="268" y="321">s6</text><text class="tag tg-agent" x="440" y="321" text-anchor="end">агенты</text>
+        <text class="t" x="354" y="348" text-anchor="middle">Оппонент и арбитр</text>
+        <text class="s" x="354" y="367" text-anchor="middle">опровергнуть или подтвердить</text>
+        <text class="k" x="354" y="388" text-anchor="middle">s6_findings.json</text>
+
+        <rect class="n-gate" x="492" y="300" width="196" height="100" rx="8"/>
+        <text class="k" x="504" y="321">s7</text><text class="tag tg-gate" x="676" y="321" text-anchor="end">гейт</text>
+        <text class="t" x="590" y="348" text-anchor="middle">Гейты доказательств</text>
+        <text class="s" x="590" y="367" text-anchor="middle">цитата, покрытие, числа</text>
+        <text class="k" x="590" y="388" text-anchor="middle">s7_gated.json</text>
+
+        <rect class="n-model" x="728" y="300" width="196" height="100" rx="8"/>
+        <text class="k" x="740" y="321">s8</text><text class="tag tg-model" x="912" y="321" text-anchor="end">модель</text>
+        <text class="t" x="826" y="348" text-anchor="middle">Вопросы автору</text>
+        <text class="s" x="826" y="367" text-anchor="middle">по дефектам, по ролям</text>
+        <text class="k" x="826" y="388" text-anchor="middle">s8_questions.json</text>
+
+        <rect class="n-code" x="964" y="300" width="196" height="100" rx="8"/>
+        <text class="k" x="976" y="321">s9</text><text class="tag tg-code" x="1148" y="321" text-anchor="end">код</text>
+        <text class="t" x="1062" y="348" text-anchor="middle">Отчёт</text>
+        <text class="s" x="1062" y="367" text-anchor="middle">шаблон, паспорт, сводка</text>
+        <text class="k" x="1062" y="388" text-anchor="middle">report.md, report.json</text>
+
+        <line class="edge" x1="216" y1="350" x2="252" y2="350" marker-end="url(#ah1)"/>
+        <line class="edge" x1="452" y1="350" x2="488" y2="350" marker-end="url(#ah1)"/>
+        <line class="edge" x1="688" y1="350" x2="724" y2="350" marker-end="url(#ah1)"/>
+        <line class="edge" x1="924" y1="350" x2="960" y2="350" marker-end="url(#ah1)"/>
+
+        <rect class="n-ext" x="728" y="460" width="196" height="40" rx="20"/>
+        <text class="pt" x="826" y="485" text-anchor="middle">Автор ТЗ, аналитик</text>
+        <line class="edge" x1="826" y1="400" x2="826" y2="456" marker-end="url(#ah1)"/>
+        <text class="lbl" x="836" y="432">вопросы</text>
+
+        <rect class="n-ext" x="982" y="460" width="160" height="40" rx="20"/>
+        <text class="pt" x="1062" y="485" text-anchor="middle">Отчёт на русском</text>
+        <line class="edge" x1="1062" y1="400" x2="1062" y2="456" marker-end="url(#ah1)"/>
+        <line class="edge" x1="982" y1="480" x2="928" y2="480" marker-end="url(#ah1)"/>
+
+        <path class="edge dash" d="M728 480 H354 V404" marker-end="url(#ah1)"/>
+        <text class="lbl" x="541" y="499" text-anchor="middle">ответы: файлом или в диалоге, затем перепроверка находок</text>
+
+        <rect class="band" x="20" y="540" width="1140" height="140" rx="8"/>
+        <text class="lbl" x="36" y="565">Сквозные механизмы: оборачивают каждый вызов модели на этапах s1–s8</text>
+
+        <rect class="n-code" x="36" y="582" width="206" height="80" rx="8"/>
+        <text class="t" x="139" y="615" text-anchor="middle">Кэш ответов на диск</text>
+        <text class="s" x="139" y="636" text-anchor="middle">ключ: хэш промпта и входа</text>
+
+        <rect class="n-code" x="262" y="582" width="206" height="80" rx="8"/>
+        <text class="t" x="365" y="615" text-anchor="middle">Трасса вызовов</text>
+        <text class="s" x="365" y="636" text-anchor="middle">trace.jsonl на каждый прогон</text>
+
+        <rect class="n-code" x="488" y="582" width="206" height="80" rx="8"/>
+        <text class="t" x="591" y="615" text-anchor="middle">Бюджет и запасная модель</text>
+        <text class="s" x="591" y="636" text-anchor="middle">лимитер, повторы, fallback</text>
+
+        <rect class="n-code" x="714" y="582" width="206" height="80" rx="8"/>
+        <text class="t" x="817" y="615" text-anchor="middle">Промпты файлами</text>
+        <text class="s" x="817" y="636" text-anchor="middle">хэш попадает в паспорт</text>
+
+        <rect class="n-code" x="940" y="582" width="206" height="80" rx="8"/>
+        <text class="t" x="1043" y="615" text-anchor="middle">Eval-стенд</text>
+        <text class="s" x="1043" y="636" text-anchor="middle">эталон, мутации, скорер</text>
+      </svg>
+    </div>
+    <figcaption>Верхний ряд превращает файл в базу: блоки с якорями, реестр требований, таблица фактов. Нижний ряд работает только с базой. Пунктир показывает единственную обратную связь с человеком: ответы на вопросы возвращают находки на перепроверку, после чего отчёт собирается заново.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Реестр этапов</h2>
+  <p class="lead">Каждый этап пишет артефакт в папку прогона, поэтому перезапуск с середины бесплатен, а любой этап можно проверять отдельно.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Код</th><th>Этап</th><th>Кто работает</th><th>Что делает</th><th>Что проверяет код</th><th>Статус</th></tr></thead>
+      <tbody>
+        <tr><td class="code">s0</td><td class="name">Приёмка</td><td><span class="who who-code">код</span></td><td>Тип файла по сигнатуре, кодировка, лимиты размера, ремонт структуры PDF, попытка открыть с пустым паролем.</td><td>Файл открыт или выдана понятная ошибка с ненулевым кодом возврата.</td><td><span class="st">не начат</span></td></tr>
+        <tr><td class="code">s1</td><td class="name">Чтение</td><td><span class="who who-code">код</span> <span class="who who-model">VLM</span></td><td>Три независимых прочтения PDF и их сверка. Отдельная ветка для MD, TXT, DOCX, HTML с ремонтом разметки.</td><td>Покрытие текста, расхождения между прочтениями, уверенность каждого блока.</td><td><span class="st">не начат</span></td></tr>
+        <tr><td class="code">s2</td><td class="name">Профиль и нарезка</td><td><span class="who who-model">модель</span></td><td>Определяет, какие единицы есть в документе, есть ли своя нумерация, из скольких он частей и какие проверки к нему применимы. Строит реестр требований с цитатами. Второй сегментатор с другой стратегией сверяет границы.</td><td>Каждый блок отнесён к единице или помечен «не требование». Цитата является подстрокой блока.</td><td><span class="st">не начат</span></td></tr>
+        <tr><td class="code">s3</td><td class="name">Факты и глоссарий</td><td><span class="who who-model">модель</span></td><td>Извлекает факты в виде «сущность, атрибут, значение, единица, условие», собирает термины и роли.</td><td>Значение факта дословно присутствует в блоке, на который он ссылается.</td><td><span class="st">не начат</span></td></tr>
+        <tr><td class="code">s4</td><td class="name">План ячеек</td><td><span class="who who-code">код</span></td><td>Строит ячейки из профиля: требование и группа критериев, пары-кандидаты в противоречия, проверки набора. Сверка «родитель и дочерний документ» включается, только если частей больше одной.</td><td>Датчик допущений: при малом покрытии блоков профилем система уходит на общий путь и пишет об этом в отчёте.</td><td><span class="st">не начат</span></td></tr>
+        <tr><td class="code">s5</td><td class="name">Кандидаты в дефекты</td><td><span class="who who-agent">агент на ячейку</span></td><td>По требованию: однозначность, проверяемость, полнота, атомарность, уместность. По набору: противоречия, родитель и дочерний документ, покрытие критериями приёмки, полнота, контракт API. Словарь маркеров только добавляет кандидатов.</td><td>Вердикт выбран из перечисления, ссылка на блок обязательна, каждый словарный кандидат рассмотрен.</td><td><span class="st">не начат</span></td></tr>
+        <tr><td class="code">s6</td><td class="name">Оппонент и арбитр</td><td><span class="who who-agent">агенты</span></td><td>Оппонент ищет контекст, который снимает дефект, и проводит контрфактуальный тест. Арбитр решает спорное по доказательствам обеих сторон. Оппонент работает в другой роли и, в полном профиле, на другой модели.</td><td>Контрфактуальный тест: без одного из двух утверждений противоречие исчезает; после предложенной правки дефект пропадает.</td><td><span class="st">не начат</span></td></tr>
+        <tr><td class="code">s7</td><td class="name">Гейты доказательств</td><td><span class="who who-gate">гейт</span></td><td>Пропускает в отчёт только находки с подтверждённой цитатой. Пересчитывает все числа сводки.</td><td>Цитата найдена в блоке. Оба значения противоречия присутствуют и различаются. Числа сходятся.</td><td><span class="st">не начат</span></td></tr>
+        <tr><td class="code">s8</td><td class="name">Вопросы автору</td><td><span class="who who-model">модель</span></td><td>Вопрос на каждый подтверждённый дефект, с адресатом по роли и приоритетом. Критик убирает вопросы, на которые отвечает сам документ.</td><td>Каждый вопрос привязан к находке и к месту в тексте, дубли объединены.</td><td><span class="st">не начат</span></td></tr>
+        <tr><td class="code">s9</td><td class="name">Отчёт</td><td><span class="who who-code">код</span></td><td>Паспорт прогона, таблица нарезки, проверка каждого требования, проверка набора, сводка, итог, вопросы. Собирается шаблоном из данных.</td><td>Все ссылки разрешаются. Отчёт пишется всегда, даже при сбое модели.</td><td><span class="st">не начат</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="legend" aria-label="Статусы">
+    <span><i class="st">не начат</i></span>
+    <span><i class="st st-work">в работе</i></span>
+    <span><i class="st st-done">готов</i></span>
+    <span><i class="st st-eval">проверен на eval</i></span>
+  </div>
+</section>
+
+<section>
+  <h2>Чтение файла, этапы s0 и s1</h2>
+  <figure>
+    <div class="scroll">
+      <svg viewBox="0 0 1180 410" role="img" aria-label="PDF читается тремя независимыми способами: текстовый слой, структурный разбор и зрительное прочтение моделью. Сверка сравнивает их постранично, при расхождении решает арбитр по изображению страницы. Текстовые форматы идут через терпимый парсер. На выходе блоки с якорями.">
+        <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+
+        <rect class="n-ext" x="20" y="150" width="120" height="40" rx="20"/>
+        <text class="pt" x="80" y="175" text-anchor="middle">Файл</text>
+        <line class="edge" x1="140" y1="170" x2="176" y2="170" marker-end="url(#ah2)"/>
+
+        <rect class="n-code" x="180" y="120" width="190" height="100" rx="8"/>
+        <text class="k" x="192" y="141">s0</text><text class="tag tg-code" x="358" y="141" text-anchor="end">код</text>
+        <text class="t" x="275" y="168" text-anchor="middle">Приёмка</text>
+        <text class="s" x="275" y="187" text-anchor="middle">сигнатура, кодировка,</text>
+        <text class="s" x="275" y="203" text-anchor="middle">лимиты, ремонт PDF</text>
+
+        <path class="edge" d="M370 170 H405 V60 H436" marker-end="url(#ah2)"/>
+        <path class="edge" d="M405 148 H436" marker-end="url(#ah2)"/>
+        <path class="edge" d="M405 170 V236 H436" marker-end="url(#ah2)"/>
+        <path class="edge" d="M405 236 V354 H436" marker-end="url(#ah2)"/>
+        <text class="lbl" x="398" y="100" text-anchor="end">PDF</text>
+        <text class="lbl" x="414" y="300">MD, TXT, DOCX, HTML</text>
+
+        <rect class="n-code" x="440" y="24" width="250" height="72" rx="8"/>
+        <text class="tag tg-code" x="678" y="45" text-anchor="end">код</text>
+        <text class="t" x="454" y="56">Текстовый слой</text>
+        <text class="s" x="454" y="78">PyMuPDF: точный текст, координаты</text>
+
+        <rect class="n-code" x="440" y="112" width="250" height="72" rx="8"/>
+        <text class="tag tg-code" x="678" y="133" text-anchor="end">код</text>
+        <text class="t" x="454" y="144">Структура и OCR</text>
+        <text class="s" x="454" y="166">Docling: таблицы, порядок чтения</text>
+
+        <rect class="n-model" x="440" y="200" width="250" height="72" rx="8"/>
+        <text class="tag tg-model" x="678" y="221" text-anchor="end">модель</text>
+        <text class="t" x="454" y="232">Зрительное прочтение</text>
+        <text class="s" x="454" y="254">VLM: сканы, диаграммы, таблицы</text>
+
+        <rect class="n-code" x="440" y="318" width="250" height="72" rx="8"/>
+        <text class="tag tg-code" x="678" y="339" text-anchor="end">код</text>
+        <text class="t" x="454" y="350">Терпимый парсер</text>
+        <text class="s" x="454" y="372">карта строк, журнал ремонта</text>
+
+        <path class="edge" d="M690 60 H730 V130 H766" marker-end="url(#ah2)"/>
+        <line class="edge" x1="690" y1="148" x2="766" y2="148" marker-end="url(#ah2)"/>
+        <path class="edge" d="M690 236 H730 V166 H766" marker-end="url(#ah2)"/>
+
+        <rect class="n-code" x="770" y="100" width="190" height="96" rx="8"/>
+        <text class="tag tg-code" x="948" y="121" text-anchor="end">код</text>
+        <text class="t" x="865" y="146" text-anchor="middle">Сверка прочтений</text>
+        <text class="s" x="865" y="165" text-anchor="middle">постранично, с оценкой</text>
+        <text class="s" x="865" y="181" text-anchor="middle">уверенности блока</text>
+
+        <line class="edge" x1="850" y1="196" x2="850" y2="246" marker-end="url(#ah2)"/>
+        <line class="edge" x1="880" y1="250" x2="880" y2="200" marker-end="url(#ah2)"/>
+        <text class="lbl" x="842" y="227" text-anchor="end">расхождение</text>
+        <text class="lbl" x="888" y="227">решение</text>
+
+        <rect class="n-model" x="770" y="250" width="190" height="72" rx="8"/>
+        <text class="tag tg-model" x="948" y="271" text-anchor="end">модель</text>
+        <text class="t" x="784" y="282">Арбитр</text>
+        <text class="s" x="784" y="304">смотрит на картинку страницы</text>
+
+        <line class="edge" x1="960" y1="148" x2="1006" y2="148" marker-end="url(#ah2)"/>
+        <rect class="n-code" x="1010" y="100" width="150" height="96" rx="8"/>
+        <text class="k" x="1085" y="121" text-anchor="middle">s1_blocks.json</text>
+        <text class="t" x="1085" y="146" text-anchor="middle">Блоки с якорями</text>
+        <text class="s" x="1085" y="165" text-anchor="middle">страница, раздел,</text>
+        <text class="s" x="1085" y="181" text-anchor="middle">строка, уверенность</text>
+
+        <path class="edge" d="M690 354 H1085 V200" marker-end="url(#ah2)"/>
+        <text class="lbl" x="888" y="373" text-anchor="middle">поломки разметки идут в отчёт как дефекты документа</text>
+      </svg>
+    </div>
+    <figcaption>Прочтения нужны разные, потому что ломаются они по-разному. Пример из практики: у одной PDF-презентации текстовый слой отдал кириллицу, но молча потерял всю латиницу и цифры, и по самому тексту это не видно. Такой дефект ловит только сверка с изображением страницы.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Одна ячейка проверки, этапы s5 и s6</h2>
+  <figure>
+    <div class="scroll">
+      <svg viewBox="0 0 1180 380" role="img" aria-label="Ячейка проверки проходит четыре роли: аналитик с доступом к базе документа, инварианты кода, оппонент и арбитр. Инварианты возвращают аналитику претензию. Арбитр либо подтверждает находку и отправляет её в гейты, либо отклоняет.">
+        <defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+
+        <rect class="n-ext" x="230" y="24" width="160" height="40" rx="20"/>
+        <text class="pt" x="310" y="49" text-anchor="middle">База документа</text>
+        <line class="edge" x1="280" y1="160" x2="280" y2="68" marker-end="url(#ah3)"/>
+        <line class="edge" x1="340" y1="64" x2="340" y2="156" marker-end="url(#ah3)"/>
+        <text class="lbl" x="272" y="110" text-anchor="end">поиск, блок, факты</text>
+        <text class="lbl" x="348" y="104">блоки и факты,</text>
+        <text class="lbl" x="348" y="120">до трёх шагов</text>
+
+        <rect class="n-ext" x="20" y="188" width="140" height="40" rx="20"/>
+        <text class="pt" x="90" y="213" text-anchor="middle">Ячейка</text>
+        <line class="edge" x1="160" y1="208" x2="206" y2="208" marker-end="url(#ah3)"/>
+
+        <rect class="n-agent" x="210" y="160" width="200" height="96" rx="8"/>
+        <text class="tag tg-agent" x="398" y="181" text-anchor="end">агент</text>
+        <text class="t" x="310" y="206" text-anchor="middle">Аналитик</text>
+        <text class="s" x="310" y="225" text-anchor="middle">ищет дефект по критериям,</text>
+        <text class="s" x="310" y="241" text-anchor="middle">вердикт и ссылка на блок</text>
+
+        <line class="edge" x1="410" y1="208" x2="466" y2="208" marker-end="url(#ah3)"/>
+        <rect class="n-gate" x="470" y="160" width="200" height="96" rx="8"/>
+        <text class="tag tg-gate" x="658" y="181" text-anchor="end">гейт</text>
+        <text class="t" x="570" y="206" text-anchor="middle">Инварианты кода</text>
+        <text class="s" x="570" y="225" text-anchor="middle">схема ответа соблюдена,</text>
+        <text class="s" x="570" y="241" text-anchor="middle">цитата есть в блоке</text>
+
+        <path class="edge dash" d="M570 256 V300 H310 V260" marker-end="url(#ah3)"/>
+        <text class="lbl" x="440" y="319" text-anchor="middle">претензия: что исправить, одна попытка</text>
+
+        <line class="edge" x1="670" y1="208" x2="726" y2="208" marker-end="url(#ah3)"/>
+        <rect class="n-agent" x="730" y="160" width="200" height="96" rx="8"/>
+        <text class="tag tg-agent" x="918" y="181" text-anchor="end">агент</text>
+        <text class="t" x="830" y="206" text-anchor="middle">Оппонент</text>
+        <text class="s" x="830" y="225" text-anchor="middle">ищет контекст против дефекта,</text>
+        <text class="s" x="830" y="241" text-anchor="middle">контрфактуальный тест</text>
+
+        <line class="edge" x1="930" y1="208" x2="986" y2="208" marker-end="url(#ah3)"/>
+        <rect class="n-model" x="990" y="160" width="170" height="96" rx="8"/>
+        <text class="tag tg-model" x="1148" y="181" text-anchor="end">модель</text>
+        <text class="t" x="1075" y="206" text-anchor="middle">Арбитр</text>
+        <text class="s" x="1075" y="225" text-anchor="middle">решает спорное</text>
+        <text class="s" x="1075" y="241" text-anchor="middle">по доказательствам</text>
+
+        <line class="edge" x1="1105" y1="256" x2="1105" y2="316" marker-end="url(#ah3)"/>
+        <rect class="n-ext" x="1040" y="320" width="130" height="40" rx="20"/>
+        <text class="pt" x="1105" y="345" text-anchor="middle">Находка в s7</text>
+
+        <path class="edge" d="M1030 256 V290 H890 V316" marker-end="url(#ah3)"/>
+        <rect class="n-ext" x="790" y="320" width="200" height="40" rx="20"/>
+        <text class="pt" x="890" y="345" text-anchor="middle">Отклонено, след в трассе</text>
+      </svg>
+    </div>
+    <figcaption>Ячейка это одно требование с группой критериев либо одна пара-кандидат в противоречие. Набор ячеек заранее не задан: его строит этап s4 из профиля документа. Оппонент полезен только тогда, когда он независим: другая роль, другой вход или другая модель. Та же ячейка с теми же четырьмя ролями используется и на остальных этапах, меняется только содержание.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Внешний цикл улучшения</h2>
+  <figure>
+    <div class="scroll">
+      <svg viewBox="0 0 1180 270" role="img" aria-label="Корпус ТЗ прогоняется через агента, скорер считает метрики, провалы разбираются по трассам, команда вносит одну правку, после чего цикл повторяется. Отложенный набор проверяется только перед сдачей.">
+        <defs><marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+
+        <rect class="n-ext" x="20" y="118" width="150" height="40" rx="20"/>
+        <text class="pt" x="95" y="143" text-anchor="middle">Корпус ТЗ</text>
+        <line class="edge" x1="170" y1="138" x2="216" y2="138" marker-end="url(#ah4)"/>
+
+        <rect class="n-code" x="220" y="96" width="190" height="84" rx="8"/>
+        <text class="tag tg-code" x="398" y="117" text-anchor="end">код</text>
+        <text class="t" x="315" y="142" text-anchor="middle">Прогон агента</text>
+        <text class="s" x="315" y="162" text-anchor="middle">несколько повторов</text>
+
+        <line class="edge" x1="410" y1="138" x2="466" y2="138" marker-end="url(#ah4)"/>
+        <rect class="n-code" x="470" y="96" width="190" height="84" rx="8"/>
+        <text class="tag tg-code" x="648" y="117" text-anchor="end">код</text>
+        <text class="t" x="565" y="142" text-anchor="middle">Скорер</text>
+        <text class="s" x="565" y="162" text-anchor="middle">полнота, выдумки, разброс</text>
+
+        <line class="edge" x1="660" y1="138" x2="716" y2="138" marker-end="url(#ah4)"/>
+        <rect class="n-model" x="720" y="96" width="190" height="84" rx="8"/>
+        <text class="tag tg-model" x="898" y="117" text-anchor="end">модель</text>
+        <text class="t" x="815" y="142" text-anchor="middle">Разбор провалов</text>
+        <text class="s" x="815" y="162" text-anchor="middle">кластеры по трассам</text>
+
+        <line class="edge" x1="910" y1="138" x2="966" y2="138" marker-end="url(#ah4)"/>
+        <rect class="n-ext" x="970" y="96" width="190" height="84" rx="8"/>
+        <text class="tag tg-ext" x="1148" y="117" text-anchor="end">команда</text>
+        <text class="t" x="1065" y="142" text-anchor="middle">Одна правка</text>
+        <text class="s" x="1065" y="162" text-anchor="middle">правило в код или промпт</text>
+
+        <path class="edge" d="M1065 96 V44 H315 V92" marker-end="url(#ah4)"/>
+        <text class="lbl" x="690" y="34" text-anchor="middle">повторить: одна правка за цикл, каждая включается флагом</text>
+
+        <rect class="n-ext" x="470" y="214" width="190" height="40" rx="20"/>
+        <text class="pt" x="565" y="239" text-anchor="middle">Отложенный набор</text>
+        <line class="edge dash" x1="565" y1="214" x2="565" y2="184" marker-end="url(#ah4)"/>
+        <text class="lbl" x="672" y="239">во время правок не читаем, смотрим только итоговые числа</text>
+      </svg>
+    </div>
+    <figcaption>Корпус состоит из пяти частей: выданный документ в разных контейнерах, ближний круг (тот же шаблон, другие фичи, дефекты внесены по журналу), дальний круг (ГОСТ 34, user stories, английская SRS, сплошной текст), вырожденные случаи и мутационный набор. Повторяющаяся ошибка модели становится проверкой в коде, а не ещё одним абзацем промпта.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Сквозные механизмы</h2>
+  <dl>
+    <dt>Кэш ответов на диск</dt><dd>Ключ собирается из провайдера, модели, параметров, промпта, схемы и входа. Повторный прогон на том же входе даёт тот же отчёт и почти ничего не стоит.</dd>
+    <dt>Трасса вызовов</dt><dd>На каждый вызов пишется шаг, модель, хэш промпта, токены, задержка, повторы, попадание в кэш и сырой ответ. По трассам разбираются провалы.</dd>
+    <dt>Бюджет и запасная модель</dt><dd>Клиентский лимитер под минутные лимиты, повторы с паузой на временные ошибки, переход на запасную модель при исчерпании суточной квоты, один-два повтора при невалидном ответе.</dd>
+    <dt>Промпты файлами</dt><dd>Промпты лежат в репозитории, их хэш попадает в паспорт прогона вместе с коммитом агента и моделью.</dd>
+    <dt>Профили запуска</dt><dd><code>quick</code> работает на бесплатном тарифе одной моделью и нужен, чтобы жюри повторило прогон без платного ключа. <code>thorough</code> включает сильную модель на суждения, вторую модель оппонентом и все три прочтения.</dd>
+    <dt>Eval-стенд</dt><dd>Эталонная разметка, мутационный набор и скорер. Каждый проверяющий включается флагом, и стенд показывает, что он даёт.</dd>
+  </dl>
+</section>
+
+<section>
+  <h2>Кто что решает</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3>Код</h3>
+      <ul>
+        <li>Делает проверки, которые имеют смысл на любом документе: цитата существует, каждый блок учтён, числа сходятся.</li>
+        <li>Может отклонить утверждение по факту.</li>
+        <li>Не решает по смыслу и не знает ничего о содержании конкретного шаблона.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Модель и агенты</h3>
+      <ul>
+        <li>Решают по смыслу: что считать требованием, дефект это или нет, противоречат ли два утверждения.</li>
+        <li>Отвечают только в типизированной форме со ссылкой на блок.</li>
+        <li>Не утверждают ничего о тексте без подтверждения кодом.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Словарные правила</h3>
+      <ul>
+        <li>Добавляют кандидатов по маркерам вроде «при необходимости» или «и т. д.».</li>
+        <li>Не выносят вердикт и не отбрасывают находки.</li>
+        <li>Правило, которое ломается на чужом формате, понижается до подсказки.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Что гарантируется, а что измеряется</h3>
+      <ul>
+        <li>Гарантирует код: цитаты настоящие, строки учтены, отчёт создан, повторный прогон совпадает.</li>
+        <li>Только измеряется на eval-стенде: какая доля дефектов найдена и сколько находок выдумано.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Открытые решения</h2>
+  <dl>
+    <dt>Модели</dt><dd>Какая модель OpenAI идёт на суждения и какая на зрительное прочтение, не выбрано. Решаем сравнением на eval-наборе.</dd>
+    <dt>Раннер агентов</dt><dd>Предложен PydanticAI основным, pi вторым за тем же интерфейсом. Командой не утверждено.</dd>
+    <dt>Лимиты бесплатного Gemini</dt><dd>Известны только по сторонним замерам. Нужно посмотреть фактические значения в AI Studio своего проекта.</dd>
+    <dt>Пороги</dt><dd>Число шагов агента в ячейке, порог «малого покрытия» для датчика допущений и порог расхождения прочтений подбираются на корпусе.</dd>
+  </dl>
+</section>
+
+</div>

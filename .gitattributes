@@ -1,0 +1,9 @@
+# Same bytes on every OS: prompt fingerprints and input hashes in the run passport depend on it.
+* text=auto eol=lf
+
+# Corpus files are test inputs; keep their bytes exactly as committed (encodings, CRLF, BOM).
+corpus/inputs/** -text
+
+*.pdf binary
+*.docx binary
+*.png binary

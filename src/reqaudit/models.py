@@ -216,6 +216,36 @@ class Segmentation(BaseModel):
     coverage: Coverage
 
 
+# --- s4: cells --------------------------------------------------------------------------
+
+
+class CellKind(StrEnum):
+    REQUIREMENTS = "requirements"
+    CONSISTENCY = "consistency"
+    PARENT_CHILD = "parent_child"
+    ACCEPTANCE = "acceptance"
+    COMPLETENESS = "completeness"
+    API_CONTRACT = "api_contract"
+
+
+class Cell(BaseModel):
+    """One unit of checking work: what to look at and against which criteria."""
+
+    id: str
+    kind: CellKind
+    title: str
+    unit_ids: list[str] = Field(default_factory=list,
+                                description="Requirements under check; empty for set cells.")
+    criteria: list[Criterion]
+
+
+class CellPlan(BaseModel):
+    """Artifact of s4."""
+
+    cells: list[Cell]
+    notes: list[str] = Field(default_factory=list)
+
+
 # --- s5–s7: findings --------------------------------------------------------------------
 
 
@@ -259,6 +289,19 @@ class Finding(BaseModel):
     trail: list[str] = Field(
         default_factory=list, description="Roles that touched the finding, in order."
     )
+    question: str | None = None
+    question_to: str | None = None
+    cell: str | None = None
+    review_note: str | None = Field(default=None, description="Why the opponent, the arbiter "
+                                    "or a gate kept, changed or rejected the finding.")
+
+
+class CheckFailure(BaseModel):
+    """A cell or review batch the model could not do; its scope stays unchecked."""
+
+    stage: str
+    cell: str
+    message: str
 
 
 # --- s8: questions ----------------------------------------------------------------------

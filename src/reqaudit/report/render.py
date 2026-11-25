@@ -185,28 +185,115 @@ def _segmentation(state: RunState) -> str:
     return "\n".join(out)
 
 
-def _finding(f: Finding) -> str:
-    quotes = "\n".join(
-        f"  > {display_quote(e.quote)}  \n  > — блок `{e.block_id}`"
-        + ("" if e.verified else " (цитата не подтверждена)")
-        for e in f.evidence
-    )
-    lines = [
-        f"**{f.id}. {f.title}** — {criteria.label(f.criterion)}, {_SEVERITY_RU[f.severity]}",
-        "",
-        f.explanation,
-        "",
-        quotes,
-    ]
+def _finding(f: Finding, blocks: dict[str, Block]) -> str:
+    units = ", ".join(f.unit_ids) or "документ целиком"
+    lines = [f"#### {f.id}. {f.title}", "",
+             f"Критерий: {criteria.label(f.criterion)} · Серьёзность: "
+             f"{_SEVERITY_RU[f.severity]} · Требования: {units}", "", f.explanation, ""]
+    for e in f.evidence:
+        lines += [f"> «{display_quote(e.quote)}» — {_place([e.block_id], blocks)}", ""]
     if f.suggestion:
-        lines += ["", f"Как исправить: {f.suggestion}"]
-    return "\n".join(lines)
+        lines += [f"**Как исправить.** {f.suggestion}", ""]
+    if f.question:
+        lines += [f"**Вопрос автору.** {f.question}", ""]
+    if "arbiter:kept" in f.trail:
+        lines += ["*Оппонент оспаривал находку, арбитр её оставил.*", ""]
+    elif "opponent:unavailable" in f.trail:
+        lines += ["*Находка не проверена оппонентом: он был недоступен.*", ""]
+    return "\n".join(lines).rstrip()
+
+
+def _per_requirement(state: RunState, confirmed: list[Finding],
+                     blocks: dict[str, Block]) -> str:
+    own: dict[str, list[str]] = {}
+    in_set: dict[str, list[str]] = {}
+    for f in confirmed:
+        target = own if f.scope == Scope.REQUIREMENT else in_set
+        for u in f.unit_ids:
+            target.setdefault(u, []).append(f.id)
+    rows = [[u.id, u.doc_label or "—", u.summary,
+             ", ".join(own.get(u.id, [])) or "замечаний нет",
+             ", ".join(in_set.get(u.id, [])) or "—"] for u in state.units]
+    out = [_table(["ID", "ID в документе", "Требование", "Замечания к требованию",
+                   "Участвует в дефектах набора"], rows)]
+    details = [_finding(f, blocks) for f in confirmed if f.scope == Scope.REQUIREMENT]
+    if details:
+        out += ["", "### Замечания к отдельным требованиям", "", "\n\n".join(details)]
+    return "\n".join(out)
+
+
+def _summary(state: RunState, confirmed: list[Finding]) -> str:
+    count = {s: sum(1 for f in confirmed if f.severity == s) for s in Severity}
+    by_gate = sum(1 for f in state.rejected if any(t.startswith("gate:") for t in f.trail))
+    rows = [
+        ["Требований выделено", len(state.units)],
+        ["Нарушений найдено", len(confirmed)],
+        ["из них критичных", count[Severity.CRITICAL]],
+        ["существенных", count[Severity.MAJOR]],
+        ["незначительных", count[Severity.MINOR]],
+        ["Кандидатов отклонено оппонентом и арбитром", len(state.rejected) - by_gate],
+        ["Кандидатов отклонено проверкой цитат", by_gate],
+    ]
+    out = [_table(["Показатель", "Значение"], rows)]
+
+    by_criterion: dict[str, int] = {}
+    for f in confirmed:
+        by_criterion[criteria.label(f.criterion)] = by_criterion.get(
+            criteria.label(f.criterion), 0) + 1
+    if by_criterion:
+        out += ["", _table(["Критерий", "Нарушений"],
+                           sorted(by_criterion.items(), key=lambda kv: -kv[1]))]
+
+    critical = [f for f in confirmed if f.severity == Severity.CRITICAL]
+    if critical:
+        out += ["", "Критичные дефекты:", ""]
+        out += [f"- {f.id}: {f.title} ({criteria.label(f.criterion)})" for f in critical]
+    if state.check_failures:
+        out += ["", "**Не проверено** (модель не выполнила проверку, её область осталась "
+                    "без оценки):", ""]
+        out += [f"- {x.cell}: {x.message}" for x in state.check_failures]
+    return "\n".join(out)
+
+
+def _verdict(state: RunState, confirmed: list[Finding]) -> str:
+    critical = [f for f in confirmed if f.severity == Severity.CRITICAL]
+    major = [f for f in confirmed if f.severity == Severity.MAJOR]
+    if critical:
+        n = plural(len(critical), "критичный дефект", "критичных дефекта", "критичных дефектов")
+        head = (f"**Нет.** Начинать разработку и тестирование по этому документу нельзя: {n} "
+                "делают поведение системы неопределённым или противоречивым.")
+    elif major:
+        n = plural(len(major), "существенный дефект", "существенных дефекта",
+                   "существенных дефектов")
+        head = (f"**С оговорками.** Критичных дефектов нет, но {n} приведут к разному "
+                "пониманию требований; их стоит исправить до начала разработки.")
+    else:
+        head = ("**Да.** Существенных дефектов не найдено; незначительные замечания можно "
+                "исправить по ходу работы.")
+    out = [head]
+    if state.check_failures:
+        out += ["", "Вывод неполный: часть проверок не выполнена, см. раздел «Сводка»."]
+    first = (critical + major)[:7]
+    if first:
+        out += ["", "Исправить в первую очередь:", ""]
+        out += [f"{n}. {f.id} — {f.title}" for n, f in enumerate(first, 1)]
+    return "\n".join(out)
+
+
+def _rejected(state: RunState) -> str:
+    rows = []
+    for f in state.rejected:
+        who = ("проверка цитат" if any(t.startswith("gate:") for t in f.trail)
+               else "оппонент и арбитр")
+        rows.append([f.title, criteria.label(f.criterion), who, (f.review_note or "")[:300]])
+    return _table(["Кандидат", "Критерий", "Кем отклонён", "Почему"], rows)
 
 
 def render_markdown(p: Passport, state: RunState, plan: list[tuple[str, str]]) -> str:
     confirmed = [f for f in state.findings if f.status == FindingStatus.CONFIRMED]
     checks_ran = set(state.completed) >= _CHECK_STAGES
     no_checks = _not_done("s5", state)
+    blocks = {b.id: b for b in state.document.blocks} if state.document else {}
     out: list[str] = ["# Отчёт о проверке требований", ""]
 
     if state.errors and p.status == "input_rejected":
@@ -220,14 +307,17 @@ def render_markdown(p: Passport, state: RunState, plan: list[tuple[str, str]]) -
 
     out += ["## Как агент нарезал требования", "", _segmentation(state), ""]
 
-    per_requirement = [f for f in confirmed if f.scope == Scope.REQUIREMENT]
     out += ["## Проверка каждого требования", ""]
-    out.append("\n\n".join(_finding(f) for f in per_requirement) if checks_ran else no_checks)
+    out.append(_per_requirement(state, confirmed, blocks) if checks_ran else no_checks)
     out.append("")
 
     set_level = [f for f in confirmed if f.scope != Scope.REQUIREMENT]
     out += ["## Проверка всего набора требований", ""]
-    out.append("\n\n".join(_finding(f) for f in set_level) if checks_ran else no_checks)
+    if checks_ran:
+        out.append("\n\n".join(_finding(f, blocks) for f in set_level)
+                   or "Дефектов набора требований не найдено.")
+    else:
+        out.append(no_checks)
     out.append("")
 
     out += ["## Уточняющие вопросы", ""]
@@ -243,27 +333,24 @@ def render_markdown(p: Passport, state: RunState, plan: list[tuple[str, str]]) -
 
     out += ["## Сводка", ""]
     if checks_ran:
-        critical = [f for f in confirmed if f.severity == Severity.CRITICAL]
-        out.append(_table(["Показатель", "Значение"], [
-            ["Требований", len(state.units)],
-            ["Нарушений", len(confirmed)],
-            ["Критичных", len(critical)],
-        ]))
-        if critical:
-            out += ["", "Критичные дефекты:", ""]
-            out += [f"- {f.id}: {f.title} ({criteria.label(f.criterion)})" for f in critical]
+        out.append(_summary(state, confirmed))
     else:
         out.append("Сводка не сформирована: проверка требований в этом прогоне не выполнялась.")
     out.append("")
 
     out += ["## Итог", ""]
     if checks_ran:
-        out.append("Итоговый вывод формирует этап s9 после подключения проверок.")
+        out.append(_verdict(state, confirmed))
     else:
         out.append("Вывод о готовности документа к разработке не сформирован: "
                    "проверка не выполнялась. Отсутствие замечаний в этом отчёте "
                    "не означает, что документ без дефектов.")
     out.append("")
+
+    if checks_ran and state.rejected:
+        out += ["## Приложение. Отклонённые кандидаты", "",
+                "Находки, которые рецензент предложил, но оппонент с арбитром или проверка "
+                "цитат не пропустили в отчёт.", "", _rejected(state), ""]
 
     out += ["## Ход прогона", ""]
     errors = {e.stage: e for e in state.errors}

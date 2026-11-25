@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field
 from reqaudit.config import Settings
 from reqaudit.llm import LLMClient
 from reqaudit.models import (
+    Cell,
+    CheckFailure,
     Coverage,
     DocumentIR,
     DocumentProfile,
@@ -37,7 +39,11 @@ class RunState(BaseModel):
     profile: DocumentProfile | None = None
     units: list[Unit] = Field(default_factory=list)
     coverage: Coverage | None = None
+    cells: list[Cell] = Field(default_factory=list)
+    candidates: list[Finding] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
+    rejected: list[Finding] = Field(default_factory=list)
+    check_failures: list[CheckFailure] = Field(default_factory=list)
     questions: list[Question] = Field(default_factory=list)
     completed: list[str] = Field(default_factory=list)
     errors: list[StageError] = Field(default_factory=list)

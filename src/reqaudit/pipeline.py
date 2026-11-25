@@ -20,6 +20,11 @@ from reqaudit.stages.base import RunContext, RunState, Stage, StageError
 from reqaudit.stages.s0_intake import IntakeStage
 from reqaudit.stages.s1_read import ReadStage
 from reqaudit.stages.s2_segment import SegmentStage
+from reqaudit.stages.s4_plan import PlanStage
+from reqaudit.stages.s5_candidates import CandidatesStage
+from reqaudit.stages.s6_review import ReviewStage
+from reqaudit.stages.s7_gates import GatesStage
+from reqaudit.stages.s8_questions import QuestionsStage
 from reqaudit.trace import Trace
 
 # The full plan. Stages without an implementation are listed so the report can say so.
@@ -32,11 +37,12 @@ STAGE_PLAN: list[tuple[str, str]] = [
     ("s5", "Кандидаты в дефекты"),
     ("s6", "Оппонент и арбитр"),
     ("s7", "Гейты доказательств"),
-    ("s8", "Вопросы автору"),
+    ("s8", "Сведение и вопросы"),
     ("s9", "Отчёт"),
 ]
 
-IMPLEMENTED: list[Stage] = [IntakeStage(), ReadStage(), SegmentStage()]
+IMPLEMENTED: list[Stage] = [IntakeStage(), ReadStage(), SegmentStage(), PlanStage(),
+                            CandidatesStage(), ReviewStage(), GatesStage(), QuestionsStage()]
 
 EXIT_OK = 0
 EXIT_INPUT_ERROR = 2

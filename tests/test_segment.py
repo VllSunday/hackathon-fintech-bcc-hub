@@ -103,7 +103,7 @@ def test_segmentation_of_organizers_document(tmp_path):
     result, report, state, trace = run(tmp_path, model)
 
     assert result.exit_code == 0, report
-    assert calls == {"profile": 1, "segment": 1}
+    assert (calls["profile"], calls["segment"]) == (1, 1)
     units = state["units"]
     assert [u["id"] for u in units[:3]] == ["R-001", "R-002", "R-003"]
     assert any("Ф-1" in u["quote"] for u in units)
@@ -183,7 +183,7 @@ def test_rerun_uses_cache(tmp_path):
     model, calls = fake_analyst()
     run(tmp_path, model)
     run(tmp_path, model)
-    assert calls == {"profile": 1, "segment": 1}
+    assert (calls["profile"], calls["segment"]) == (1, 1)
 
 
 def test_report_shows_quotes_without_markup():

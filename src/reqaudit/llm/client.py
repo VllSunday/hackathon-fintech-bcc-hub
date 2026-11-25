@@ -89,6 +89,26 @@ class LLMClient:
         """Synchronous wrapper around `astructured` for sequential stages."""
         return asyncio.run(self.astructured(**kwargs))
 
+    def many(self, requests: Sequence[dict[str, Any]]) -> list[Any]:
+        """Run several `astructured` calls at once, at most `settings.concurrency` together.
+
+        Results come back in request order. A call that fails yields its `LLMError` in place
+        of a result, so one failed cell does not cancel the others.
+        """
+        return asyncio.run(self._amany(requests))
+
+    async def _amany(self, requests: Sequence[dict[str, Any]]) -> list[Any]:
+        gate = asyncio.Semaphore(self.settings.concurrency)
+
+        async def one(kwargs: dict[str, Any]) -> Any:
+            async with gate:
+                try:
+                    return await self.astructured(**kwargs)
+                except LLMError as err:
+                    return err
+
+        return list(await asyncio.gather(*(one(r) for r in requests)))
+
     async def astructured(
         self,
         *,

@@ -48,6 +48,8 @@ class Settings:
     output_retries: int = 2
     # Characters of rendered document per model call; longer documents are split by sections.
     window_chars: int = 40_000
+    # Model calls running at the same time within one stage.
+    concurrency: int = 6
     # Decisions taken while reading the configuration, shown in the console and the passport.
     notes: list[str] = field(default_factory=list)
 
@@ -120,5 +122,6 @@ def load_settings(
         cache_read=cache_read,
         max_llm_calls=int(_env("REQAUDIT_MAX_LLM_CALLS") or _DEFAULT_BUDGET[chosen]),
         requests_per_minute=float(rpm) if rpm else None,
+        concurrency=max(1, int(_env("REQAUDIT_CONCURRENCY") or 6)),
         notes=notes,
     )

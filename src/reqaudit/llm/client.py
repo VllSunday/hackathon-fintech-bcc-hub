@@ -19,7 +19,7 @@ from typing import Any, TypeVar
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
 from pydantic import BaseModel, ValidationError  # noqa: E402
-from pydantic_ai import Agent, ModelRetry  # noqa: E402
+from pydantic_ai import Agent, ModelRetry, RunContext  # noqa: E402
 from pydantic_ai import exceptions as pai  # noqa: E402
 from pydantic_ai.models import Model  # noqa: E402
 
@@ -98,13 +98,21 @@ class LLMClient:
         output_type: type[T],
         prompt_ids: Sequence[str] = (),
         check: Check | None = None,
+        soft_check: bool = True,
         model_settings: dict[str, Any] | None = None,
     ) -> T:
-        chain = self.settings.models.get(role)
+        """Ask the role's model for a typed answer.
+
+        `check` returns a complaint or None; a complaint goes back to the model as a retry.
+        With `soft_check`, the answer is accepted after the last retry even if the complaint
+        stands, and the caller's own code is expected to drop what is still wrong. Without
+        it, the model is treated as failed and the next model in the chain is tried.
+        """
+        chain = self.settings.chain_for(role)
         if not chain:
             raise LLMUnavailable(
                 f"Для роли «{role}» не задана модель. Укажите REQAUDIT_MODEL_{role.upper()} "
-                "в файле .env, пример есть в .env.example.")
+                "или REQAUDIT_MODEL_JUDGE в файле .env, пример есть в .env.example.")
 
         settings = {"timeout": self.settings.request_timeout_s, **(model_settings or {})}
         schema = output_type.model_json_schema()
@@ -125,7 +133,8 @@ class LLMClient:
         for model_id in chain:
             try:
                 output, usage, attempts, seconds = await self._call(
-                    model_id, instructions, prompt, output_type, check, settings, step)
+                    model_id, instructions, prompt, output_type, check, soft_check, settings,
+                    step)
             except _ModelGaveUp as err:
                 failures.append(f"{model_id}: {err}")
                 self.trace.event("llm_fallback", step=step, role=role, model=model_id,
@@ -185,7 +194,8 @@ class LLMClient:
         self._last_request[provider] = time.monotonic()
 
     async def _call(self, model_id: str, instructions: str, prompt: str, output_type: type[T],
-                    check: Check | None, settings: dict[str, Any], step: str):
+                    check: Check | None, soft_check: bool, settings: dict[str, Any],
+                    step: str):
         try:
             model = self._factory(model_id)
             agent = Agent(model, output_type=output_type, instructions=instructions,
@@ -195,11 +205,17 @@ class LLMClient:
 
         if check is not None:
             @agent.output_validator
-            def _validate(output: T) -> T:
+            def _validate(ctx: RunContext, output: T) -> T:
                 complaint = check(output)
-                if complaint:
-                    raise ModelRetry(complaint)
-                return output
+                if not complaint:
+                    return output
+                if soft_check and ctx.retry >= ctx.max_retries:
+                    self.trace.event("llm_check_unresolved", step=step, model=model_id,
+                                     complaint=complaint[:1000])
+                    return output
+                self.trace.event("llm_check_retry", step=step, model=model_id,
+                                 retry=ctx.retry, complaint=complaint[:1000])
+                raise ModelRetry(complaint)
 
         attempt = 0
         while True:

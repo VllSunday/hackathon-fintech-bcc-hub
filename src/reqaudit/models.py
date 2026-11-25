@@ -111,7 +111,69 @@ class DocumentIR(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
-# --- s2: units --------------------------------------------------------------------------
+# --- s2: profile and units --------------------------------------------------------------
+
+
+class PartRole(StrEnum):
+    MAIN = "main"
+    CHILD_SPEC = "child_spec"
+    APPENDIX = "appendix"
+    OTHER = "other"
+
+
+class DocumentPart(BaseModel):
+    name: str = Field(description="The part's name as written in its heading.")
+    role: PartRole = Field(description="main: the specification itself; child_spec: a "
+                           "detailed specification of something the main part refers to; "
+                           "appendix: supporting material; other.")
+    start_block_id: str = Field(description="Id of the block where the part starts, "
+                                "usually its heading.")
+    parent: str | None = Field(default=None, description="For child_spec: the name of the "
+                               "part it details. Otherwise null.")
+
+
+class DocumentProfile(BaseModel):
+    """What the document is and what it contains. Decides which checks apply (s4)."""
+
+    summary: str = Field(description="One or two sentences in Russian: what the document "
+                         "specifies, for which product.")
+    parts: list[DocumentPart] = Field(min_length=1, description="Parts in document order.")
+    numbering: str = Field(description="In Russian: how the document identifies its "
+                           "requirements, e.g. 'Ф-1…Ф-4 для функциональных требований', or "
+                           "'нумерации нет'.")
+    has_acceptance_criteria: bool
+    has_api_spec: bool
+    has_data_requirements: bool
+    has_non_functional: bool
+    has_ui_spec: bool
+
+
+class SkipReason(StrEnum):
+    GOAL = "goal"
+    CONTEXT = "context"
+    METADATA = "metadata"
+    TEMPLATE = "template"
+    EXAMPLE = "example"
+    APPROVAL = "approval"
+    EMPTY = "empty"
+    OTHER = "other"
+
+
+class SkippedBlock(BaseModel):
+    block_id: str
+    reason: SkipReason
+
+
+class Coverage(BaseModel):
+    """How every visible non-heading block was accounted for. The assumption sensor of s2."""
+
+    blocks_checked: int
+    in_units: int
+    skipped: int
+    unclassified: list[str] = Field(default_factory=list)
+    skipped_by_reason: dict[str, int] = Field(default_factory=dict)
+    dropped_units: list[str] = Field(default_factory=list,
+                                     description="Why model units were rejected by code.")
 
 
 class UnitKind(StrEnum):
@@ -136,6 +198,15 @@ class Unit(BaseModel):
     block_ids: list[str]
     quote: str
     summary: str
+
+
+class Segmentation(BaseModel):
+    """Artifact of s2."""
+
+    profile: DocumentProfile
+    units: list[Unit]
+    skipped: list[SkippedBlock]
+    coverage: Coverage
 
 
 # --- s5–s7: findings --------------------------------------------------------------------

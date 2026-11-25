@@ -14,10 +14,12 @@ from reqaudit import passport as passport_mod
 from reqaudit.config import Settings
 from reqaudit.errors import InputError
 from reqaudit.llm import LLMClient, LLMError
+from reqaudit.llm.client import ModelFactory
 from reqaudit.report.render import render_markdown
 from reqaudit.stages.base import RunContext, RunState, Stage, StageError
 from reqaudit.stages.s0_intake import IntakeStage
 from reqaudit.stages.s1_read import ReadStage
+from reqaudit.stages.s2_segment import SegmentStage
 from reqaudit.trace import Trace
 
 # The full plan. Stages without an implementation are listed so the report can say so.
@@ -34,7 +36,7 @@ STAGE_PLAN: list[tuple[str, str]] = [
     ("s9", "Отчёт"),
 ]
 
-IMPLEMENTED: list[Stage] = [IntakeStage(), ReadStage()]
+IMPLEMENTED: list[Stage] = [IntakeStage(), ReadStage(), SegmentStage()]
 
 EXIT_OK = 0
 EXIT_INPUT_ERROR = 2
@@ -54,13 +56,14 @@ def _new_run_id() -> str:
 
 
 def run_pipeline(input_path: Path, output_path: Path, settings: Settings,
-                 llm: LLMClient | None = None) -> RunResult:
+                 model_factory: ModelFactory | None = None) -> RunResult:
+    """Run all implemented stages. `model_factory` replaces real models in tests."""
     run_id = _new_run_id()
     run_dir = settings.runs_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     trace = Trace(run_dir / "trace.jsonl")
     state = RunState()
-    llm = llm or LLMClient(settings, trace)
+    llm = LLMClient(settings, trace, model_factory=model_factory)
     ctx = RunContext(input_path=input_path, run_dir=run_dir, settings=settings,
                      state=state, trace=trace, llm=llm)
     passport = passport_mod.start(input_path.name, settings.profile, settings.models, run_id,

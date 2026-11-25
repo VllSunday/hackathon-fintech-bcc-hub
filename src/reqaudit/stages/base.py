@@ -11,7 +11,15 @@ from pydantic import BaseModel, Field
 
 from reqaudit.config import Settings
 from reqaudit.llm import LLMClient
-from reqaudit.models import DocumentIR, Finding, IntakeResult, Question, Unit
+from reqaudit.models import (
+    Coverage,
+    DocumentIR,
+    DocumentProfile,
+    Finding,
+    IntakeResult,
+    Question,
+    Unit,
+)
 from reqaudit.trace import Trace
 
 
@@ -26,7 +34,9 @@ class RunState(BaseModel):
 
     intake: IntakeResult | None = None
     document: DocumentIR | None = None
+    profile: DocumentProfile | None = None
     units: list[Unit] = Field(default_factory=list)
+    coverage: Coverage | None = None
     findings: list[Finding] = Field(default_factory=list)
     questions: list[Question] = Field(default_factory=list)
     completed: list[str] = Field(default_factory=list)

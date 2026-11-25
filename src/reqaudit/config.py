@@ -9,7 +9,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 PROFILES = ("quick", "thorough")
-ROLES = ("judge", "opponent", "vision")
+ROLES = ("analyst", "judge", "opponent", "vision")
+# A role without its own model borrows this role's chain.
+ROLE_FALLBACK = {"analyst": "judge", "opponent": "judge"}
 
 # Model request budget per run when REQAUDIT_MAX_LLM_CALLS is not set.
 _DEFAULT_BUDGET = {"quick": 60, "thorough": 400}
@@ -31,6 +33,11 @@ class Settings:
     max_attempts: int = 4
     backoff_base_s: float = 2.0
     output_retries: int = 2
+    # Characters of rendered document per model call; longer documents are split by sections.
+    window_chars: int = 40_000
+
+    def chain_for(self, role: str) -> list[str]:
+        return self.models.get(role) or self.models.get(ROLE_FALLBACK.get(role, ""), [])
 
 
 def _env(name: str) -> str | None:

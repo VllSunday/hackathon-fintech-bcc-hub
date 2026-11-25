@@ -56,6 +56,19 @@ def render(name: str, /, **values: str) -> str:
     return _PLACEHOLDER.sub(substitute, prompt.body)
 
 
+def compose(*names: str, **values: str) -> tuple[str, list[str]]:
+    """Join `system_base` and role prompts into one instruction text.
+
+    Returns the text and the prompt ids with versions, for the trace.
+    """
+    parts, ids = [], []
+    for name in ("system_base", *names):
+        prompt = load(name)
+        parts.append(render(name, **values).strip())
+        ids.append(f"{prompt.id}@{prompt.version}")
+    return "\n\n".join(parts) + "\n", ids
+
+
 def fingerprint() -> str:
     """Hash of every prompt file; changes whenever any prompt changes."""
     digest = hashlib.sha256()

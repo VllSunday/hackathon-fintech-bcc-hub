@@ -1,10 +1,11 @@
+<meta charset="utf-8">
 <title>Карта агента проверки ТЗ</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@600;700&display=swap">
 <style>
 /* Layout: one column of figures, each a schematic that scrolls sideways on narrow screens; stage registry table between the overview and the detail figures. */
 :root {
-  --bg: #F6F8F6; --surface: #FFFFFF; --fg: #18211D; --muted: #586760; --line: #D3DAD6; --edge: #7C8A83;
+  --bg: #F6F8F6; --surface: #FFFFFF; --fg: #18211D; --muted: #586760; --line: #D3DAD6; --lane: #F1F4F2; --edge: #7C8A83;
   --code-bg: #EDF0EE; --code-line: #8C9892; --code-ink: #47554E;
   --model-bg: #E2F2E6; --model-line: #3D9159; --model-ink: #1E6238;
   --agent-bg: #EAE8FA; --agent-line: #6B60C4; --agent-ink: #3F3599;
@@ -16,7 +17,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #111614; --surface: #19201D; --fg: #E5ECE8; --muted: #9BA9A2; --line: #2F3A35; --edge: #7F8E87;
+    --bg: #111614; --surface: #19201D; --fg: #E5ECE8; --muted: #9BA9A2; --line: #2F3A35; --lane: #1E2622; --edge: #7F8E87;
     --code-bg: #212925; --code-line: #6E7B74; --code-ink: #B4C0BA;
     --model-bg: #173423; --model-line: #5CB67C; --model-ink: #A6E0BA;
     --agent-bg: #242149; --agent-line: #928AE8; --agent-ink: #CAC5F7;
@@ -26,7 +27,7 @@
   }
 }
 :root[data-theme="dark"] {
-  --bg: #111614; --surface: #19201D; --fg: #E5ECE8; --muted: #9BA9A2; --line: #2F3A35; --edge: #7F8E87;
+  --bg: #111614; --surface: #19201D; --fg: #E5ECE8; --muted: #9BA9A2; --line: #2F3A35; --lane: #1E2622; --edge: #7F8E87;
   --code-bg: #212925; --code-line: #6E7B74; --code-ink: #B4C0BA;
   --model-bg: #173423; --model-line: #5CB67C; --model-ink: #A6E0BA;
   --agent-bg: #242149; --agent-line: #928AE8; --agent-ink: #CAC5F7;
@@ -98,13 +99,43 @@ td.name { font-weight: 600; white-space: nowrap; }
 dl { margin: 0; display: grid; grid-template-columns: minmax(170px, 240px) 1fr; gap: 8px 20px; }
 dt { font-weight: 600; } dd { margin: 0; color: var(--muted); }
 @media (max-width: 560px) { dl { grid-template-columns: 1fr; gap: 2px; } dd { margin-bottom: 10px; } h1 { font-size: 25px; } }
+/* Сквозная схема: фазы-дорожки слева направо, прокрутка и перетаскивание мышью, режим «вписать целиком». */
+figure.bleed { width: calc(100vw - 48px); max-width: 1880px; align-self: center; }
+.lane { fill: var(--lane); }
+.ph { font-family: var(--font-display); font-size: 14px; font-weight: 700; fill: var(--fg); }
+.phk { font-family: var(--font-mono); font-size: 12px; font-weight: 400; fill: var(--muted); }
+.opt { stroke-dasharray: 6 4; }
+.cellbox { fill: var(--surface); stroke: var(--agent-line); stroke-width: 1.2; }
+.cellcopy { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+.cn circle { fill: var(--fg); }
+.cn text { fill: var(--bg); font-size: 12px; font-weight: 600; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.chips, .tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tools { gap: 12px; }
+.hint { font-size: 13px; color: var(--muted); }
+.toolbar button { font: 500 13px/1 var(--font-body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; cursor: pointer; display: inline-flex; gap: 6px; align-items: baseline; }
+.toolbar button span { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+.toolbar button:hover { border-color: var(--edge); }
+.toolbar button.on, .toolbar button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.toolbar button.on span { color: inherit; opacity: .7; }
+.toolbar button:focus-visible, .flow:focus-visible { outline: 2px solid var(--agent-line); outline-offset: 2px; }
+.flow { padding: 16px; cursor: grab; user-select: none; -webkit-user-select: none; }
+.flow.grabbing { cursor: grabbing; }
+.flow svg, .scroll.flow svg { width: 3660px; min-width: 3660px; }
+.flow.fit { cursor: zoom-in; }
+.flow.fit svg, .scroll.flow.fit svg { width: 100%; min-width: 0; }
+.notes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.notes li { display: flex; gap: 10px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.notes b { color: var(--fg); font-weight: 600; }
+.notes .num { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--fg); color: var(--bg); font: 600 12px/22px var(--font-body); text-align: center; }
+@media (max-width: 560px) { .hint { display: none; } }
 </style>
 
 <div class="page">
 
 <header>
   <h1>Карта агента проверки ТЗ</h1>
-  <p class="lead">Весь путь документа от файла до отчёта: десять этапов, кто на каждом работает, какой артефакт остаётся на диске и что проверяет код. Ниже три укрупнения: чтение файла, устройство одной ячейки проверки и внешний цикл улучшения.</p>
+  <p class="lead">Весь путь документа от файла до отчёта на одной схеме слева направо: десять этапов, кто на каждом работает, какой артефакт остаётся на диске и что проверяет код. Внутри схемы раскрыты чтение файла и устройство одной ячейки проверки. Ниже реестр этапов и внешний цикл улучшения.</p>
   <div class="state"><span><b>Состояние на 26 ноября:</b> агент проходит весь путь от MD/TXT до отчёта с дефектами, вопросами и итогом. На документе организаторов (gpt-5.5): 25 дефектов, 3 критичных, 18 вопросов, около 3,5 минуты. Читаются PDF, сканы, картинки, DOCX, HTML, RTF. Таблица фактов s3 подключена. Не сделан eval-стенд. Живые прогоны остановлены: на ключе OpenAI закончились кредиты.</span><span>Репозиторий: <a href="https://github.com/VllSunday/hackathon-fintech-bcc-hub">VllSunday/hackathon-fintech-bcc-hub</a></span></div>
   <div class="legend" aria-label="Обозначения">
     <span><i class="sw sw-code"></i>код</span>
@@ -117,127 +148,298 @@ dt { font-weight: 600; } dd { margin: 0; color: var(--muted); }
 
 <section>
   <h2>Общий поток</h2>
-  <figure>
-    <div class="scroll">
-      <svg viewBox="0 0 1180 700" role="img" aria-label="Десять этапов от документа до отчёта. Первые пять строят базу документа, следующие пять проверяют и доказывают. Ответы автора ТЗ возвращаются на этап оппонента и арбитра. Сквозные механизмы оборачивают каждый вызов модели.">
+  <figure class="bleed">
+    <div class="toolbar">
+      <div class="chips" role="group" aria-label="Перейти к фазе">
+        <button type="button" data-go="0">Вход</button>
+        <button type="button" data-go="162">Чтение файла<span>s0–s1</span></button>
+        <button type="button" data-go="1068">База и план<span>s2–s4</span></button>
+        <button type="button" data-go="1710">Проверка ячеек<span>s5–s6</span></button>
+        <button type="button" data-go="2796">Доказательство и выдача<span>s7–s9</span></button>
+      </div>
+      <div class="tools">
+        <span class="hint">тащите мышью или листайте вбок; в обзоре щелчок приближает место</span>
+        <button type="button" id="fitBtn" aria-pressed="false">Вписать целиком</button>
+      </div>
+    </div>
+    <div class="scroll flow" id="flow" tabindex="0">
+      <svg viewBox="0 0 3660 684" role="img" aria-label="Весь путь документа слева направо. Вход: документ ТЗ. Чтение файла: приёмка, три независимых прочтения PDF и терпимый парсер для текстовых форматов, сверка прочтений с арбитром, блоки с якорями. База и план: профиль и нарезка, факты и глоссарий, план ячеек; блоки, реестр и факты складываются в базу документа. Проверка ячеек: на каждую ячейку аналитик с доступом к базе, инварианты кода, оппонент и арбитр; словарь маркеров добавляет кандидатов; отклонённое уходит в трассу; калибровка выставляет серьёзность всем находкам одним вызовом. Доказательство и выдача: гейты доказательств, редактор и вопросы автору, перепроверка по ответам автора, отчёт. Снизу сквозные механизмы, которые оборачивают каждый вызов модели.">
         <defs><marker id="ah1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
 
-        <rect class="n-ext" x="38" y="20" width="160" height="40" rx="20"/>
-        <text class="pt" x="118" y="45" text-anchor="middle">Документ ТЗ</text>
-        <text class="lbl" x="212" y="44">PDF, MD, DOCX, скан, формат заранее неизвестен</text>
-        <line class="edge" x1="118" y1="60" x2="118" y2="92" marker-end="url(#ah1)"/>
+        <!-- фазы -->
+        <rect class="lane" x="16" y="44" width="134" height="470" rx="12"/>
+        <rect class="lane" x="162" y="44" width="894" height="470" rx="12"/>
+        <rect class="lane" x="1068" y="44" width="630" height="470" rx="12"/>
+        <rect class="lane" x="1710" y="44" width="1074" height="470" rx="12"/>
+        <rect class="lane" x="2796" y="44" width="848" height="470" rx="12"/>
+        <text class="ph" x="20" y="30">Вход</text>
+        <text class="ph" x="166" y="30">Чтение файла <tspan class="phk" dx="4">s0–s1</tspan></text>
+        <text class="ph" x="1072" y="30">База и план проверки <tspan class="phk" dx="4">s2–s4</tspan></text>
+        <text class="ph" x="1714" y="30">Проверка ячеек <tspan class="phk" dx="4">s5–s6</tspan></text>
+        <text class="ph" x="2800" y="30">Доказательство и выдача <tspan class="phk" dx="4">s7–s9</tspan></text>
 
-        <rect class="n-code" x="20" y="96" width="196" height="100" rx="8"/>
-        <text class="k" x="32" y="117">s0</text><text class="tag tg-code" x="204" y="117" text-anchor="end">код</text>
-        <text class="t" x="118" y="144" text-anchor="middle">Приёмка</text>
-        <text class="s" x="118" y="163" text-anchor="middle">тип, кодировка, ремонт</text>
-        <text class="k" x="118" y="184" text-anchor="middle">s0_intake.json</text>
+        <!-- вход -->
+        <rect class="n-ext" x="26" y="208" width="114" height="44" rx="22"/>
+        <text class="pt" x="83" y="235" text-anchor="middle">Документ ТЗ</text>
+        <text class="lbl" x="83" y="280" text-anchor="middle">PDF, DOCX, MD,</text>
+        <text class="lbl" x="83" y="296" text-anchor="middle">скан, картинка;</text>
+        <text class="lbl" x="83" y="312" text-anchor="middle">формат заранее</text>
+        <text class="lbl" x="83" y="328" text-anchor="middle">неизвестен</text>
+        <line class="edge" x1="140" y1="230" x2="186" y2="230" marker-end="url(#ah1)"/>
 
-        <rect class="n-code" x="256" y="96" width="196" height="100" rx="8"/>
-        <text class="k" x="268" y="117">s1</text><text class="tag tg-model" x="440" y="117" text-anchor="end">код + VLM</text>
-        <text class="t" x="354" y="144" text-anchor="middle">Чтение</text>
-        <text class="s" x="354" y="163" text-anchor="middle">три прочтения и сверка</text>
-        <text class="k" x="354" y="184" text-anchor="middle">s1_blocks.json</text>
+        <!-- s0 -->
+        <rect class="n-code" x="190" y="180" width="160" height="100" rx="8"/>
+        <text class="k" x="202" y="201">s0</text><text class="tag tg-code" x="338" y="201" text-anchor="end">код</text>
+        <text class="t" x="270" y="228" text-anchor="middle">Приёмка</text>
+        <text class="s" x="270" y="247" text-anchor="middle">тип, кодировка, ремонт</text>
+        <text class="k" x="270" y="268" text-anchor="middle">s0_intake.json</text>
 
-        <rect class="n-model" x="492" y="96" width="196" height="100" rx="8"/>
-        <text class="k" x="504" y="117">s2</text><text class="tag tg-model" x="676" y="117" text-anchor="end">модель</text>
-        <text class="t" x="590" y="144" text-anchor="middle">Профиль и нарезка</text>
-        <text class="s" x="590" y="163" text-anchor="middle">единицы, реестр требований</text>
-        <text class="k" x="590" y="184" text-anchor="middle">s2_units.json</text>
+        <!-- развилка на прочтения -->
+        <path class="edge" d="M350 230 H375 M375 150 V420"/>
+        <path class="edge" d="M375 150 H396" marker-end="url(#ah1)"/>
+        <path class="edge" d="M375 230 H396" marker-end="url(#ah1)"/>
+        <path class="edge" d="M375 310 H396" marker-end="url(#ah1)"/>
+        <path class="edge" d="M375 420 H396" marker-end="url(#ah1)"/>
+        <text class="lbl" x="366" y="140" text-anchor="end">PDF, сканы, картинки</text>
+        <text class="lbl" x="366" y="442" text-anchor="end">MD, TXT, DOCX, HTML, RTF</text>
 
-        <rect class="n-model" x="728" y="96" width="196" height="100" rx="8"/>
-        <text class="k" x="740" y="117">s3</text><text class="tag tg-model" x="912" y="117" text-anchor="end">модель</text>
-        <text class="t" x="826" y="144" text-anchor="middle">Факты и глоссарий</text>
-        <text class="s" x="826" y="163" text-anchor="middle">сущность, атрибут, значение</text>
-        <text class="k" x="826" y="184" text-anchor="middle">s3_facts.json</text>
+        <rect class="n-code" x="400" y="118" width="230" height="64" rx="8"/>
+        <text class="tag tg-code" x="618" y="136" text-anchor="end">код</text>
+        <text class="t" x="515" y="154" text-anchor="middle">Текстовый слой</text>
+        <text class="s" x="515" y="172" text-anchor="middle">PyMuPDF: текст и координаты</text>
 
-        <rect class="n-code" x="964" y="96" width="196" height="100" rx="8"/>
-        <text class="k" x="976" y="117">s4</text><text class="tag tg-code" x="1148" y="117" text-anchor="end">код</text>
-        <text class="t" x="1062" y="144" text-anchor="middle">План ячеек</text>
-        <text class="s" x="1062" y="163" text-anchor="middle">ячейки из профиля</text>
-        <text class="k" x="1062" y="184" text-anchor="middle">s4_cells.json</text>
+        <rect class="n-code" x="400" y="198" width="230" height="64" rx="8"/>
+        <text class="tag tg-code" x="618" y="216" text-anchor="end">код</text>
+        <text class="t" x="515" y="234" text-anchor="middle">Структура и OCR</text>
+        <text class="s" x="515" y="252" text-anchor="middle">Docling: таблицы, порядок чтения</text>
 
-        <line class="edge" x1="216" y1="146" x2="252" y2="146" marker-end="url(#ah1)"/>
-        <line class="edge" x1="452" y1="146" x2="488" y2="146" marker-end="url(#ah1)"/>
-        <line class="edge" x1="688" y1="146" x2="724" y2="146" marker-end="url(#ah1)"/>
-        <line class="edge" x1="924" y1="146" x2="960" y2="146" marker-end="url(#ah1)"/>
+        <rect class="n-model" x="400" y="278" width="230" height="64" rx="8"/>
+        <text class="tag tg-model" x="618" y="296" text-anchor="end">модель</text>
+        <text class="t" x="515" y="314" text-anchor="middle">Зрительное прочтение</text>
+        <text class="s" x="515" y="332" text-anchor="middle">VLM: сканы, диаграммы, таблицы</text>
 
-        <path class="edge" d="M1062 196 V248 H118 V296" marker-end="url(#ah1)"/>
-        <text class="lbl" x="590" y="238" text-anchor="middle">база готова: дальше агенты не ищут по файлу, а проверяют и доказывают</text>
+        <rect class="n-code" x="400" y="388" width="230" height="64" rx="8"/>
+        <text class="tag tg-code" x="618" y="406" text-anchor="end">код</text>
+        <text class="t" x="515" y="424" text-anchor="middle">Терпимый парсер</text>
+        <text class="s" x="515" y="442" text-anchor="middle">карта строк, журнал ремонта</text>
 
-        <rect class="n-agent" x="20" y="300" width="196" height="100" rx="8"/>
-        <text class="k" x="32" y="321">s5</text><text class="tag tg-agent" x="204" y="321" text-anchor="end">агенты</text>
-        <text class="t" x="118" y="348" text-anchor="middle">Кандидаты в дефекты</text>
-        <text class="s" x="118" y="367" text-anchor="middle">агент на ячейку + словарь</text>
-        <text class="k" x="118" y="388" text-anchor="middle">s5_candidates.json</text>
+        <!-- сверка прочтений -->
+        <path class="edge" d="M630 150 H652 V212 H672" marker-end="url(#ah1)"/>
+        <path class="edge" d="M630 230 H672" marker-end="url(#ah1)"/>
+        <path class="edge" d="M630 310 H652 V248 H672" marker-end="url(#ah1)"/>
 
-        <rect class="n-agent" x="256" y="300" width="196" height="100" rx="8"/>
-        <text class="k" x="268" y="321">s6</text><text class="tag tg-agent" x="440" y="321" text-anchor="end">агенты</text>
-        <text class="t" x="354" y="348" text-anchor="middle">Оппонент и арбитр</text>
-        <text class="s" x="354" y="367" text-anchor="middle">опровергнуть или подтвердить</text>
-        <text class="k" x="354" y="388" text-anchor="middle">s6_findings.json</text>
+        <rect class="n-code" x="676" y="182" width="170" height="96" rx="8"/>
+        <text class="tag tg-code" x="834" y="201" text-anchor="end">код</text>
+        <text class="t" x="761" y="226" text-anchor="middle">Сверка прочтений</text>
+        <text class="s" x="761" y="245" text-anchor="middle">постранично, с оценкой</text>
+        <text class="s" x="761" y="262" text-anchor="middle">уверенности блока</text>
 
-        <rect class="n-gate" x="492" y="300" width="196" height="100" rx="8"/>
-        <text class="k" x="504" y="321">s7</text><text class="tag tg-gate" x="676" y="321" text-anchor="end">гейт</text>
-        <text class="t" x="590" y="348" text-anchor="middle">Гейты доказательств</text>
-        <text class="s" x="590" y="367" text-anchor="middle">цитата, покрытие, числа</text>
-        <text class="k" x="590" y="388" text-anchor="middle">s7_gated.json</text>
+        <line class="edge" x1="741" y1="278" x2="741" y2="312" marker-end="url(#ah1)"/>
+        <line class="edge" x1="781" y1="316" x2="781" y2="282" marker-end="url(#ah1)"/>
+        <text class="lbl" x="734" y="300" text-anchor="end">расхождение</text>
+        <text class="lbl" x="788" y="300">решение</text>
 
-        <rect class="n-model" x="728" y="300" width="196" height="100" rx="8"/>
-        <text class="k" x="740" y="321">s8</text><text class="tag tg-model" x="912" y="321" text-anchor="end">модель</text>
-        <text class="t" x="826" y="348" text-anchor="middle">Вопросы автору</text>
-        <text class="s" x="826" y="367" text-anchor="middle">по дефектам, по ролям</text>
-        <text class="k" x="826" y="388" text-anchor="middle">s8_questions.json</text>
+        <rect class="n-model" x="676" y="316" width="170" height="64" rx="8"/>
+        <text class="tag tg-model" x="834" y="334" text-anchor="end">модель</text>
+        <text class="t" x="761" y="352" text-anchor="middle">Арбитр</text>
+        <text class="s" x="761" y="370" text-anchor="middle">смотрит на картинку</text>
 
-        <rect class="n-code" x="964" y="300" width="196" height="100" rx="8"/>
-        <text class="k" x="976" y="321">s9</text><text class="tag tg-code" x="1148" y="321" text-anchor="end">код</text>
-        <text class="t" x="1062" y="348" text-anchor="middle">Отчёт</text>
-        <text class="s" x="1062" y="367" text-anchor="middle">шаблон, паспорт, сводка</text>
-        <text class="k" x="1062" y="388" text-anchor="middle">report.md, report.json</text>
+        <!-- s1: блоки -->
+        <line class="edge" x1="846" y1="230" x2="880" y2="230" marker-end="url(#ah1)"/>
+        <rect class="n-code" x="884" y="180" width="166" height="100" rx="8"/>
+        <text class="k" x="896" y="201">s1</text><text class="tag tg-model" x="1038" y="201" text-anchor="end">код + VLM</text>
+        <text class="t" x="967" y="228" text-anchor="middle">Блоки с якорями</text>
+        <text class="s" x="967" y="247" text-anchor="middle">страница, раздел, строка</text>
+        <text class="k" x="967" y="268" text-anchor="middle">s1_blocks.json</text>
 
-        <line class="edge" x1="216" y1="350" x2="252" y2="350" marker-end="url(#ah1)"/>
-        <line class="edge" x1="452" y1="350" x2="488" y2="350" marker-end="url(#ah1)"/>
-        <line class="edge" x1="688" y1="350" x2="724" y2="350" marker-end="url(#ah1)"/>
-        <line class="edge" x1="924" y1="350" x2="960" y2="350" marker-end="url(#ah1)"/>
+        <path class="edge" d="M630 420 H967 V284" marker-end="url(#ah1)"/>
+        <text class="lbl" x="800" y="442" text-anchor="middle">поломки разметки идут в отчёт как дефекты документа</text>
 
-        <rect class="n-ext" x="728" y="460" width="196" height="40" rx="20"/>
-        <text class="pt" x="826" y="485" text-anchor="middle">Автор ТЗ, аналитик</text>
-        <line class="edge" x1="826" y1="400" x2="826" y2="456" marker-end="url(#ah1)"/>
-        <text class="lbl" x="836" y="432">вопросы</text>
+        <!-- шина в базу документа -->
+        <path class="edge dash" d="M967 180 V92 H1760" marker-end="url(#ah1)"/>
+        <path class="edge dash" d="M1182 180 V92 M1396 180 V92"/>
+        <text class="lbl" x="1545" y="84" text-anchor="middle">блоки, реестр и факты → в базу</text>
 
-        <rect class="n-ext" x="982" y="460" width="160" height="40" rx="20"/>
-        <text class="pt" x="1062" y="485" text-anchor="middle">Отчёт на русском</text>
-        <line class="edge" x1="1062" y1="400" x2="1062" y2="456" marker-end="url(#ah1)"/>
-        <line class="edge" x1="982" y1="480" x2="928" y2="480" marker-end="url(#ah1)"/>
+        <!-- s2–s4 -->
+        <line class="edge" x1="1050" y1="230" x2="1088" y2="230" marker-end="url(#ah1)"/>
+        <rect class="n-model" x="1092" y="180" width="180" height="100" rx="8"/>
+        <text class="k" x="1104" y="201">s2</text><text class="tag tg-model" x="1260" y="201" text-anchor="end">модель</text>
+        <text class="t" x="1182" y="228" text-anchor="middle">Профиль и нарезка</text>
+        <text class="s" x="1182" y="247" text-anchor="middle">единицы, реестр требований</text>
+        <text class="k" x="1182" y="268" text-anchor="middle">s2_units.json</text>
 
-        <path class="edge dash" d="M728 480 H354 V404" marker-end="url(#ah1)"/>
-        <text class="lbl" x="541" y="499" text-anchor="middle">ответы: файлом или в диалоге, затем перепроверка находок</text>
+        <line class="edge" x1="1272" y1="230" x2="1302" y2="230" marker-end="url(#ah1)"/>
+        <rect class="n-model" x="1306" y="180" width="180" height="100" rx="8"/>
+        <text class="k" x="1318" y="201">s3</text><text class="tag tg-model" x="1474" y="201" text-anchor="end">модель</text>
+        <text class="t" x="1396" y="228" text-anchor="middle">Факты и глоссарий</text>
+        <text class="s" x="1396" y="247" text-anchor="middle">сущность, атрибут, значение</text>
+        <text class="k" x="1396" y="268" text-anchor="middle">s3_facts.json</text>
 
-        <rect class="band" x="20" y="540" width="1140" height="140" rx="8"/>
-        <text class="lbl" x="36" y="565">Сквозные механизмы: оборачивают каждый вызов модели на этапах s1–s8</text>
+        <line class="edge" x1="1486" y1="230" x2="1516" y2="230" marker-end="url(#ah1)"/>
+        <rect class="n-code" x="1520" y="180" width="170" height="100" rx="8"/>
+        <text class="k" x="1532" y="201">s4</text><text class="tag tg-code" x="1678" y="201" text-anchor="end">код</text>
+        <text class="t" x="1605" y="228" text-anchor="middle">План ячеек</text>
+        <text class="s" x="1605" y="247" text-anchor="middle">ячейки из профиля</text>
+        <text class="k" x="1605" y="268" text-anchor="middle">s4_cells.json</text>
 
-        <rect class="n-code" x="36" y="582" width="206" height="80" rx="8"/>
-        <text class="t" x="139" y="615" text-anchor="middle">Кэш ответов на диск</text>
-        <text class="s" x="139" y="636" text-anchor="middle">ключ: хэш промпта и входа</text>
+        <text class="lbl" x="1383" y="332" text-anchor="middle">база готова: дальше агенты не ищут по файлу,</text>
+        <text class="lbl" x="1383" y="349" text-anchor="middle">а проверяют и доказывают</text>
 
-        <rect class="n-code" x="262" y="582" width="206" height="80" rx="8"/>
-        <text class="t" x="365" y="615" text-anchor="middle">Трасса вызовов</text>
-        <text class="s" x="365" y="636" text-anchor="middle">trace.jsonl на каждый прогон</text>
+        <!-- ячейки s5–s6 -->
+        <line class="edge" x1="1690" y1="230" x2="1736" y2="230" marker-end="url(#ah1)"/>
+        <text class="lbl" x="1713" y="221" text-anchor="middle">× N</text>
 
-        <rect class="n-code" x="488" y="582" width="206" height="80" rx="8"/>
-        <text class="t" x="591" y="615" text-anchor="middle">Бюджет и запасная модель</text>
-        <text class="s" x="591" y="636" text-anchor="middle">лимитер, повторы, fallback</text>
+        <rect class="n-ext" x="1764" y="74" width="176" height="36" rx="18"/>
+        <text class="pt" x="1852" y="97" text-anchor="middle">База документа</text>
 
-        <rect class="n-code" x="714" y="582" width="206" height="80" rx="8"/>
-        <text class="t" x="817" y="615" text-anchor="middle">Промпты файлами</text>
-        <text class="s" x="817" y="636" text-anchor="middle">хэш попадает в паспорт</text>
+        <rect class="cellcopy" x="1752" y="142" width="804" height="220" rx="10"/>
+        <rect class="cellcopy" x="1746" y="136" width="804" height="220" rx="10"/>
+        <rect class="cellbox" x="1740" y="130" width="804" height="220" rx="10"/>
+        <text class="lbl" x="1950" y="157">ячейка × N, параллельно: требование с критериями или пара-кандидат в противоречие</text>
 
-        <rect class="n-code" x="940" y="582" width="206" height="80" rx="8"/>
-        <text class="t" x="1043" y="615" text-anchor="middle">Eval-стенд</text>
-        <text class="s" x="1043" y="636" text-anchor="middle">эталон, мутации, скорер</text>
+        <line class="edge" x1="1822" y1="180" x2="1822" y2="114" marker-end="url(#ah1)"/>
+        <line class="edge" x1="1882" y1="110" x2="1882" y2="176" marker-end="url(#ah1)"/>
+        <text class="lbl" x="1815" y="124" text-anchor="end">запрос</text>
+        <text class="lbl" x="1890" y="124">блоки и факты, до трёх шагов</text>
+
+        <rect class="n-agent" x="1764" y="180" width="170" height="100" rx="8"/>
+        <text class="k" x="1776" y="201">s5</text><text class="tag tg-agent" x="1922" y="201" text-anchor="end">агент</text>
+        <text class="t" x="1849" y="228" text-anchor="middle">Аналитик</text>
+        <text class="s" x="1849" y="247" text-anchor="middle">ищет дефект по критериям</text>
+        <text class="k" x="1849" y="268" text-anchor="middle">s5_candidates.json</text>
+
+        <line class="edge" x1="1934" y1="230" x2="1970" y2="230" marker-end="url(#ah1)"/>
+        <rect class="n-gate" x="1974" y="180" width="160" height="100" rx="8"/>
+        <text class="tag tg-gate" x="2122" y="201" text-anchor="end">гейт</text>
+        <text class="t" x="2054" y="228" text-anchor="middle">Инварианты кода</text>
+        <text class="s" x="2054" y="247" text-anchor="middle">схема ответа соблюдена,</text>
+        <text class="s" x="2054" y="264" text-anchor="middle">цитата есть в блоке</text>
+
+        <line class="edge" x1="2134" y1="230" x2="2170" y2="230" marker-end="url(#ah1)"/>
+        <rect class="n-agent" x="2174" y="180" width="170" height="100" rx="8"/>
+        <text class="k" x="2186" y="201">s6</text><text class="tag tg-agent" x="2332" y="201" text-anchor="end">агент</text>
+        <text class="t" x="2259" y="228" text-anchor="middle">Оппонент</text>
+        <text class="s" x="2259" y="247" text-anchor="middle">ищет контекст против,</text>
+        <text class="s" x="2259" y="264" text-anchor="middle">контрфактуальный тест</text>
+
+        <line class="edge" x1="2344" y1="230" x2="2380" y2="230" marker-end="url(#ah1)"/>
+        <rect class="n-model" x="2384" y="180" width="140" height="100" rx="8"/>
+        <text class="tag tg-model" x="2512" y="201" text-anchor="end">модель</text>
+        <text class="t" x="2454" y="228" text-anchor="middle">Арбитр</text>
+        <text class="s" x="2454" y="247" text-anchor="middle">решает спорное</text>
+        <text class="k" x="2454" y="268" text-anchor="middle">s6_review.json</text>
+
+        <path class="edge dash" d="M2054 280 V306 H1890 V284" marker-end="url(#ah1)"/>
+        <text class="lbl" x="1972" y="326" text-anchor="middle">претензия: что исправить, одна попытка</text>
+
+        <rect class="n-code" x="1764" y="392" width="200" height="62" rx="8"/>
+        <text class="tag tg-code" x="1952" y="410" text-anchor="end">код</text>
+        <text class="t" x="1864" y="427" text-anchor="middle">Словарь маркеров</text>
+        <text class="s" x="1864" y="445" text-anchor="middle">только добавляет кандидатов</text>
+        <line class="edge" x1="1800" y1="392" x2="1800" y2="284" marker-end="url(#ah1)"/>
+
+        <line class="edge" x1="2454" y1="280" x2="2454" y2="392" marker-end="url(#ah1)"/>
+        <rect class="n-ext" x="2354" y="396" width="200" height="36" rx="18"/>
+        <text class="pt" x="2454" y="419" text-anchor="middle">Отклонено, след в трассе</text>
+
+        <!-- калибровка: последний шаг s6, один вызов на все находки -->
+        <line class="edge" x1="2524" y1="230" x2="2586" y2="230" marker-end="url(#ah1)"/>
+        <text class="lbl" x="2675" y="164" text-anchor="middle">все подтверждённые сразу</text>
+        <rect class="n-model" x="2590" y="180" width="170" height="100" rx="8"/>
+        <text class="k" x="2602" y="201">s6</text><text class="tag tg-model" x="2748" y="201" text-anchor="end">модель</text>
+        <text class="t" x="2675" y="228" text-anchor="middle">Калибровка</text>
+        <text class="s" x="2675" y="247" text-anchor="middle">серьёзность всех находок</text>
+        <text class="s" x="2675" y="264" text-anchor="middle">одним вызовом</text>
+
+        <!-- s7–s9 -->
+        <line class="edge" x1="2760" y1="230" x2="2816" y2="230" marker-end="url(#ah1)"/>
+        <rect class="n-gate" x="2820" y="180" width="170" height="100" rx="8"/>
+        <text class="k" x="2832" y="201">s7</text><text class="tag tg-gate" x="2978" y="201" text-anchor="end">гейт</text>
+        <text class="t" x="2905" y="228" text-anchor="middle">Гейты доказательств</text>
+        <text class="s" x="2905" y="247" text-anchor="middle">цитата, покрытие, числа</text>
+        <text class="k" x="2905" y="268" text-anchor="middle">s7_gated.json</text>
+
+        <line class="edge" x1="2990" y1="230" x2="3026" y2="230" marker-end="url(#ah1)"/>
+        <rect class="n-model" x="3030" y="180" width="170" height="100" rx="8"/>
+        <text class="k" x="3042" y="201">s8</text><text class="tag tg-model" x="3188" y="201" text-anchor="end">модель</text>
+        <text class="t" x="3115" y="228" text-anchor="middle">Редактор и вопросы</text>
+        <text class="s" x="3115" y="247" text-anchor="middle">дубли, адресат по роли</text>
+        <text class="k" x="3115" y="268" text-anchor="middle">s8_questions.json</text>
+
+        <line class="edge" x1="3200" y1="230" x2="3236" y2="230" marker-end="url(#ah1)"/>
+        <rect class="n-model opt" x="3240" y="180" width="170" height="100" rx="8"/>
+        <text class="k" x="3252" y="201">s8b</text><text class="tag tg-model" x="3398" y="201" text-anchor="end">модель</text>
+        <text class="t" x="3325" y="228" text-anchor="middle">Перепроверка</text>
+        <text class="s" x="3325" y="247" text-anchor="middle">по ответам автора</text>
+        <text class="k" x="3325" y="268" text-anchor="middle">s8b_answers.json</text>
+
+        <line class="edge" x1="3410" y1="230" x2="3446" y2="230" marker-end="url(#ah1)"/>
+        <rect class="n-code" x="3450" y="180" width="170" height="100" rx="8"/>
+        <text class="k" x="3462" y="201">s9</text><text class="tag tg-code" x="3608" y="201" text-anchor="end">код</text>
+        <text class="t" x="3535" y="228" text-anchor="middle">Отчёт</text>
+        <text class="s" x="3535" y="247" text-anchor="middle">шаблон, паспорт, сводка</text>
+        <text class="k" x="3535" y="268" text-anchor="middle">report.md, report.json</text>
+
+        <path class="edge dash" d="M3115 180 V146 H3535 V176" marker-end="url(#ah1)"/>
+        <text class="lbl" x="3325" y="138" text-anchor="middle">нет ответов: сразу в отчёт</text>
+
+        <line class="edge" x1="3115" y1="280" x2="3115" y2="396" marker-end="url(#ah1)"/>
+        <text class="lbl" x="3123" y="342">вопросы</text>
+        <rect class="n-ext" x="3030" y="400" width="170" height="40" rx="20"/>
+        <text class="pt" x="3115" y="425" text-anchor="middle">Автор ТЗ, аналитик</text>
+
+        <path class="edge dash" d="M3200 420 H3325 V284" marker-end="url(#ah1)"/>
+        <text class="lbl" x="3335" y="348">ответы: файлом</text>
+        <text class="lbl" x="3335" y="364">или в терминале</text>
+
+        <line class="edge" x1="3535" y1="280" x2="3535" y2="396" marker-end="url(#ah1)"/>
+        <rect class="n-ext" x="3450" y="400" width="170" height="40" rx="20"/>
+        <text class="pt" x="3535" y="425" text-anchor="middle">Отчёт на русском</text>
+
+        <!-- сквозные механизмы -->
+        <rect class="band" x="162" y="534" width="3482" height="132" rx="10"/>
+        <text class="lbl" x="186" y="559">Сквозные механизмы: оборачивают каждый вызов модели на этапах s1–s8b</text>
+
+        <rect class="n-code" x="182" y="572" width="652" height="78" rx="8"/>
+        <text class="t" x="508" y="600" text-anchor="middle">Кэш ответов на диск</text>
+        <text class="s" x="508" y="620" text-anchor="middle">ключ: провайдер, модель, параметры, промпт, схема, вход</text>
+        <text class="s" x="508" y="637" text-anchor="middle">повторный прогон даёт тот же отчёт и почти ничего не стоит</text>
+
+        <rect class="n-code" x="880" y="572" width="652" height="78" rx="8"/>
+        <text class="t" x="1206" y="600" text-anchor="middle">Трасса вызовов</text>
+        <text class="s" x="1206" y="620" text-anchor="middle">trace.jsonl: шаг, модель, хэш промпта, токены, задержка, кэш</text>
+        <text class="s" x="1206" y="637" text-anchor="middle">по трассам разбираются провалы</text>
+
+        <rect class="n-code" x="1578" y="572" width="652" height="78" rx="8"/>
+        <text class="t" x="1904" y="600" text-anchor="middle">Бюджет и запасная модель</text>
+        <text class="s" x="1904" y="620" text-anchor="middle">лимитер под минутные лимиты, повторы с паузой</text>
+        <text class="s" x="1904" y="637" text-anchor="middle">запасная модель при исчерпании квоты, повтор при невалидном ответе</text>
+
+        <rect class="n-code" x="2276" y="572" width="652" height="78" rx="8"/>
+        <text class="t" x="2602" y="600" text-anchor="middle">Промпты файлами</text>
+        <text class="s" x="2602" y="620" text-anchor="middle">лежат в репозитории, хэш попадает в паспорт прогона</text>
+        <text class="s" x="2602" y="637" text-anchor="middle">вместе с коммитом агента и моделью</text>
+
+        <rect class="n-code" x="2974" y="572" width="652" height="78" rx="8"/>
+        <text class="t" x="3300" y="600" text-anchor="middle">Eval-стенд</text>
+        <text class="s" x="3300" y="620" text-anchor="middle">эталонная разметка, мутационный набор, скорер</text>
+        <text class="s" x="3300" y="637" text-anchor="middle">каждый проверяющий включается флагом</text>
+
+        <!-- номера пояснений -->
+        <g class="cn"><circle cx="761" cy="160" r="11"/><text x="761" y="164.5" text-anchor="middle">1</text></g>
+        <g class="cn"><circle cx="1110" cy="92" r="11"/><text x="1110" y="96.5" text-anchor="middle">2</text></g>
+        <g class="cn"><circle cx="1740" cy="130" r="11"/><text x="1740" y="134.5" text-anchor="middle">3</text></g>
+        <g class="cn"><circle cx="3262" cy="420" r="11"/><text x="3262" y="424.5" text-anchor="middle">4</text></g>
+        <g class="cn"><circle cx="162" cy="534" r="11"/><text x="162" y="538.5" text-anchor="middle">5</text></g>
       </svg>
     </div>
-    <figcaption>Верхний ряд превращает файл в базу: блоки с якорями, реестр требований, таблица фактов. Нижний ряд работает только с базой. Пунктир показывает единственную обратную связь с человеком: ответы на вопросы возвращают находки на перепроверку, после чего отчёт собирается заново.</figcaption>
+    <ol class="notes">
+      <li><span class="num">1</span><span><b>Прочтения нужны разные, потому что ломаются по-разному.</b> У одной PDF-презентации текстовый слой отдал кириллицу, но молча потерял латиницу и цифры. По самому тексту это не видно, ловит только сверка с изображением страницы.</span></li>
+      <li><span class="num">2</span><span><b>База документа.</b> Блоки с якорями, реестр требований и таблица фактов складываются в одно место. Начиная с s5 агенты не ищут по файлу, а проверяют и доказывают по базе.</span></li>
+      <li><span class="num">3</span><span><b>Ячейка</b> это одно требование с группой критериев либо одна пара-кандидат в противоречие. Набор ячеек строит s4 из профиля. Оппонент полезен, только когда независим: другая роль, другой вход или другая модель. После всех ячеек одна калибровка выставляет серьёзность всем находкам сразу: оценённая поодиночке, каждая кажется важнее.</span></li>
+      <li><span class="num">4</span><span><b>Единственная обратная связь с человеком.</b> Если автор ответил файлом или в терминале, s8b перепроверяет затронутые находки: дефект остаётся с конкретной правкой текста, снимается или меняет серьёзность. Без ответов отчёт собирается сразу.</span></li>
+      <li><span class="num">5</span><span><b>Сквозные механизмы</b> оборачивают каждый вызов модели: прогон воспроизводим, дёшев при повторе и разбирается по трассе. Подробности ниже.</span></li>
+    </ol>
   </figure>
 </section>
 
@@ -267,147 +469,6 @@ dt { font-weight: 600; } dd { margin: 0; color: var(--muted); }
     <span><i class="st st-done">готов</i></span>
     <span><i class="st st-eval">проверен на eval</i></span>
   </div>
-</section>
-
-<section>
-  <h2>Чтение файла, этапы s0 и s1</h2>
-  <figure>
-    <div class="scroll">
-      <svg viewBox="0 0 1180 410" role="img" aria-label="PDF читается тремя независимыми способами: текстовый слой, структурный разбор и зрительное прочтение моделью. Сверка сравнивает их постранично, при расхождении решает арбитр по изображению страницы. Текстовые форматы идут через терпимый парсер. На выходе блоки с якорями.">
-        <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
-
-        <rect class="n-ext" x="20" y="150" width="120" height="40" rx="20"/>
-        <text class="pt" x="80" y="175" text-anchor="middle">Файл</text>
-        <line class="edge" x1="140" y1="170" x2="176" y2="170" marker-end="url(#ah2)"/>
-
-        <rect class="n-code" x="180" y="120" width="190" height="100" rx="8"/>
-        <text class="k" x="192" y="141">s0</text><text class="tag tg-code" x="358" y="141" text-anchor="end">код</text>
-        <text class="t" x="275" y="168" text-anchor="middle">Приёмка</text>
-        <text class="s" x="275" y="187" text-anchor="middle">сигнатура, кодировка,</text>
-        <text class="s" x="275" y="203" text-anchor="middle">лимиты, ремонт PDF</text>
-
-        <path class="edge" d="M370 170 H405 V60 H436" marker-end="url(#ah2)"/>
-        <path class="edge" d="M405 148 H436" marker-end="url(#ah2)"/>
-        <path class="edge" d="M405 170 V236 H436" marker-end="url(#ah2)"/>
-        <path class="edge" d="M405 236 V354 H436" marker-end="url(#ah2)"/>
-        <text class="lbl" x="398" y="100" text-anchor="end">PDF</text>
-        <text class="lbl" x="414" y="300">MD, TXT, DOCX, HTML</text>
-
-        <rect class="n-code" x="440" y="24" width="250" height="72" rx="8"/>
-        <text class="tag tg-code" x="678" y="45" text-anchor="end">код</text>
-        <text class="t" x="454" y="56">Текстовый слой</text>
-        <text class="s" x="454" y="78">PyMuPDF: точный текст, координаты</text>
-
-        <rect class="n-code" x="440" y="112" width="250" height="72" rx="8"/>
-        <text class="tag tg-code" x="678" y="133" text-anchor="end">код</text>
-        <text class="t" x="454" y="144">Структура и OCR</text>
-        <text class="s" x="454" y="166">Docling: таблицы, порядок чтения</text>
-
-        <rect class="n-model" x="440" y="200" width="250" height="72" rx="8"/>
-        <text class="tag tg-model" x="678" y="221" text-anchor="end">модель</text>
-        <text class="t" x="454" y="232">Зрительное прочтение</text>
-        <text class="s" x="454" y="254">VLM: сканы, диаграммы, таблицы</text>
-
-        <rect class="n-code" x="440" y="318" width="250" height="72" rx="8"/>
-        <text class="tag tg-code" x="678" y="339" text-anchor="end">код</text>
-        <text class="t" x="454" y="350">Терпимый парсер</text>
-        <text class="s" x="454" y="372">карта строк, журнал ремонта</text>
-
-        <path class="edge" d="M690 60 H730 V130 H766" marker-end="url(#ah2)"/>
-        <line class="edge" x1="690" y1="148" x2="766" y2="148" marker-end="url(#ah2)"/>
-        <path class="edge" d="M690 236 H730 V166 H766" marker-end="url(#ah2)"/>
-
-        <rect class="n-code" x="770" y="100" width="190" height="96" rx="8"/>
-        <text class="tag tg-code" x="948" y="121" text-anchor="end">код</text>
-        <text class="t" x="865" y="146" text-anchor="middle">Сверка прочтений</text>
-        <text class="s" x="865" y="165" text-anchor="middle">постранично, с оценкой</text>
-        <text class="s" x="865" y="181" text-anchor="middle">уверенности блока</text>
-
-        <line class="edge" x1="850" y1="196" x2="850" y2="246" marker-end="url(#ah2)"/>
-        <line class="edge" x1="880" y1="250" x2="880" y2="200" marker-end="url(#ah2)"/>
-        <text class="lbl" x="842" y="227" text-anchor="end">расхождение</text>
-        <text class="lbl" x="888" y="227">решение</text>
-
-        <rect class="n-model" x="770" y="250" width="190" height="72" rx="8"/>
-        <text class="tag tg-model" x="948" y="271" text-anchor="end">модель</text>
-        <text class="t" x="784" y="282">Арбитр</text>
-        <text class="s" x="784" y="304">смотрит на картинку страницы</text>
-
-        <line class="edge" x1="960" y1="148" x2="1006" y2="148" marker-end="url(#ah2)"/>
-        <rect class="n-code" x="1010" y="100" width="150" height="96" rx="8"/>
-        <text class="k" x="1085" y="121" text-anchor="middle">s1_blocks.json</text>
-        <text class="t" x="1085" y="146" text-anchor="middle">Блоки с якорями</text>
-        <text class="s" x="1085" y="165" text-anchor="middle">страница, раздел,</text>
-        <text class="s" x="1085" y="181" text-anchor="middle">строка, уверенность</text>
-
-        <path class="edge" d="M690 354 H1085 V200" marker-end="url(#ah2)"/>
-        <text class="lbl" x="888" y="373" text-anchor="middle">поломки разметки идут в отчёт как дефекты документа</text>
-      </svg>
-    </div>
-    <figcaption>Прочтения нужны разные, потому что ломаются они по-разному. Пример из практики: у одной PDF-презентации текстовый слой отдал кириллицу, но молча потерял всю латиницу и цифры, и по самому тексту это не видно. Такой дефект ловит только сверка с изображением страницы.</figcaption>
-  </figure>
-</section>
-
-<section>
-  <h2>Одна ячейка проверки, этапы s5 и s6</h2>
-  <figure>
-    <div class="scroll">
-      <svg viewBox="0 0 1180 380" role="img" aria-label="Ячейка проверки проходит четыре роли: аналитик с доступом к базе документа, инварианты кода, оппонент и арбитр. Инварианты возвращают аналитику претензию. Арбитр либо подтверждает находку и отправляет её в гейты, либо отклоняет.">
-        <defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
-
-        <rect class="n-ext" x="230" y="24" width="160" height="40" rx="20"/>
-        <text class="pt" x="310" y="49" text-anchor="middle">База документа</text>
-        <line class="edge" x1="280" y1="160" x2="280" y2="68" marker-end="url(#ah3)"/>
-        <line class="edge" x1="340" y1="64" x2="340" y2="156" marker-end="url(#ah3)"/>
-        <text class="lbl" x="272" y="110" text-anchor="end">поиск, блок, факты</text>
-        <text class="lbl" x="348" y="104">блоки и факты,</text>
-        <text class="lbl" x="348" y="120">до трёх шагов</text>
-
-        <rect class="n-ext" x="20" y="188" width="140" height="40" rx="20"/>
-        <text class="pt" x="90" y="213" text-anchor="middle">Ячейка</text>
-        <line class="edge" x1="160" y1="208" x2="206" y2="208" marker-end="url(#ah3)"/>
-
-        <rect class="n-agent" x="210" y="160" width="200" height="96" rx="8"/>
-        <text class="tag tg-agent" x="398" y="181" text-anchor="end">агент</text>
-        <text class="t" x="310" y="206" text-anchor="middle">Аналитик</text>
-        <text class="s" x="310" y="225" text-anchor="middle">ищет дефект по критериям,</text>
-        <text class="s" x="310" y="241" text-anchor="middle">вердикт и ссылка на блок</text>
-
-        <line class="edge" x1="410" y1="208" x2="466" y2="208" marker-end="url(#ah3)"/>
-        <rect class="n-gate" x="470" y="160" width="200" height="96" rx="8"/>
-        <text class="tag tg-gate" x="658" y="181" text-anchor="end">гейт</text>
-        <text class="t" x="570" y="206" text-anchor="middle">Инварианты кода</text>
-        <text class="s" x="570" y="225" text-anchor="middle">схема ответа соблюдена,</text>
-        <text class="s" x="570" y="241" text-anchor="middle">цитата есть в блоке</text>
-
-        <path class="edge dash" d="M570 256 V300 H310 V260" marker-end="url(#ah3)"/>
-        <text class="lbl" x="440" y="319" text-anchor="middle">претензия: что исправить, одна попытка</text>
-
-        <line class="edge" x1="670" y1="208" x2="726" y2="208" marker-end="url(#ah3)"/>
-        <rect class="n-agent" x="730" y="160" width="200" height="96" rx="8"/>
-        <text class="tag tg-agent" x="918" y="181" text-anchor="end">агент</text>
-        <text class="t" x="830" y="206" text-anchor="middle">Оппонент</text>
-        <text class="s" x="830" y="225" text-anchor="middle">ищет контекст против дефекта,</text>
-        <text class="s" x="830" y="241" text-anchor="middle">контрфактуальный тест</text>
-
-        <line class="edge" x1="930" y1="208" x2="986" y2="208" marker-end="url(#ah3)"/>
-        <rect class="n-model" x="990" y="160" width="170" height="96" rx="8"/>
-        <text class="tag tg-model" x="1148" y="181" text-anchor="end">модель</text>
-        <text class="t" x="1075" y="206" text-anchor="middle">Арбитр</text>
-        <text class="s" x="1075" y="225" text-anchor="middle">решает спорное</text>
-        <text class="s" x="1075" y="241" text-anchor="middle">по доказательствам</text>
-
-        <line class="edge" x1="1105" y1="256" x2="1105" y2="316" marker-end="url(#ah3)"/>
-        <rect class="n-ext" x="1040" y="320" width="130" height="40" rx="20"/>
-        <text class="pt" x="1105" y="345" text-anchor="middle">Находка в s7</text>
-
-        <path class="edge" d="M1030 256 V290 H890 V316" marker-end="url(#ah3)"/>
-        <rect class="n-ext" x="790" y="320" width="200" height="40" rx="20"/>
-        <text class="pt" x="890" y="345" text-anchor="middle">Отклонено, след в трассе</text>
-      </svg>
-    </div>
-    <figcaption>Ячейка это одно требование с группой критериев либо одна пара-кандидат в противоречие. Набор ячеек заранее не задан: его строит этап s4 из профиля документа. Оппонент полезен только тогда, когда он независим: другая роль, другой вход или другая модель. Та же ячейка с теми же четырьмя ролями используется и на остальных этапах, меняется только содержание.</figcaption>
-  </figure>
 </section>
 
 <section>
@@ -517,3 +578,56 @@ dt { font-weight: 600; } dd { margin: 0; color: var(--muted); }
 </section>
 
 </div>
+
+<script>
+(() => {
+  const flow = document.getElementById('flow');
+  if (!flow) return;
+  const svg = flow.querySelector('svg');
+  const fitBtn = document.getElementById('fitBtn');
+  const chips = [...document.querySelectorAll('.chips [data-go]')];
+  const W = 3660;
+  const isFit = () => flow.classList.contains('fit');
+  const scale = () => svg.getBoundingClientRect().width / W;
+  const mark = () => {
+    const x = (flow.scrollLeft + flow.clientWidth * 0.3) / scale();
+    let cur = chips[0];
+    chips.forEach(b => { if (x >= +b.dataset.go) cur = b; });
+    chips.forEach(b => b.classList.toggle('on', !isFit() && b === cur));
+  };
+  const setFit = on => {
+    flow.classList.toggle('fit', on);
+    fitBtn.setAttribute('aria-pressed', String(on));
+    fitBtn.textContent = on ? 'Обычный масштаб' : 'Вписать целиком';
+    mark();
+  };
+  fitBtn.addEventListener('click', () => setFit(!isFit()));
+  chips.forEach(b => b.addEventListener('click', () => {
+    if (isFit()) setFit(false);
+    flow.scrollTo({ left: Math.max(0, +b.dataset.go * scale() - 8), behavior: 'smooth' });
+  }));
+  flow.addEventListener('click', e => {
+    if (!isFit()) return;
+    const r = svg.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width * W;
+    setFit(false);
+    flow.scrollLeft = Math.max(0, x * scale() - flow.clientWidth / 2);
+  });
+  flow.addEventListener('scroll', mark, { passive: true });
+  window.addEventListener('resize', mark);
+  mark();
+  let drag = null;
+  flow.addEventListener('pointerdown', e => {
+    if (e.pointerType !== 'mouse' || e.button !== 0 || isFit()) return;
+    drag = { x: e.clientX, left: flow.scrollLeft };
+    flow.classList.add('grabbing');
+  });
+  window.addEventListener('pointermove', e => {
+    if (!drag) return;
+    flow.scrollLeft = drag.left - (e.clientX - drag.x);
+  });
+  const end = () => { drag = null; flow.classList.remove('grabbing'); };
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
+})();
+</script>

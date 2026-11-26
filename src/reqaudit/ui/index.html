@@ -296,7 +296,8 @@ table { border-collapse: collapse; width: 100%; }
 .fixes .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .blocking { margin-top: 14px; }
 .blocking ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
-.blocking li { overflow-wrap: anywhere; }
+.blocking li { overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .findings details.resolved { margin-top: 14px; }
 .findings details.resolved summary { cursor: pointer; color: var(--muted); }
 .notes h4 { margin: 0 0 4px; }
@@ -1032,7 +1033,7 @@ function showReport(R) {
             h('span', { class: 'mono' }, f.id), h('span', { class: 't' }, f.title))))) : null,
         blocking.length ? h('div', { class: 'blocking' },
           h('div', { class: 'q' }, `Ответить до начала разработки: ${blocking.length} ${plural(blocking.length, 'вопрос', 'вопроса', 'вопросов')}`),
-          h('ul', null, blocking.slice(0, 3).map((q) => h('li', null,
+          h('ul', null, blocking.slice(0, 3).map((q) => h('li', { title: q.text },
             h('span', { class: 'mono' }, q.id), ' ', h('span', { class: 'muted' }, `${q.addressee}: `), q.text))),
           blocking.length > 3 ? h('button', { class: 'linkish', type: 'button', onclick: () => showTab('questions') }, 'Все вопросы автору') : null) : null));
   } else {

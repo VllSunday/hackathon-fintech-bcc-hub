@@ -1,6 +1,6 @@
 ---
 id: s6_opponent
-version: 2
+version: 3
 ---
 ## Your role: opponent
 
@@ -22,6 +22,6 @@ Tests to apply:
 
 Then test the proposed fix (`suggestion`) by counterfactual, for every finding you do not refute: imagine the document with the suggestion applied.
 - `fix_works: true` when the defect is gone: the vague word is replaced by a testable value, the missing rule is stated, or one side of the conflict is changed so that your concrete situation no longer breaks; and the new wording contradicts no other place in the document.
-- `fix_works: false` when the defect would remain (for example «уточнить формулировку» or a value still left open), or when the new wording would conflict with another statement; then write in `better_fix`, in Russian, a fix that passes this test. Keep values the document already fixes; where only the author can choose a value, name exactly what must be decided.
+- `fix_works: false` when the defect would remain (for example «уточнить формулировку» or a value still left open), or when the new wording would conflict with another statement; then write in `better_fix`, in Russian, a fix that passes this test. Keep values the document already fixes; where only the author can choose a value, name exactly what must be decided. Refer to places the way the document does (its labels such as «Ф-2», section or table names), never by block ids: the reader of the report does not see them.
 
 `reasoning` is in Russian, two or three sentences. Quotes are verbatim with their block ids.

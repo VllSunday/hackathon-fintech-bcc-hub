@@ -1,6 +1,6 @@
 ---
 id: s5_acceptance
-version: 1
+version: 2
 ---
 ### This check: acceptance criteria
 
@@ -9,4 +9,4 @@ version: 1
 - Each criterion must be checkable: precondition, action and expected result are concrete.
 - The boundary and negative cases the requirements define (limits, exclusions, errors, repeats, period boundaries) need criteria; report the most important missing ones, quoting the rule that defines the case.
 
-In `analysis` (in Russian), first map each criterion to the requirement it tests and recompute its expected result.
+Fill `checklist` first: one item for every acceptance criterion (a table row or a scenario), with its block, the rule it tests, and the status `ok` when the expected result follows from the rules or `conflict` when recomputing it from the rules gives something else. Requirements without criteria are not checklist items: report only the most important of them as findings. In `analysis` (in Russian), sum up.

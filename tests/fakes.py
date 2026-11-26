@@ -222,6 +222,10 @@ def fake_team(mutate_segment: Mutate | None = None,
         elif "analysis" in fields:
             calls["review"] += 1
             args = set_review(prompt)
+            if "checklist" in fields and "checklist" not in args:
+                first = _BLOCK_LINE.search(prompt).group(1)
+                args = {**args, "checklist": [{"item": "Проверенный пункт", "block_id": first,
+                                               "status": "ok", "note": "Описано в документе."}]}
         elif "verdicts" in fields:
             calls["opponent"] += 1
             args = {"verdicts": [

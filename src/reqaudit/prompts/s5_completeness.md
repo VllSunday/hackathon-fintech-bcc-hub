@@ -1,6 +1,6 @@
 ---
 id: s5_completeness
-version: 1
+version: 2
 ---
 ### This check: completeness and the document as a whole
 
@@ -11,4 +11,9 @@ Look for what is missing or unfinished:
 - requirements without identifiers or priorities, statements duplicated in several places;
 - goals no requirement serves, or requirements that serve no stated goal.
 
-Quote the nearest text that shows the gap and name exactly what is missing. Report a domain gap only when this document's own scope needs it. In `analysis` (in Russian), list the areas you checked and what you found in each.
+Work in two passes. First fill `checklist`, built from this document's own content:
+- every external system, service or component it names: one item each for its failure, timeout or unavailability, and, where an operation spans systems, for a partial outcome (one step done, the next one failed);
+- every input a user or another system provides: one item for invalid, missing or repeated values;
+- every limit, period and status: one item for its boundaries and transitions;
+- every quality area from the list above that this document's scope needs.
+Give the block that names the thing, and the status: `ok` (where the document covers it), `gap`, `conflict` or `n/a`. Then report every `gap` and `conflict` as a finding that quotes that block and names exactly what is missing. Report a domain gap only when this document's own scope needs it. In `analysis` (in Russian), sum up.

@@ -9,6 +9,8 @@ A cell the model could not do is recorded as unchecked, never silently skipped.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from reqaudit import criteria, prompt_store
@@ -73,6 +75,26 @@ class SetAnswer(BaseModel):
     findings: list[CandidateDraft]
 
 
+class ChecklistItem(BaseModel):
+    item: str  # what is checked, in Russian: an operation, a rule, a system and its failure
+    block_id: str  # where the document states the thing the item is about
+    status: Literal["ok", "gap", "conflict", "n/a"]
+    note: str  # in Russian: where it is covered, or what is missing
+
+
+class ChecklistAnswer(BaseModel):
+    """For checks whose misses come from skipping items: enumerate first, then judge. Code
+    holds the two together: an item marked gap or conflict needs a finding quoting it."""
+
+    checklist: list[ChecklistItem]
+    analysis: str
+    findings: list[CandidateDraft]
+
+
+# Checks whose defects are things missing from a list the document itself implies.
+_CHECKLIST_KINDS = {CellKind.PARENT_CHILD, CellKind.COMPLETENESS, CellKind.ACCEPTANCE}
+
+
 class CandidateSet(BaseModel):
     """Artifact of s5."""
 
@@ -82,6 +104,8 @@ class CandidateSet(BaseModel):
 
 
 def _answer_type(cell: Cell, markers: list[MarkerHit]) -> type[BaseModel]:
+    if cell.kind in _CHECKLIST_KINDS:
+        return ChecklistAnswer
     if cell.kind != CellKind.REQUIREMENTS:
         return SetAnswer
     return RequirementsWithMarkersAnswer if markers else RequirementsAnswer
@@ -102,6 +126,8 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
             missing = [u for u in cell.unit_ids if u not in {r.unit_id for r in answer.reviewed}]
             if missing:
                 complaints.append(f"`reviewed` must list every requirement; missing {missing}")
+        if isinstance(answer, ChecklistAnswer):
+            complaints += _checklist_complaints(answer, blocks)
         if isinstance(answer, RequirementsWithMarkersAnswer):
             decided = {m.marker_id: m for m in answer.markers}
             undecided = [m.id for m in markers if m.id not in decided]
@@ -139,7 +165,24 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
                 + "\n".join(f"- {c}" for c in shown)
                 + (f"\n- and {more} more of the same kind" if more > 0 else ""))
 
-    return combine(check, require_russian(*_RUSSIAN_FIELDS, "markers.reason"))
+    return combine(check, require_russian(*_RUSSIAN_FIELDS, "markers.reason",
+                                          "checklist.note"))
+
+
+def _checklist_complaints(answer: ChecklistAnswer, blocks: dict) -> list[str]:
+    out = []
+    if not answer.checklist:
+        out.append("`checklist` is empty: list every item this check covers before judging")
+    quoted = {e.block_id for f in answer.findings for e in f.evidence}
+    for n, item in enumerate(answer.checklist):
+        if item.block_id not in blocks:
+            out.append(f"checklist[{n}] ({item.item[:40]!r}): block {item.block_id} does not "
+                       "exist; give the block that states the thing checked")
+        elif item.status in ("gap", "conflict") and item.block_id not in quoted:
+            out.append(f"checklist[{n}] ({item.item[:40]!r}) is marked {item.status}, but no "
+                       f"finding quotes block {item.block_id}: report it, or change the status "
+                       "if the document covers it")
+    return out
 
 
 def _instructions(cell: Cell, has_parent_child: bool,

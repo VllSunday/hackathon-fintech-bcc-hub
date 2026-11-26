@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -379,3 +380,19 @@ def test_a_defect_found_on_the_way_is_filed_under_its_own_criterion(tmp_path):
     _, state, _, trace = run(tmp_path, lambda _id: model)
     assert "is not part of this check" not in trace and "not a known code" not in trace
     assert any(f["title"] == "Срок без единицы измерения" for f in state["findings"])
+
+
+
+def test_a_checklist_gap_needs_a_finding(tmp_path):
+    """Completeness enumerates first; a gap it lists but does not report goes back."""
+    def lists_a_gap(prompt):
+        answer = honest_set_review(prompt)
+        if "Полнота и документ целиком" in prompt:
+            block = re.search(r"^\[(b\d{4})\]", prompt, re.MULTILINE).group(1)
+            answer["checklist"] = [{"item": "Отказ внешней системы", "block_id": block,
+                                    "status": "gap", "note": "Не описано."}]
+        return answer
+
+    model, _ = fake_team(set_review=lists_a_gap)
+    _, _, _, trace = run(tmp_path, lambda _id: model)
+    assert "is marked gap, but no finding quotes block" in trace

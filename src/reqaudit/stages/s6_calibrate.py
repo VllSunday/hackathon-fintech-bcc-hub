@@ -97,8 +97,12 @@ def calibrate(ctx: RunContext, context: str, findings: list[Finding]) -> list[Fi
             ctx.trace.event("calibration_failed", error=result.message[:300])
             out.extend(chunk)
             continue
-        ctx.trace.event("core_flow", text=result.core_flow)
         by_ref = {r.ref: r for r in result.ratings}
+        ctx.trace.event("calibration", core_flow=result.core_flow, ratings=[
+            {"finding": f.id, "title": f.title, "was": f.severity.value,
+             **(by_ref[f"C{i}"].model_dump(mode="json", exclude={"ref"})
+                if f"C{i}" in by_ref else {})}
+            for i, f in enumerate(chunk, 1)])
         for i, f in enumerate(chunk, 1):
             r = by_ref.get(f"C{i}")
             if r is None or r.severity not in bounds(r.path, r.harm):

@@ -28,6 +28,7 @@ reqaudit = "reqaudit.cli:main"
 reqaudit-eval = "reqaudit.eval:main"
 reqaudit-ui = "reqaudit.ui.server:main"
 reqaudit-diagnose = "reqaudit.diagnose:main"
+reqaudit-bench = "reqaudit.bench:main"
 
 [dependency-groups]
 dev = [

@@ -26,6 +26,7 @@ defects:
     note: Не сказано, сколько последних цифр карты показывать.
   - id: G-04
     scope: requirement
+    in_image: true
     criterion: unambiguous
     severity: major
     quotes:

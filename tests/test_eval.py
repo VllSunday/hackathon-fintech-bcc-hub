@@ -75,3 +75,78 @@ def test_stability_across_runs(tmp_path):
     assert "найдены во всех прогонах — 1, только в части — 0" in text
     assert "серьёзность менялась между прогонами у 1" in text
     assert "| G-01 | critical | 0/2 |" in text
+
+
+# --- gold files: traps, checking, importing generator output --------------------------
+
+from reqaudit.eval import (  # noqa: E402
+    GoldFile,
+    Trap,
+    check_gold,
+    import_generated,
+    load_gold_file,
+)
+
+TEXT = "\n".join(b["text"] for b in BLOCKS)
+
+
+def test_check_gold_finds_quotes_that_would_make_scoring_lie():
+    gold = GoldFile(document="x.md", defects=[
+        GoldDefect(id="G-01", scope="pair", criterion="set_consistent", severity="critical",
+                   quotes=["Сервис передаёт push на отправку в течение минуты"]),
+        GoldDefect(id="G-02", scope="requirement", criterion="clarity", severity="huge",
+                   quotes=["Этого текста нет в документе"]),
+        GoldDefect(id="G-03", scope="requirement", criterion="verifiable", severity="major",
+                   quotes=["push"]),
+    ], traps=[Trap(id="T-01", quotes=["Когда расходы переходят порог, клиент получает push."])])
+    problems = "\n".join(check_gold(gold, TEXT))
+    assert "G-01: у пары одна цитата" in problems
+    assert "G-02: цитаты нет в документе" in problems
+    assert "неизвестный критерий «clarity»" in problems and "неизвестная серьёзность" in problems
+    assert "G-03: цитата слишком короткая" in problems
+    assert "T-01" not in problems
+
+
+def test_traps_count_findings_that_match_no_gold_defect(tmp_path):
+    trap = Trap(id="T-01", quotes=["Когда расходы переходят порог, клиент получает push."])
+    on_trap = finding("D-009", "unambiguous", "minor",
+                      "Когда расходы переходят порог, клиент получает push.")
+    vague = finding("D-003", "verifiable", "major", "в течение минуты после получения события")
+    score = score_run(GOLD, run_dir(tmp_path, "r1", [vague, on_trap]), [trap])
+    assert score.traps_hit == {"T-01": "D-009"} and score.traps_total == 1
+    assert "| 1/1 |" in report(GOLD, [score])
+
+
+def test_generator_answer_is_split_into_document_and_gold(tmp_path):
+    raw = """Вот документ.
+=== DOCUMENT BEGIN ===
+# Часть 1
+Ф-1. Перевод до 500 000 ₸ за операцию.
+=== DOCUMENT END ===
+дальше
+=== DOCUMENT BEGIN ===
+Ф-2. Лимит в API: amount | integer | 100–1 000 000
+=== DOCUMENT END ===
+=== GOLD BEGIN ===
+```yaml
+document: near/demo.md
+annotators: [generator]
+requirements_total: 2
+defects:
+  - id: G-01
+    scope: pair
+    criterion: set_consistent
+    severity: critical
+    kind: cross_section
+    quotes:
+      - "Перевод до 500 000 ₸ за операцию."
+      - "amount | integer | 100–1 000 000"
+traps: []
+```
+=== GOLD END ==="""
+    doc, gold_path = import_generated(raw, tmp_path)
+    assert doc == tmp_path / "inputs" / "near" / "demo.md"
+    assert "Ф-1." in doc.read_text(encoding="utf-8") and "Ф-2." in doc.read_text(encoding="utf-8")
+    gold = load_gold_file(gold_path)
+    assert gold.requirements_total == 2 and gold.defects[0].kind == "cross_section"
+    assert check_gold(gold, doc.read_text(encoding="utf-8")) == []

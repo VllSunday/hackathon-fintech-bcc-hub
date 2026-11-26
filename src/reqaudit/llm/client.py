@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import os
 import random
+import re
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime
@@ -328,6 +329,13 @@ class LLMClient:
                 except _FALL_THROUGH as err:
                     self.requests += 1
                     self._trace_rejections(messages, step, model_id)
+                    wait = _minute_quota_wait(err)
+                    if wait is not None and attempt < self.settings.max_attempts:
+                        # A per-minute limit passes by itself; a daily one does not.
+                        self.trace.event("llm_retry", step=step, model=model_id,
+                                         attempt=attempt, error="minute_quota", delay=wait)
+                        await self._sleep(wait)
+                        continue
                     if isinstance(err, pai.ModelQuotaExceededError | pai.ModelAuthenticationError):
                         # No point asking this model again in this run.
                         reason = ("квота или баланс исчерпаны"
@@ -365,6 +373,23 @@ class LLMClient:
                     feedback.append(str(part.content)[:1500])
         if feedback:
             self.trace.event("llm_invalid_output", step=step, model=model_id, feedback=feedback)
+
+
+_MINUTE_QUOTA = re.compile(r"PerMinute", re.IGNORECASE)
+_RETRY_DELAY = re.compile(r"retryDelay['\"]?\s*:\s*['\"]?(\d+(?:\.\d+)?)s")
+_MAX_QUOTA_WAIT_S = 120.0
+
+
+def _minute_quota_wait(err: Exception) -> float | None:
+    """Seconds to wait out a per-minute quota (Gemini free tier), or None if it is not one."""
+    if not isinstance(err, pai.ModelQuotaExceededError):
+        return None
+    text = str(err)
+    if not _MINUTE_QUOTA.search(text) or "PerDay" in text:
+        return None
+    match = _RETRY_DELAY.search(text)
+    delay = float(match.group(1)) + 1.0 if match else 30.0
+    return delay if delay <= _MAX_QUOTA_WAIT_S else None
 
 
 _WARM_UP_MIN_GROUP = 3

@@ -119,6 +119,26 @@ def test_exhausted_model_is_not_asked_again_in_the_run(tmp_path):
     assert '"llm_model_disabled"' in (tmp_path / "trace.jsonl").read_text(encoding="utf-8")
 
 
+MINUTE = ("{'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier'}, "
+          "{'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '17s'}")
+DAY = ("{'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier'}, "
+       "{'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '2441s'}")
+
+
+def test_minute_quota_is_waited_out_daily_quota_disables(tmp_path):
+    model, state = answering(ModelQuotaExceededError("fake:a", MINUTE), RU)
+    client, sleeps = client_for(tmp_path, {"fake:a": model})
+    assert ask(client) == Summary(**RU)
+    assert sleeps.delays == [18.0] and state["calls"] == 2
+
+    daily, _ = answering(ModelQuotaExceededError("fake:a", DAY))
+    backup, _ = answering(RU)
+    client, sleeps = client_for(tmp_path / "day", {"fake:a": daily, "fake:b": backup},
+                                chain=("fake:a", "fake:b"))
+    assert ask(client) == Summary(**RU)
+    assert sleeps.delays == [] and client.models_used == ["fake:b"]
+
+
 def test_all_models_failing_raises(tmp_path):
     primary, _ = answering(ModelQuotaExceededError("fake:a", "daily quota"))
     client, _ = client_for(tmp_path, {"fake:a": primary})

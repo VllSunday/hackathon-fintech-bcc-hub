@@ -130,8 +130,18 @@ class LLMClient:
     # --- public -------------------------------------------------------------------------
 
     def structured(self, **kwargs: Any) -> Any:
-        """Synchronous wrapper around `astructured` for sequential stages."""
-        return asyncio.run(self.astructured(**kwargs))
+        """Synchronous wrapper around `astructured` for sequential stages. A call lost only
+        to transient provider trouble gets one more try after a pause, as in `many`: one
+        sequential step (segmentation, the profile) failing costs the whole run."""
+        async def with_second_chance() -> Any:
+            try:
+                return await self.astructured(**kwargs)
+            except LLMBusy:
+                self.trace.event("llm_second_chance", step=kwargs.get("step"))
+                await self._sleep(_SECOND_CHANCE_PAUSE_S)
+                return await self.astructured(**kwargs)
+
+        return asyncio.run(with_second_chance())
 
     def many(self, requests: Sequence[dict[str, Any]]) -> list[Any]:
         """Run several `astructured` calls at once, at most `settings.concurrency` together.

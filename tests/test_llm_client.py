@@ -190,3 +190,13 @@ def test_a_lasting_failure_is_not_retried_as_busy(tmp_path):
     [result] = client.many([dict(step="s5[x]", role="judge", instructions="Answer.",
                                  prompt="Сколько?", output_type=Summary)])
     assert isinstance(result, LLMUnavailable) and not isinstance(result, LLMBusy)
+
+
+def test_a_sequential_call_lost_to_server_errors_gets_a_second_chance(tmp_path):
+    from pydantic_ai.exceptions import ModelServerError
+
+    down = ModelServerError("fake:a", "overloaded", retry_after=0.0)
+    model, state = answering(down, down, down, RU)
+    client, _ = client_for(tmp_path, {"fake:a": model}, max_attempts=3)
+    assert ask(client) == Summary(**RU) and state["calls"] == 4
+    assert '"llm_second_chance"' in (tmp_path / "trace.jsonl").read_text(encoding="utf-8")

@@ -1,298 +1,483 @@
 <!doctype html>
-<html lang="ru" data-theme="light">
+<html lang="ru" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>reqaudit — проверка требований</title>
+<title>reqaudit</title>
 <link rel="icon" href="data:,">
 <style>
+/* Idea: a paper document on a dark desk. The page chrome follows the theme, the document itself
+   always stays paper, and defects are drawn on it like highlighter strokes. */
+@property --spin { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
 :root {
-  --bg: #f3f2ef;
-  --surface: #ffffff;
-  --surface-2: #f8f7f5;
-  --line: #dcd9d3;
-  --line-strong: #c4c0b8;
-  --text: #1d1f1e;
-  --muted: #5a605c;
-  --accent: #0f5c43;
-  --accent-soft: #e3efe9;
+  --bg: #0b1026;
+  --glow-a: rgba(61, 91, 255, .34);
+  --glow-b: rgba(57, 167, 255, .16);
+  --surface: #141a3a;
+  --surface-2: #1b2248;
+  --line: #2a3260;
+  --line-strong: #3d4788;
+  --text: #eef1ff;
+  --muted: #9aa3cf;
+  --accent: #7d97ff;
+  --accent-strong: #3d5bff;
+  --accent-soft: rgba(108, 140, 255, .16);
   --on-accent: #ffffff;
-  --crit: #a4261d;  --crit-soft: #fbe9e7;  --crit-mark: #f8d7d3;
-  --major: #7a4a00; --major-soft: #fbefd5; --major-mark: #f7e3b5;
-  --minor: #2a5580; --minor-soft: #e6eef7; --minor-mark: #d5e4f3;
-  --crit-active: #f0aaa3; --major-active: #efc968; --minor-active: #a9c9ea;
-  --flash: #dcebe4;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ok: #3ddc97;       --ok-soft: rgba(61, 220, 151, .14);
+  --crit: #ff7a86;     --crit-soft: rgba(255, 77, 94, .16);   --crit-fill: #ff4d5e;
+  --major: #ffc552;    --major-soft: rgba(255, 176, 32, .16); --major-fill: #ffb020;
+  --minor: #74c2ff;    --minor-soft: rgba(57, 167, 255, .16); --minor-fill: #39a7ff;
+  --shadow: 0 18px 50px rgba(2, 6, 30, .55);
+  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --display: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, "Liberation Mono", Menlo, monospace;
-  --r: 6px;
-  --tabs-h: 46px;
+  --r: 10px;
+  --tabs-h: 58px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --spring: cubic-bezier(.2, 1.5, .4, 1);
 }
-:root[data-theme="dark"] {
-  --bg: #171918;
-  --surface: #1f2221;
-  --surface-2: #252928;
-  --line: #343937;
-  --line-strong: #4a504d;
-  --text: #e6e8e6;
-  --muted: #a3aaa6;
-  --accent: #5cc49b;
-  --accent-soft: #1d3a30;
-  --on-accent: #10231c;
-  --crit: #ff9d92;  --crit-soft: #3f1d1a;  --crit-mark: #5a2622;
-  --major: #f0be62; --major-soft: #3b2d10; --major-mark: #54400f;
-  --minor: #9cc3ea; --minor-soft: #1b2f43; --minor-mark: #223f5c;
-  --crit-active: #8a3029; --major-active: #7d5e12; --minor-active: #2f5a85;
-  --flash: #24443a;
+:root[data-theme="light"] {
+  --bg: #e8ebf6;
+  --glow-a: rgba(61, 91, 255, .16);
+  --glow-b: rgba(57, 167, 255, .14);
+  --surface: #ffffff;
+  --surface-2: #f2f4fb;
+  --line: #d5daec;
+  --line-strong: #b4bcdb;
+  --text: #12152b;
+  --muted: #565d80;
+  --accent: #3d5bff;
+  --accent-strong: #3d5bff;
+  --accent-soft: #e3e8ff;
+  --ok: #0c8552;       --ok-soft: #dcf5e9;
+  --crit: #cc1f38;     --crit-soft: #ffe3e6;   --crit-fill: #f0384d;
+  --major: #8a5200;    --major-soft: #fff0cc;  --major-fill: #f2a516;
+  --minor: #1b62ab;    --minor-soft: #dcedff;  --minor-fill: #2f95ee;
+  --shadow: 0 14px 40px rgba(40, 52, 110, .16);
 }
 * { box-sizing: border-box; }
 html { font-size: 15px; }
-body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans);
-  line-height: 1.45; -webkit-text-size-adjust: 100%; }
+body { margin: 0; min-height: 100vh; color: var(--text); font-family: var(--sans); line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+  background: radial-gradient(900px 520px at 10% -12%, var(--glow-a), transparent 62%),
+    radial-gradient(760px 480px at 102% -4%, var(--glow-b), transparent 60%), var(--bg);
+  background-attachment: fixed; }
 button, select, input { font: inherit; color: inherit; }
 a { color: var(--accent); }
 .mono { font-family: var(--mono); font-size: 14px; }
 .muted { color: var(--muted); }
-.wrap { max-width: 1680px; margin: 0 auto; padding: 0 20px; }
+.wrap { max-width: 1680px; margin: 0 auto; padding: 0 24px; }
+.grow { flex: 1; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 700; letter-spacing: -.01em; }
+h1 { font-size: 26px; line-height: 1.15; }
+h2 { font-size: 18px; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes pop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+@keyframes spin { to { --spin: 360deg; } }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--accent-soft); } 100% { box-shadow: 0 0 0 14px transparent; } }
+@keyframes blink { 50% { opacity: .25; } }
+#app.enter > * { animation: rise .42s var(--ease) backwards; }
+#app.enter > *:nth-child(2) { animation-delay: .06s; }
+#app.enter > *:nth-child(3) { animation-delay: .12s; }
 
 /* top bar */
-.top { background: var(--surface); border-bottom: 1px solid var(--line); }
-.top .wrap { display: flex; align-items: center; gap: 16px; min-height: 48px; flex-wrap: wrap; }
-.brand { font-weight: 650; letter-spacing: .01em; }
-.brand small { font-weight: 400; color: var(--muted); font-size: 14px; margin-left: 8px; }
-.top .grow { flex: 1; }
-.btn { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 5px 12px;
-  border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--surface);
-  color: var(--text); text-decoration: none; cursor: pointer; font-size: 14px; white-space: nowrap; }
-.btn:hover { border-color: var(--accent); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
-.btn.primary:disabled { opacity: .5; cursor: not-allowed; }
-.btn.ghost { border-color: transparent; background: transparent; color: var(--accent); padding-left: 4px; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.top .wrap { display: flex; align-items: center; gap: 14px; min-height: 60px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700;
+  font-size: 18px; letter-spacing: -.01em; color: var(--text); text-decoration: none; }
+.logo { position: relative; width: 22px; height: 28px; border-radius: 4px; background: #f7f8fc;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .25); transform: rotate(-6deg); transition: transform .3s var(--spring); }
+.logo::before, .logo::after { content: ""; position: absolute; left: 4px; height: 4px; border-radius: 2px; }
+.logo::before { top: 7px; width: 14px; background: #ffb020; }
+.logo::after { top: 15px; width: 9px; background: #ff4d5e; }
+.brand:hover .logo { transform: rotate(4deg) scale(1.08); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 6px 16px;
+  border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--text);
+  text-decoration: none; cursor: pointer; font-size: 14px; font-weight: 600; white-space: nowrap;
+  transition: transform .15s var(--ease), border-color .15s, background-color .15s, box-shadow .15s; }
+.btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+.btn:active { transform: translateY(0) scale(.97); }
+.btn.primary { border: 0; color: var(--on-accent); background: linear-gradient(135deg, #5d78ff, #3d5bff 55%, #2b43d6);
+  box-shadow: 0 8px 22px rgba(61, 91, 255, .42); }
+.btn.primary:hover { box-shadow: 0 12px 28px rgba(61, 91, 255, .55); }
+.btn.primary:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; transform: none; }
+.btn.big { min-height: 50px; padding: 10px 30px; font-size: 16px; }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--text); }
+.btn.icon { width: 38px; padding: 0; }
+.btn.icon svg { transition: transform .5s var(--spring); }
+.btn.icon:hover svg { transform: rotate(40deg); }
 
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
-.pad { padding: 16px 18px; }
-h1, h2, h3 { margin: 0; font-weight: 650; }
-h1 { font-size: 20px; }
-h2 { font-size: 16px; }
-.section-title { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase;
-  letter-spacing: .05em; margin: 0 0 8px; }
-.notice { border: 1px solid var(--line-strong); border-left: 4px solid var(--major); background: var(--major-soft);
-  border-radius: var(--r); padding: 10px 14px; margin: 12px 0; }
-.notice.error { border-left-color: var(--crit); background: var(--crit-soft); }
-.notice.ok { border-left-color: var(--accent); background: var(--accent-soft); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+.pad { padding: 18px 20px; }
+.section-title { font-size: 14px; font-weight: 600; color: var(--muted); margin: 0 0 10px; }
+.notice { border-radius: var(--r); padding: 11px 16px; margin: 12px 0; background: var(--major-soft); color: var(--text);
+  border: 1px solid transparent; border-left: 4px solid var(--major-fill); }
+.notice.error { background: var(--crit-soft); border-left-color: var(--crit-fill); }
+.notice.ok { background: var(--ok-soft); border-left-color: var(--ok); }
 .notice p { margin: 0 0 4px; } .notice p:last-child { margin: 0; }
 .notice details p { margin: 6px 0 0; }
-.empty { padding: 28px 18px; text-align: center; color: var(--muted); }
+.notice code { font-family: var(--mono); font-size: 14px; }
+.empty { padding: 34px 18px; text-align: center; color: var(--muted); }
 
 /* upload screen */
-.upload-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding-top: 20px; padding-bottom: 40px; }
-.drop { border: 1.5px dashed var(--line-strong); border-radius: 8px; background: var(--surface-2);
-  padding: 26px 18px; text-align: center; cursor: pointer; }
-.drop.over { border-color: var(--accent); background: var(--accent-soft); }
-.drop strong { display: block; font-size: 16px; margin-bottom: 4px; }
-.form-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-top: 14px; }
-.profiles { display: flex; gap: 8px; flex-wrap: wrap; border: 0; padding: 0; margin: 0; }
-.profiles legend { font-size: 14px; color: var(--muted); padding: 0; margin-bottom: 4px; }
-.profile { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: var(--r);
-  padding: 8px 12px; cursor: pointer; background: var(--surface); max-width: 320px; }
-.profile:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-.profile span { display: block; font-size: 14px; color: var(--muted); }
-.profile b { font-family: var(--mono); font-size: 14px; }
+.upload { max-width: 980px; padding-top: 4vh; padding-bottom: 60px; display: grid; gap: 22px; }
+.drop { position: relative; isolation: isolate; border-radius: 26px; padding: 44px 24px 38px; text-align: center;
+  cursor: pointer; background: var(--surface); box-shadow: var(--shadow); display: grid; justify-items: center; gap: 6px;
+  transition: transform .25s var(--ease); }
+.drop::before { content: ""; position: absolute; inset: -2px; z-index: -2; border-radius: 28px;
+  background: conic-gradient(from var(--spin), #3d5bff, #39a7ff, #ffb020, #ff4d5e, #3d5bff);
+  animation: spin 7s linear infinite; opacity: .75; transition: opacity .25s; }
+.drop::after { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 26px; background: var(--surface); }
+.drop:hover { transform: translateY(-2px); }
+.drop:hover::before, .drop.over::before, .drop.has-file::before { opacity: 1; }
+.drop.over { transform: scale(1.015); }
+.drop.over::after { background: var(--surface-2); }
+.drop strong { font-family: var(--display); font-size: 24px; font-weight: 700; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.drop .hint { color: var(--muted); font-size: 14px; }
+.paper { position: relative; width: 78px; height: 98px; margin-bottom: 14px; border-radius: 8px; background: #f7f8fc;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, .32); transform: rotate(-5deg); display: grid; align-content: center; gap: 8px;
+  padding: 0 13px; transition: transform .45s var(--spring); }
+.paper i { display: block; height: 6px; border-radius: 3px; background: #cfd4e8; width: var(--w, 100%); }
+.paper i:nth-child(2) { background: #ffb020; } .paper i:nth-child(4) { background: #ff4d5e; }
+.drop:hover .paper { transform: rotate(3deg) translateY(-6px); }
+.drop.over .paper { transform: rotate(0) translateY(-12px) scale(1.12); }
+.drop.has-file .paper { animation: pop .45s var(--spring); transform: rotate(0); }
+.form-row { display: flex; gap: 14px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.profiles { display: inline-flex; padding: 4px; border: 1px solid var(--line); border-radius: 999px; margin: 0;
+  background: var(--surface); }
+.profile { position: relative; cursor: pointer; }
+.profile input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.profile b { display: block; padding: 9px 20px; border-radius: 999px; font-family: var(--mono); font-size: 14px;
+  font-weight: 600; color: var(--muted); transition: background-color .2s, color .2s; }
+.profile input:checked + b { background: var(--accent-soft); color: var(--text); }
+.profile input:focus-visible + b { outline: 2px solid var(--accent); outline-offset: 2px; }
+.models { text-align: center; color: var(--muted); font-family: var(--mono); font-size: 14px; }
+.runs { display: grid; gap: 8px; }
+.run { display: grid; grid-template-columns: minmax(0, 1fr) auto auto repeat(4, 64px); gap: 6px 18px; align-items: center;
+  padding: 13px 18px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); color: var(--text);
+  text-decoration: none; animation: rise .45s var(--ease) backwards; animation-delay: calc(var(--i, 0) * 55ms + .15s);
+  transition: transform .18s var(--ease), border-color .18s, box-shadow .18s; }
+.run:hover { transform: translateX(6px); border-color: var(--accent); box-shadow: var(--shadow); }
+.run-doc { min-width: 0; display: grid; }
+.run-doc b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-doc span { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-date { font-size: 14px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.stat { display: grid; justify-items: end; line-height: 1.15; }
+.stat b { font-family: var(--display); font-size: 20px; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 12px; color: var(--muted); }
+.stat.crit b { color: var(--crit); }
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 3px 11px; border-radius: 999px; font-size: 14px;
+  font-weight: 600; white-space: nowrap; background: var(--major-soft); color: var(--major); }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.completed { background: var(--ok-soft); color: var(--ok); }
+.pill.partial, .pill.interrupted, .pill.input_rejected { background: var(--crit-soft); color: var(--crit); }
+.pill.running { background: var(--accent-soft); color: var(--accent); }
+.pill.running::before { animation: blink 1s infinite; }
+@media (max-width: 860px) {
+  .run { grid-template-columns: minmax(0, 1fr) auto; }
+  .run .stat { justify-items: start; }
+  .run-date { display: none; }
+  .run { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .run-doc { grid-column: 1 / 4; } .run .pill { grid-column: 4; justify-self: end; }
+}
+
+/* generic tables */
 table { border-collapse: collapse; width: 100%; }
-.grid-table th, .grid-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line);
+.grid-table th, .grid-table td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line);
   vertical-align: top; font-size: 14px; }
+.grid-table tr:last-child td { border-bottom: 0; }
 .grid-table th { color: var(--muted); font-weight: 600; background: var(--surface-2); position: sticky; top: 0; }
 .grid-table td.mono, .grid-table td.prio, .grid-table th { white-space: nowrap; }
 .grid-table .chip { flex-wrap: nowrap; white-space: nowrap; }
+.grid-table tbody tr { transition: background-color .15s; }
 .grid-table tbody tr.click { cursor: pointer; }
 .grid-table tbody tr.click:hover { background: var(--surface-2); }
 .num { text-align: right !important; font-variant-numeric: tabular-nums; }
 .table-scroll { overflow-x: auto; }
+.card.table-scroll { overflow: auto; }
 
-/* stage chain */
-.chain { display: grid; grid-template-columns: repeat(var(--stages, 10), minmax(0, 1fr)); gap: 0; margin: 14px 0 4px; }
-.stage { position: relative; padding: 10px 10px 12px; border: 1px solid var(--line); border-right-width: 0;
-  background: var(--surface); min-height: 132px; }
-.stage:first-child { border-radius: 8px 0 0 8px; }
-.stage:last-child { border-right-width: 1px; border-radius: 0 8px 8px 0; }
-.stage .code { font-family: var(--mono); font-size: 14px; color: var(--muted); }
-.stage .name { font-weight: 600; font-size: 14px; margin: 2px 0 6px; min-height: 2.9em; }
-.stage .state { font-size: 14px; font-weight: 600; }
-.stage .meta { font-size: 14px; color: var(--muted); }
-.stage.done { border-top: 3px solid var(--accent); padding-top: 8px; }
-.stage.done .state { color: var(--accent); }
-.stage.running { border-top: 3px solid var(--accent); padding-top: 8px; background: var(--accent-soft); }
-.stage.error, .stage.interrupted { border-top: 3px solid var(--crit); padding-top: 8px; background: var(--crit-soft); }
+/* run screen: the sheet being read */
+.runview { max-width: 1280px; padding-top: 3vh; padding-bottom: 50px; }
+.scan { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 44px; align-items: center; justify-content: center;
+  max-width: 820px; margin: 0 auto 34px; }
+.sheet { position: relative; width: 190px; height: 246px; border-radius: 12px; background: #f7f8fc; overflow: hidden;
+  box-shadow: 0 26px 60px rgba(0, 0, 0, .42); padding: 26px 22px; display: grid; align-content: start; gap: 12px;
+  transform: rotate(-3deg); transition: transform .6s var(--spring); }
+.scan.finished .sheet { transform: rotate(0); }
+.sheet i { display: block; height: 8px; border-radius: 4px; width: var(--w); background: #dfe3f1;
+  transition: background-color .5s var(--ease); }
+.sheet i.on { background: #232745; }
+.sheet i.on.critical { background: #ff4d5e; } .sheet i.on.major { background: #ffb020; } .sheet i.on.minor { background: #39a7ff; }
+.beam { position: absolute; left: 0; right: 0; top: 0; height: 64px; pointer-events: none; opacity: 0;
+  background: linear-gradient(180deg, rgba(61, 91, 255, 0), rgba(61, 91, 255, .28));
+  border-bottom: 2px solid #3d5bff; box-shadow: 0 6px 22px rgba(61, 91, 255, .55); }
+@keyframes sweep { 0% { transform: translateY(-64px); } 100% { transform: translateY(246px); } }
+.scan.running .beam { opacity: 1; animation: sweep 1.9s cubic-bezier(.45, 0, .55, 1) infinite alternate; }
+.badge { position: absolute; right: 14px; bottom: 14px; width: 46px; height: 46px; border-radius: 50%; display: none;
+  place-items: center; color: #fff; background: #16a765; font-size: 24px; font-weight: 700; line-height: 1; }
+.scan.finished .badge { display: grid; animation: pop .5s var(--spring); }
+.scan.failed .badge { background: #f0384d; }
+.scan-info { min-width: 0; display: grid; gap: 6px; justify-items: start; }
+.scan-info h1 { overflow-wrap: anywhere; }
+.clock { font-family: var(--display); font-size: 64px; font-weight: 700; line-height: 1; letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums; }
+.now { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; min-height: 28px; }
+.now .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.scan.running .now .dot { animation: pulse 1.2s infinite; }
+.scan.finished .now .dot { background: var(--ok); } .scan.failed .now .dot { background: var(--crit); }
+.scan-info .btn { margin-top: 10px; }
+@media (max-width: 620px) { .scan { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 24px; }
+  .scan-info { justify-items: center; text-align: center; } .clock { font-size: 48px; } }
+
+/* stage track */
+.chain { display: grid; grid-template-columns: repeat(var(--stages, 10), minmax(0, 1fr)); margin: 18px 0 6px; }
+.stage { position: relative; display: grid; justify-items: center; align-content: start; gap: 2px; text-align: center;
+  padding: 0 6px; min-width: 0; }
+.stage::before { content: ""; position: absolute; top: 14px; left: 50%; width: 100%; height: 2px; background: var(--line);
+  transition: background-color .5s; }
+.stage:last-child::before { display: none; }
+.stage.done::before, .stage.not_needed::before { background: var(--accent); }
+.node { position: relative; z-index: 1; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--bg); border: 2px solid var(--line-strong); margin-bottom: 8px; color: var(--on-accent);
+  transition: background-color .4s, border-color .4s, transform .4s var(--spring); }
+.stage.done .node { background: var(--accent-strong); border-color: var(--accent-strong); transform: scale(1.04); }
+.stage.done .node::after { content: ""; width: 10px; height: 5px; border-left: 2px solid; border-bottom: 2px solid;
+  transform: rotate(-45deg) translate(1px, -1px); }
+.stage.running .node { border-color: var(--accent); animation: pulse 1.2s infinite; }
+.stage.running .node::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent);
+  animation: blink 1s infinite; }
+.stage.error .node, .stage.interrupted .node { background: var(--crit-fill); border-color: var(--crit-fill); }
+.stage.error .node::after, .stage.interrupted .node::after { content: "!"; font-weight: 700; font-size: 16px; line-height: 1; }
+.stage.not_needed .node, .stage.skipped .node { border-style: dashed; }
+.stage .code { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.stage .name { font-weight: 600; font-size: 14px; line-height: 1.25; }
+.stage .state { font-size: 13px; font-weight: 600; color: var(--muted); }
+.stage.done .state, .stage.pending .state { display: none; }
+.stage.running .state { color: var(--accent); }
 .stage.error .state, .stage.interrupted .state { color: var(--crit); }
-.stage.pending .state, .stage.skipped .state, .stage.not_needed .state { color: var(--muted); font-weight: 400; }
-@media (max-width: 1100px) { .chain { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .stage { border-right-width: 1px; border-radius: 0 !important; margin: 0 -1px -1px 0; } }
-@media (max-width: 620px) { .chain { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stage .meta { font-size: 13px; color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; }
+.stage.pending { opacity: .55; }
+@media (max-width: 1100px) {
+  .chain { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .stage { grid-template-columns: 30px minmax(0, 1fr); justify-items: start; text-align: left; column-gap: 14px; }
+  .stage .node { grid-row: 1 / span 4; margin: 0; }
+  .stage::before { top: 30px; left: 14px; width: 2px; height: calc(100% - 16px); }
+}
 
 /* report head */
-.report-head { padding-top: 16px; padding-bottom: 14px; }
-.title-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.report-head { padding-top: 10px; padding-bottom: 18px; }
+.title-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
 .title-row h1 { flex: 1; min-width: 240px; }
-.passport { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0; margin-bottom: 12px; }
-.passport div { padding: 9px 14px; border-right: 1px solid var(--line); min-width: 0; }
-.passport div:last-child { border-right: 0; }
-.passport dt { font-size: 14px; color: var(--muted); }
+.passport { display: flex; flex-wrap: wrap; gap: 6px 26px; margin: 0 0 18px; }
+.passport div { min-width: 0; display: flex; gap: 7px; align-items: baseline; font-size: 14px; }
+.passport dt { color: var(--muted); }
 .passport dd { margin: 0; overflow-wrap: anywhere; }
-.head-grid { display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(260px, 1fr); gap: 12px; }
-.verdict { padding: 12px 18px; border-left: 5px solid var(--line-strong); display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(0, 1.2fr); gap: 8px 28px; align-items: start; }
-.verdict > div:only-child { grid-column: 1 / -1; }
-@media (max-width: 1180px) { .verdict { grid-template-columns: minmax(0, 1fr); } }
-.verdict.no { border-left-color: var(--crit); }
-.verdict.conditional { border-left-color: var(--major); }
-.verdict.yes { border-left-color: var(--accent); }
-.verdict .q { font-size: 14px; color: var(--muted); }
-.verdict .word { font-size: 34px; font-weight: 700; line-height: 1.1; margin: 2px 0 6px; }
-.verdict.no .word { color: var(--crit); } .verdict.conditional .word { color: var(--major); }
-.verdict.yes .word { color: var(--accent); }
-.verdict p { margin: 0 0 6px; max-width: 80ch; }
+.head-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr); gap: 16px; }
+@media (max-width: 980px) { .head-grid { grid-template-columns: minmax(0, 1fr); } }
+.verdict { position: relative; overflow: hidden; padding: 22px 24px; border-radius: 20px; background: var(--surface);
+  border: 1px solid var(--line); box-shadow: var(--shadow); display: grid; grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px 30px; align-items: center; --v: var(--line-strong); --v-soft: transparent; }
+.verdict.no { --v: var(--crit); --v-soft: var(--crit-soft); }
+.verdict.conditional { --v: var(--major); --v-soft: var(--major-soft); }
+.verdict.yes { --v: var(--ok); --v-soft: var(--ok-soft); }
+.verdict::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(520px 260px at 0% 0%, var(--v-soft), transparent 70%); }
+.verdict > * { position: relative; }
+.verdict .q { font-size: 14px; color: var(--muted); margin-bottom: 12px; }
+@keyframes stamp { 0% { opacity: 0; transform: scale(2.4) rotate(-14deg); } 60% { opacity: 1; transform: scale(.94) rotate(-4deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-4deg); } }
+.verdict .word { display: inline-block; font-family: var(--display); font-size: 44px; font-weight: 800; line-height: 1;
+  letter-spacing: -.02em; color: var(--v); padding: 12px 22px 14px; border: 4px solid var(--v); border-radius: 14px;
+  box-shadow: inset 0 0 0 3px var(--surface), inset 0 0 0 5px var(--v); transform: rotate(-4deg);
+  animation: stamp .55s cubic-bezier(.3, 1.2, .5, 1) .45s backwards; max-width: 100%; overflow-wrap: anywhere; }
+.verdict .word.plain { font-size: 24px; }
+.verdict p { margin: 0 0 8px; max-width: 70ch; }
 .verdict p:last-child { margin-bottom: 0; }
-.fixes { margin: 0; padding: 0; list-style: none; counter-reset: fix; }
-.fixes li { counter-increment: fix; display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
-.fixes li::before { content: counter(fix) "."; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fixes { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.fixes li { animation: rise .4s var(--ease) backwards; animation-delay: calc(var(--i) * 90ms + .85s); }
+.fixes button { width: 100%; display: flex; gap: 10px; align-items: center; padding: 8px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; text-align: left;
+  transition: transform .15s var(--ease), border-color .15s; }
+.fixes button:hover { transform: translateX(5px); border-color: var(--accent); }
+.fixes .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fixes .mono { flex: none; white-space: nowrap; }
+@media (max-width: 760px) { .verdict { grid-template-columns: minmax(0, 1fr); } }
 .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-align: left;
-  text-decoration: underline; text-underline-offset: 2px; }
-.numbers { display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: 100%; }
-.numbers div { padding: 8px 16px; display: flex; flex-direction: column; justify-content: center; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.numbers div:nth-child(2n) { border-right: 0; }
-.numbers div:nth-last-child(-n+2) { border-bottom: 0; }
-.numbers b { display: block; font-size: 30px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-color: transparent; transition: text-decoration-color .15s; }
+.linkish:hover { text-decoration-color: currentColor; }
+.figures { padding: 18px 22px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line);
+  box-shadow: var(--shadow); display: grid; align-content: space-between; gap: 16px; }
+.numbers { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
+.numbers b { display: block; font-family: var(--display); font-size: 46px; font-weight: 800; line-height: 1;
+  letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
 .numbers span { font-size: 14px; color: var(--muted); }
 .numbers .crit b { color: var(--crit); }
-.gate-line { font-size: 14px; color: var(--muted); margin-top: 10px; display: flex; gap: 6px; align-items: flex-start; }
-@media (max-width: 980px) { .head-grid { grid-template-columns: minmax(0, 1fr); } }
+@keyframes grow { from { transform: scaleX(0); } to { transform: none; } }
+.sevbar { display: flex; gap: 3px; height: 12px; transform-origin: left; animation: grow .9s var(--ease) .5s backwards; }
+.sevbar span { min-width: 6px; border-radius: 6px; }
+.sevbar .critical { background: var(--crit-fill); } .sevbar .major { background: var(--major-fill); }
+.sevbar .minor { background: var(--minor-fill); }
+.gate-line { font-size: 14px; color: var(--muted); margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.gate-line .tag { padding: 2px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); }
+.gate-line .tag b { color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* tabs */
-.tabs { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line-strong); }
-.tabs .wrap { display: flex; gap: 2px; min-height: var(--tabs-h); align-items: flex-end; overflow-x: auto; }
-.tab { border: 1px solid transparent; border-bottom: 0; background: transparent; padding: 9px 14px; cursor: pointer;
-  border-radius: var(--r) var(--r) 0 0; font-size: 15px; color: var(--muted); white-space: nowrap; }
-.tab[aria-selected="true"] { background: var(--surface); border-color: var(--line-strong); color: var(--text);
-  font-weight: 600; margin-bottom: -1px; padding-bottom: 10px; }
-.tab .count { font-family: var(--mono); font-size: 14px; color: var(--muted); margin-left: 6px; font-weight: 400; }
-.tabpanel { padding: 16px 0 40px; }
+.tabs { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.tabs .wrap { position: relative; display: flex; gap: 4px; min-height: var(--tabs-h); align-items: center; overflow-x: auto; }
+.tab { position: relative; z-index: 1; border: 0; background: transparent; padding: 9px 16px; cursor: pointer; border-radius: 999px;
+  font-size: 15px; font-weight: 600; color: var(--muted); white-space: nowrap; transition: color .2s; }
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { color: var(--on-accent); }
+.tab .count { font-family: var(--mono); font-size: 13px; margin-left: 7px; opacity: .75; font-weight: 400; }
+.tab-ind { position: absolute; top: 50%; left: 0; height: 38px; margin-top: -19px; border-radius: 999px;
+  background: linear-gradient(135deg, #5d78ff, #3d5bff 60%, #2b43d6); box-shadow: 0 6px 18px rgba(61, 91, 255, .45);
+  transition: transform .38s var(--spring), width .38s var(--spring); }
+.tabpanel { padding: 16px 0 50px; animation: rise .35s var(--ease); }
 
-/* split: document and findings */
-.split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr); height: calc(100vh - var(--tabs-h));
-  background: var(--surface); border: 1px solid var(--line); border-top: 0; }
-.pane { overflow: auto; min-height: 0; }
-.pane.doc-pane { border-right: 1px solid var(--line); }
+/* split: the paper and the findings */
+.split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr); gap: 14px;
+  height: calc(100vh - var(--tabs-h)); padding-bottom: 14px; animation: rise .35s var(--ease); }
+.pane { overflow: auto; min-height: 0; border-radius: 18px; scrollbar-width: thin; }
+.pane.doc-pane { box-shadow: var(--shadow);
+  /* the document is paper in both themes */
+  --surface: #fbfbfe; --surface-2: #eff1f9; --line: #dadeee; --line-strong: #b9c0dc; --text: #171a2e; --muted: #5a6082;
+  --accent: #3d5bff; --accent-soft: #e3e8ff;
+  --crit: #c81e36; --crit-soft: #ffe3e6; --major: #8a5200; --major-soft: #fff0cc; --minor: #1b62ab; --minor-soft: #dcedff;
+  --crit-mark: #ffd3d8; --major-mark: #ffe9ad; --minor-mark: #d2e8ff;
+  --crit-active: #ff9aa6; --major-active: #ffcd52; --minor-active: #94c9ff; --flash: #dfe5ff;
+  background: var(--surface); color: var(--text); }
+.pane.list-pane { background: var(--surface); border: 1px solid var(--line); }
 .pane-switch { display: none; }
-.doc { padding: 18px 20px 60px; }
-.blk { display: grid; grid-template-columns: minmax(0, 72ch) 156px; column-gap: 12px;
-  border-radius: 4px; transition: background-color .15s; }
+.doc { padding: 30px 34px 80px; }
+.blk { display: grid; grid-template-columns: minmax(0, 72ch) 156px; column-gap: 14px; border-radius: 6px;
+  transition: background-color .3s; }
 .blk.flash { background: var(--flash); }
-.blk-text { line-height: 1.6; padding: 3px 4px; white-space: pre-line; overflow-wrap: anywhere; min-width: 0; }
+.blk-text { line-height: 1.65; padding: 3px 4px; white-space: pre-line; overflow-wrap: anywhere; min-width: 0; }
 .blk-side { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 3px 4px; padding-top: 5px; min-width: 0; }
-.blk.heading .blk-text { font-weight: 650; padding-top: 14px; }
-.blk.h1 .blk-text { font-size: 20px; } .blk.h2 .blk-text { font-size: 18px; } .blk.h3 .blk-text { font-size: 16px; }
+.blk.heading .blk-text { font-family: var(--display); font-weight: 700; padding-top: 16px; letter-spacing: -.01em; }
+.blk.h1 .blk-text { font-size: 24px; } .blk.h2 .blk-text { font-size: 19px; } .blk.h3 .blk-text { font-size: 16px; }
 .blk.list_item .blk-text { padding-left: 22px; position: relative; }
 .blk.list_item .blk-text::before { content: "–"; position: absolute; left: 6px; color: var(--muted); }
 .blk.code .blk-text { font-family: var(--mono); font-size: 14px; white-space: pre-wrap; background: var(--surface-2);
-  border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; margin: 4px 0; }
-.blk.hidden-text .blk-text, .blk.image_text .blk-text { border: 1px dashed var(--line-strong); border-radius: 4px;
+  border-radius: 8px; padding: 10px 12px; margin: 4px 0; }
+.blk.hidden-text .blk-text, .blk.image_text .blk-text { border: 1px dashed var(--line-strong); border-radius: 8px;
   padding: 6px 10px; margin: 4px 0; }
 .blk-note { display: block; font-size: 14px; color: var(--muted); font-style: normal; }
 .blk.header_footer .blk-text { color: var(--muted); font-size: 14px; }
 .blk.row .blk-text { padding: 0; }
 .row-table { table-layout: fixed; }
-.row-table td { border: 1px solid var(--line); padding: 5px 8px; vertical-align: top; line-height: 1.5; }
+.row-table td { border: 1px solid var(--line); padding: 6px 9px; vertical-align: top; line-height: 1.5; }
 .blk.table .row-table td { font-weight: 600; background: var(--surface-2); }
 .blk.row + .blk.row .row-table td { border-top: 0; }
-.uid { font-family: var(--mono); font-size: 14px; color: var(--muted); padding: 1px 0; }
-mark.q { background: var(--minor-mark); color: inherit; border-bottom: 2px solid var(--minor); cursor: pointer;
-  border-radius: 2px; padding: 1px 0; transition: background-color .15s, box-shadow .15s; }
-mark.q.critical { background: var(--crit-mark); border-bottom-color: var(--crit); }
-mark.q.major { background: var(--major-mark); border-bottom-color: var(--major); }
-mark.q.active { background: var(--minor-active); border-bottom-width: 3px; }
-mark.q.critical.active { background: var(--crit-active); }
-mark.q.major.active { background: var(--major-active); }
-.sev { display: inline-flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 600; border-radius: 4px;
-  padding: 1px 7px; border: 1px solid currentColor; white-space: nowrap; }
+.uid { font-family: var(--mono); font-size: 13px; color: var(--muted); padding: 1px 0; }
+/* a quote is a highlighter stroke: it is drawn across the words once the block comes into view */
+mark.q { --mk: var(--minor-mark); --mk-on: var(--minor-active); --mk-ink: var(--minor); color: inherit; cursor: pointer;
+  border-radius: 3px; padding: 2px 0; background: linear-gradient(var(--mk), var(--mk)) no-repeat 0 0 / 0% 100%;
+  box-shadow: inset 0 -2px 0 transparent; transition: background-size .7s var(--ease), box-shadow .3s .5s; }
+mark.q.critical { --mk: var(--crit-mark); --mk-on: var(--crit-active); --mk-ink: var(--crit); }
+mark.q.major { --mk: var(--major-mark); --mk-on: var(--major-active); --mk-ink: var(--major); }
+.blk.inked mark.q { background-size: 100% 100%; box-shadow: inset 0 -2px 0 var(--mk-ink); }
+mark.q:hover { background-image: linear-gradient(var(--mk-on), var(--mk-on)); }
+@keyframes ink { 0% { outline: 3px solid var(--mk-ink); outline-offset: 12px; } 100% { outline: 3px solid transparent; outline-offset: 1px; } }
+mark.q.active { background-image: linear-gradient(var(--mk-on), var(--mk-on)); box-shadow: inset 0 -3px 0 var(--mk-ink);
+  animation: ink .6s var(--ease); }
+.sev { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; border-radius: 999px;
+  padding: 2px 10px; white-space: nowrap; flex: none; }
+.sev::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .sev.critical { color: var(--crit); background: var(--crit-soft); }
 .sev.major { color: var(--major); background: var(--major-soft); }
 .sev.minor { color: var(--minor); background: var(--minor-soft); }
-.chip { display: inline-flex; flex-wrap: wrap; gap: 0 5px; align-items: baseline; font-size: 14px; border-radius: 4px;
-  padding: 0 5px; border: 1px solid currentColor; cursor: pointer; background: none; line-height: 1.45; text-align: left; }
+.chip { display: inline-flex; flex-wrap: wrap; gap: 0 5px; align-items: baseline; font-size: 13px; border-radius: 999px;
+  padding: 1px 9px; border: 0; cursor: pointer; line-height: 1.5; text-align: left; font-weight: 600;
+  transition: transform .15s var(--spring), box-shadow .15s; }
+.chip:hover { transform: scale(1.07); }
 .chip.critical { color: var(--crit); background: var(--crit-soft); }
 .chip.major { color: var(--major); background: var(--major-soft); }
 .chip.minor { color: var(--minor); background: var(--minor-soft); }
-.chip.active { box-shadow: 0 0 0 2px var(--text); }
+.chip.active { box-shadow: 0 0 0 2px currentColor; }
 .chip b { font-family: var(--mono); font-weight: 600; }
 
 /* findings list */
-.filters { position: sticky; top: 0; z-index: 2; background: var(--surface-2); border-bottom: 1px solid var(--line);
-  padding: 10px 14px; display: grid; gap: 8px; }
+.filters { position: sticky; top: 0; z-index: 2; padding: 12px 14px; display: grid; gap: 8px;
+  background: color-mix(in srgb, var(--surface) 86%, transparent); backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
 .filters .line { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.filters select { min-height: 32px; border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--surface);
-  padding: 3px 6px; font-size: 14px; max-width: 100%; flex: 1; min-width: 150px; }
-.toggle { border: 1px solid var(--line-strong); background: var(--surface); border-radius: var(--r); padding: 3px 9px;
-  cursor: pointer; font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
-.toggle[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.toggle[aria-pressed="true"].critical { border-color: var(--crit); background: var(--crit-soft); color: var(--crit); font-weight: 600; }
-.toggle[aria-pressed="true"].major { border-color: var(--major); background: var(--major-soft); color: var(--major); font-weight: 600; }
-.toggle[aria-pressed="true"].minor { border-color: var(--minor); background: var(--minor-soft); color: var(--minor); font-weight: 600; }
+.filters select { min-height: 34px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-2);
+  padding: 3px 8px; font-size: 14px; max-width: 100%; flex: 1; min-width: 150px; }
+.toggle { border: 1px solid var(--line-strong); background: transparent; border-radius: 999px; padding: 4px 12px;
+  cursor: pointer; font-size: 14px; font-weight: 600; display: inline-flex; gap: 7px; align-items: center;
+  transition: transform .15s var(--spring), background-color .15s, border-color .15s; }
+.toggle:active { transform: scale(.94); }
+.toggle[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.toggle[aria-pressed="true"].critical { border-color: var(--crit); background: var(--crit-soft); color: var(--crit); }
+.toggle[aria-pressed="true"].major { border-color: var(--major); background: var(--major-soft); color: var(--major); }
+.toggle[aria-pressed="true"].minor { border-color: var(--minor); background: var(--minor-soft); color: var(--minor); }
 .toggle .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
-.toggle.critical .dot { color: var(--crit); } .toggle.major .dot { color: var(--major); } .toggle.minor .dot { color: var(--minor); }
-.shown { font-size: 14px; color: var(--muted); }
-.finding { border-bottom: 1px solid var(--line); border-left: 4px solid transparent; }
-.finding.critical { border-left-color: var(--crit); }
-.finding.major { border-left-color: var(--major); }
-.finding.minor { border-left-color: var(--minor); }
-.finding.active { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
-.finding-head { padding: 10px 14px; cursor: pointer; display: grid; gap: 4px; }
-.finding-head:hover { background: var(--surface-2); }
+.toggle.critical .dot { color: var(--crit-fill); } .toggle.major .dot { color: var(--major-fill); } .toggle.minor .dot { color: var(--minor-fill); }
+.shown { font-size: 14px; color: var(--muted); flex: 1; }
+.findings { padding: 10px; display: grid; gap: 8px; }
+.findings.first .finding { animation: rise .4s var(--ease) backwards; animation-delay: calc(min(var(--i), 12) * 40ms + .25s); }
+.finding { --c: var(--minor-fill); position: relative; border-radius: 14px; background: var(--surface-2); border: 1px solid transparent;
+  overflow: hidden; transition: border-color .2s, box-shadow .2s, transform .2s var(--ease); }
+.finding::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c); }
+.finding.critical { --c: var(--crit-fill); } .finding.major { --c: var(--major-fill); }
+.finding:hover { transform: translateX(-3px); border-color: var(--line-strong); }
+.finding.active { border-color: var(--c); box-shadow: 0 10px 30px rgba(0, 0, 0, .22); transform: none; }
+.finding-head { padding: 11px 14px 11px 18px; cursor: pointer; display: grid; gap: 5px; }
 .finding-head .line1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .finding-head .fid { font-family: var(--mono); font-size: 14px; font-weight: 600; }
 .finding-head .crit-name { font-size: 14px; color: var(--muted); }
 .finding-head .ftitle { font-weight: 600; }
-.finding-head .line3 { display: flex; gap: 6px 12px; flex-wrap: wrap; align-items: center; font-size: 14px; color: var(--muted); }
-.verified { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 14px; font-weight: 600; }
+.finding-head .line3 { display: flex; gap: 6px 12px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--muted); }
+.verified { display: inline-flex; align-items: center; gap: 4px; color: var(--ok); font-size: 13px; font-weight: 600; }
 .verified.no { color: var(--major); }
 .verified svg { flex: none; }
-.finding-body { padding: 2px 14px 14px; display: grid; gap: 10px; }
-.finding-body h4 { margin: 0 0 2px; font-size: 14px; font-weight: 600; color: var(--muted); }
+@keyframes unfold { from { grid-template-rows: 0fr; opacity: 0; } to { grid-template-rows: 1fr; opacity: 1; } }
+.finding-open { display: grid; grid-template-rows: 1fr; animation: unfold .34s var(--ease); }
+.finding-body { min-height: 0; overflow: hidden; padding: 0 14px 0 18px; display: grid; gap: 10px; }
+.finding-body > :last-child { margin-bottom: 14px; }
+.finding-body h4 { margin: 0 0 3px; font-size: 13px; font-weight: 600; color: var(--muted); }
 .finding-body p { margin: 0; }
-.quote { border-left: 3px solid var(--line-strong); padding: 6px 10px; background: var(--surface); margin: 0 0 6px;
-  font-family: var(--mono); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.quote { border-left: 3px solid var(--line-strong); border-radius: 0 8px 8px 0; padding: 7px 11px; background: var(--surface);
+  margin: 0 0 6px; font-family: var(--mono); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .quote footer { font-family: var(--sans); color: var(--muted); display: flex; gap: 6px 12px; flex-wrap: wrap;
-  align-items: center; margin-top: 4px; }
-.fix-text { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: var(--r); padding: 8px 10px; }
+  align-items: center; margin-top: 5px; font-size: 13px; }
+.fix-text { background: var(--ok-soft); border-left: 3px solid var(--ok); border-radius: 0 8px 8px 0; padding: 8px 11px; }
 
 /* other tabs */
-.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 14px; margin: 0 0 12px; }
-.swatch { display: inline-flex; align-items: center; gap: 6px; }
-.cellbox { display: inline-flex; width: 26px; height: 22px; align-items: center; justify-content: center; border-radius: 3px;
-  font-size: 14px; font-weight: 700; border: 1px solid var(--line); }
-.cellbox.critical { background: var(--crit-soft); color: var(--crit); border-color: var(--crit); }
-.cellbox.major { background: var(--major-soft); color: var(--major); border-color: var(--major); }
-.cellbox.minor { background: var(--minor-soft); color: var(--minor); border-color: var(--minor); }
-.cellbox.ok { background: var(--accent-soft); color: var(--accent); }
-.cellbox.none { background: var(--surface-2); color: var(--muted); font-weight: 400; }
-.matrix { border-collapse: separate; border-spacing: 0; width: auto; }
-.matrix th, .matrix td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 3px; text-align: center;
-  font-size: 14px; }
-.matrix thead th { position: sticky; top: var(--tabs-h); background: var(--surface-2); z-index: 2; vertical-align: bottom;
-  height: 240px; font-weight: 600; }
-.matrix thead th .vert { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; }
-.matrix thead th.group { height: auto; position: static; font-size: 14px; color: var(--muted); padding: 5px; }
-.matrix th.rowhead { position: sticky; left: 0; background: var(--surface); text-align: left; padding: 4px 10px; white-space: nowrap;
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 14px; margin: 0 0 14px; color: var(--muted); }
+.swatch { display: inline-flex; align-items: center; gap: 7px; }
+.cellbox { display: inline-flex; width: 28px; height: 24px; align-items: center; justify-content: center; border-radius: 7px;
+  font-size: 13px; font-weight: 700; transition: transform .15s var(--spring); }
+.cellbox.critical { background: var(--crit-fill); color: #fff; }
+.cellbox.major { background: var(--major-fill); color: #2b1c00; }
+.cellbox.minor { background: var(--minor-fill); color: #04213d; }
+.cellbox.ok { background: var(--ok-soft); color: var(--ok); }
+.cellbox.none { background: transparent; color: var(--line-strong); font-weight: 400; }
+.matrix { border-collapse: separate; border-spacing: 0; width: auto; overflow: visible; }
+.matrix th, .matrix td { padding: 3px; text-align: center; font-size: 14px; }
+.matrix tbody tr { animation: rise .35s var(--ease) backwards; animation-delay: calc(min(var(--i), 30) * 14ms); }
+.matrix tbody tr:hover th, .matrix tbody tr:hover td { background: var(--surface-2); }
+.matrix td button:hover .cellbox { transform: scale(1.25); }
+.matrix thead th { position: sticky; top: var(--tabs-h); background: var(--surface); z-index: 2; vertical-align: bottom;
+  height: 230px; font-weight: 600; }
+.matrix thead th .vert { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; }
+.matrix thead th.group { height: auto; position: static; font-size: 13px; color: var(--muted); padding: 8px 5px 4px; }
+.matrix th.rowhead { position: sticky; left: 0; background: var(--surface); text-align: left; padding: 4px 14px; white-space: nowrap;
   font-weight: 400; z-index: 1; cursor: pointer; }
-.matrix thead th.corner { left: 0; z-index: 3; text-align: left; padding: 6px 10px; }
+.matrix thead th.corner { left: 0; z-index: 3; text-align: left; padding: 8px 14px; border-radius: 16px 0 0 0; }
 .matrix td button { border: 0; padding: 0; background: none; cursor: pointer; }
-.pair { margin-bottom: 12px; }
-.pair-head { padding: 10px 14px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid var(--line); }
+.pair { margin-bottom: 12px; overflow: hidden; animation: rise .4s var(--ease) backwards; animation-delay: calc(var(--i, 0) * 60ms); }
+.pair-head { padding: 12px 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid var(--line); }
 .pair-head .ftitle { font-weight: 600; flex: 1; min-width: 220px; }
 .pair-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.pair-body .side { padding: 10px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.pair-body .side { padding: 12px 16px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .pair-body .side:nth-child(2n) { border-right: 0; }
-.pair-body .quote { margin: 4px 0 0; background: var(--surface-2); }
-.pair-note { padding: 10px 14px; }
+.pair-body .quote { margin: 6px 0 0; background: var(--surface-2); }
+.pair-note { padding: 12px 16px; }
 @media (max-width: 720px) { .pair-body { grid-template-columns: minmax(0, 1fr); } .pair-body .side { border-right: 0; } }
 .prio { font-family: var(--mono); font-weight: 600; }
 
@@ -300,30 +485,33 @@ mark.q.major.active { background: var(--major-active); }
 @media (max-width: 980px) {
   .split { grid-template-columns: minmax(0, 1fr); height: auto; }
   .pane { overflow: visible; }
-  .pane.doc-pane { border-right: 0; }
-  .pane-switch { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2);
-    position: sticky; top: var(--tabs-h); z-index: 3; }
+  .pane-switch { display: flex; gap: 6px; padding: 10px 0; position: sticky; top: var(--tabs-h); z-index: 3;
+    background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
   .split[data-pane="doc"] .list-pane, .split[data-pane="list"] .doc-pane { display: none; }
   .filters { position: static; }
+  .doc { padding: 20px 16px 60px; }
   .blk { grid-template-columns: minmax(0, 1fr); }
   .blk-side { padding: 0 4px 4px; }
   .matrix thead th { top: 0; position: static; }
+  .wrap { padding: 0 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+  .beam { display: none; }
 }
 @media print {
+  body { background: #fff; }
   .top, .tabs, .filters, .pane-switch { display: none; }
-  .split { height: auto; display: block; } .pane { overflow: visible; }
+  .split { height: auto; display: block; } .pane { overflow: visible; box-shadow: none; }
 }
 </style>
 </head>
 <body>
 <header class="top"><div class="wrap">
-  <div class="brand">reqaudit<small>проверка требований по ISO/IEC/IEEE 29148 и IEEE 830</small></div>
+  <a class="brand" href="#/"><span class="logo" aria-hidden="true"></span>reqaudit</a>
   <div class="grow"></div>
   <nav id="nav"></nav>
-  <button class="btn" id="theme" type="button"></button>
+  <button class="btn icon" id="theme" type="button"></button>
 </div></header>
 <main id="app"></main>
 <!--REPORT_DATA-->
@@ -353,14 +541,14 @@ const SKIP_RU = { goal: 'цели', context: 'пояснения', metadata: 'с
 const ROLE_RU = { analyst: 'аналитик', product_owner: 'владелец продукта', architect: 'архитектор',
   developer: 'разработчик', tester: 'тестировщик', security: 'специалист по безопасности' };
 const RUN_STATUS = {
-  completed: 'завершён',
-  partial: 'завершён частично',
-  checks_incomplete: 'завершён, часть проверок не выполнена',
-  input_rejected: 'документ не принят',
-  running: 'выполняется',
+  completed: 'готов',
+  partial: 'остановлен',
+  checks_incomplete: 'проверен не полностью',
+  input_rejected: 'не принят',
+  running: 'идёт',
   interrupted: 'прерван',
 };
-const STAGE_STATE = { pending: 'ожидает', running: 'выполняется', done: 'выполнен', error: 'ошибка',
+const STAGE_STATE = { pending: 'ожидает', running: 'идёт', done: 'готов', error: 'ошибка',
   skipped: 'не выполнялся', interrupted: 'прерван', not_needed: 'не требовался' };
 const SUMMARY_RU = {
   s1: [['blocks', 'блоков текста']],
@@ -404,6 +592,35 @@ function checkIcon() {
   svg.append(path);
   return svg;
 }
+function strokeIcon(d) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', '18'); svg.setAttribute('height', '18'); svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('fill', 'none'); path.setAttribute('stroke', 'currentColor');
+  path.setAttribute('stroke-width', '2'); path.setAttribute('stroke-linecap', 'round'); path.setAttribute('stroke-linejoin', 'round');
+  svg.append(path);
+  return svg;
+}
+// A number that runs up to its value; the value itself is set at once when motion is reduced.
+function countUp(el, to) {
+  if (REDUCED || !to) { el.textContent = to; return; }
+  const started = performance.now();
+  el.textContent = '0';
+  const step = (now) => {
+    const t = Math.min(1, (now - started) / 900);
+    el.textContent = Math.round(to * (1 - Math.pow(1 - t, 3)));
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+function fmtClock(seconds) {
+  const s = Math.floor(seconds);
+  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+function cap(text) { return text ? text[0].toUpperCase() + text.slice(1) : text; }
 function plural(n, one, few, many) {
   const a = n % 10, b = n % 100;
   if (a === 1 && b !== 11) return one;
@@ -430,9 +647,14 @@ function onActivate(el, fn) {
 
 // ---------------------------------------------------------------- theme
 const themeButton = document.getElementById('theme');
+const SUN = 'M12 3v2m0 14v2m9-9h-2M5 12H3m15.4-6.4L17 7M7 17l-1.4 1.4m0-12.8L7 7m10 10 1.4 1.4M12 8a4 4 0 100 8 4 4 0 000-8z';
+const MOON = 'M20 14.5A8.5 8.5 0 019.5 4a8.5 8.5 0 1010.5 10.5z';
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
-  themeButton.textContent = theme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
+  const label = theme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
+  clear(themeButton).append(strokeIcon(theme === 'dark' ? SUN : MOON));
+  themeButton.setAttribute('aria-label', label);
+  themeButton.title = label;
   try { localStorage.setItem('reqaudit-theme', theme); } catch (e) { /* private mode */ }
 }
 themeButton.addEventListener('click', () =>
@@ -440,7 +662,7 @@ themeButton.addEventListener('click', () =>
 (function () {
   let saved = null;
   try { saved = localStorage.getItem('reqaudit-theme'); } catch (e) { /* private mode */ }
-  setTheme(saved === 'dark' ? 'dark' : 'light');
+  setTheme(saved === 'light' ? 'light' : 'dark');
 })();
 
 // ---------------------------------------------------------------- server
@@ -470,11 +692,15 @@ function go(hash) { if (location.hash === hash) route(); else location.hash = ha
 function route() {
   stopPolling();
   window.scrollTo(0, 0);
+  app.classList.remove('enter');
+  void app.offsetWidth;
+  app.classList.add('enter');
   if (EMBEDDED) { nav.hidden = true; return showReport(EMBEDDED); }
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   clear(nav);
   if (parts[0] !== 'run' && parts[0] !== 'report') return screenUpload();
   nav.append(h('a', { class: 'btn ghost', href: '#/' }, 'Все прогоны'));
+  window.onresize = null;
   if (parts[0] === 'run' && parts[1]) return screenRun(parts[1]);
   if (parts[0] === 'report' && parts[1]) return screenReport(parts[1]);
   return screenUpload();
@@ -485,21 +711,25 @@ window.addEventListener('hashchange', route);
 function screenUpload() {
   let file = null;
   let busy = false;
-  const dropTitle = h('strong', null, 'Перетащите сюда документ с требованиями');
-  const dropHint = h('span', { class: 'muted' }, 'или нажмите, чтобы выбрать файл: PDF, DOCX, Markdown, TXT, HTML, RTF');
+  const paper = h('div', { class: 'paper', 'aria-hidden': 'true' }, [100, 70, 88, 54, 80].map((w) => h('i', { style: `--w:${w}%` })));
+  const dropTitle = h('strong', null, 'Перетащите документ');
+  const dropHint = h('span', { class: 'hint' }, 'PDF, DOCX, Markdown, TXT, HTML, RTF');
   const input = h('input', { type: 'file', hidden: true, accept: '.pdf,.md,.markdown,.docx,.txt,.html,.htm,.rtf' });
-  const drop = h('div', { class: 'drop', tabindex: '0', role: 'button', 'aria-label': 'Выбрать документ' }, dropTitle, dropHint, input);
-  const submit = h('button', { class: 'btn primary', type: 'button', disabled: true }, 'Проверить');
+  const drop = h('div', { class: 'drop', tabindex: '0', role: 'button', 'aria-label': 'Выбрать документ' }, paper, dropTitle, dropHint, input);
+  const submit = h('button', { class: 'btn primary big', type: 'button', disabled: true }, 'Проверить');
   const message = h('div');
-  const modelLine = h('div', { class: 'muted', style: 'margin-top:12px' });
-  const profiles = h('fieldset', { class: 'profiles' }, h('legend', null, 'Профиль запуска'));
-  const runsBox = h('div');
+  const modelLine = h('div', { class: 'models' });
+  const profiles = h('div', { class: 'profiles', role: 'radiogroup', 'aria-label': 'Профиль' });
+  const runsBox = h('div', { class: 'runs' });
 
   function choose(f) {
     if (!f) return;
     file = f;
     dropTitle.textContent = f.name;
-    dropHint.textContent = `${(f.size / 1024).toFixed(1).replace('.', ',')} КБ. Нажмите, чтобы выбрать другой файл.`;
+    dropHint.textContent = `${(f.size / 1024).toFixed(1).replace('.', ',')} КБ`;
+    drop.classList.remove('has-file');
+    void drop.offsetWidth;
+    drop.classList.add('has-file');
     submit.disabled = busy;
     clear(message);
   }
@@ -512,7 +742,7 @@ function screenUpload() {
 
   submit.addEventListener('click', async () => {
     if (!file || busy) return;
-    busy = true; submit.disabled = true; submit.textContent = 'Запускаю агента…';
+    busy = true; submit.disabled = true; submit.textContent = 'Запускаю…';
     clear(message);
     const profile = (profiles.querySelector('input:checked') || {}).value || 'quick';
     try {
@@ -525,107 +755,94 @@ function screenUpload() {
     }
   });
 
-  clear(app).append(h('div', { class: 'wrap upload-grid' },
-    h('section', { class: 'card pad' },
-      h('h1', { style: 'margin-bottom:12px' }, 'Проверить документ'),
-      drop,
-      h('div', { class: 'form-row' }, profiles, h('div', { class: 'grow' }), submit),
-      modelLine, message),
-    h('section', null, h('h2', { style: 'margin:6px 0 10px' }, 'Прошлые прогоны'), runsBox)));
+  clear(app).append(h('div', { class: 'wrap upload' },
+    drop, h('div', { class: 'form-row' }, profiles, submit), modelLine, message, runsBox));
 
   api('/api/config').then((config) => {
-    const about = { quick: 'быстрый прогон', thorough: 'полный прогон, дольше и дороже' };
     for (const name of config.profiles) {
       profiles.append(h('label', { class: 'profile' },
         h('input', { type: 'radio', name: 'profile', value: name, checked: name === config.default_profile }),
-        h('div', null, h('b', null, name), h('span', null, about[name] || ''))));
+        h('b', null, name)));
     }
     if (config.model_ready) {
-      modelLine.append('Модель: ', h('span', { class: 'mono' }, config.models.join(', ')),
-        '. Ключ читается на сервере из файла .env и в браузер не передаётся.');
+      modelLine.textContent = config.models.join(', ');
     } else {
       modelLine.replaceWith(h('div', { class: 'notice' },
-        h('p', null, h('b', null, 'Ключ модели не найден.')),
-        h('p', null, 'Впишите OPENAI_API_KEY или GEMINI_API_KEY в файл .env рядом с местом запуска сервера. ' +
-          'Без ключа агент прочитает документ, но не проверит его: отчёт будет с причиной и без находок.')));
+        h('p', null, h('b', null, 'Нет ключа модели. '), 'Добавьте ', h('code', null, 'GEMINI_API_KEY'), ' или ',
+          h('code', null, 'OPENAI_API_KEY'), ' в файл .env и перезапустите сервер.')));
     }
   }).catch((err) => message.append(errorBox(err)));
 
   function loadRuns() {
     api('/api/runs').then(({ runs }) => {
       clear(runsBox);
-      if (!runs.length) {
-        runsBox.append(h('div', { class: 'card empty' },
-          'Прогонов пока нет. Загрузите документ выше: после проверки отчёт появится в этом списке.'));
-        return;
-      }
-      const body = h('tbody');
-      for (const run of runs) {
+      runs.forEach((run, i) => {
         const target = run.has_report ? `#/report/${run.run_id}` : `#/run/${run.run_id}`;
-        const count = (v) => h('td', { class: 'num' }, run.has_report && run.checks_ran ? v : '—');
-        const row = h('tr', { class: 'click', tabindex: '0' },
-          h('td', null, h('a', { href: target }, run.document || 'без имени'),
-            run.title ? h('div', { class: 'muted' }, run.title) : null),
-          h('td', null, fmtDate(run.started_at)),
-          h('td', { class: 'mono' }, run.profile || '—'),
-          h('td', null, RUN_STATUS[run.status] || run.status || '—'),
-          count(run.units), count(run.findings), count(run.critical), count(run.questions));
-        onActivate(row, (e) => { if (e.target.tagName !== 'A') go(target); });
-        body.append(row);
-      }
-      runsBox.append(h('div', { class: 'card table-scroll' }, h('table', { class: 'grid-table' },
-        h('thead', null, h('tr', null, h('th', null, 'Документ'), h('th', null, 'Дата'), h('th', null, 'Профиль'),
-          h('th', null, 'Статус'), h('th', { class: 'num' }, 'Требований'), h('th', { class: 'num' }, 'Нарушений'),
-          h('th', { class: 'num' }, 'Критичных'), h('th', { class: 'num' }, 'Вопросов'))),
-        body)));
+        const stat = (value, label, cls) => h('div', { class: 'stat' + (cls ? ' ' + cls : '') },
+          h('b', null, run.has_report && run.checks_ran ? value : '—'), h('span', null, label));
+        runsBox.append(h('a', { class: 'run', href: target, style: `--i:${i}` },
+          h('div', { class: 'run-doc' }, h('b', null, run.document || 'без имени'),
+            run.title ? h('span', { class: 'muted' }, run.title) : null),
+          h('div', { class: 'run-date muted' }, fmtDate(run.started_at), run.profile ? ` · ${run.profile}` : ''),
+          h('span', { class: `pill ${run.status || ''}` }, RUN_STATUS[run.status] || run.status || '—'),
+          stat(run.units, 'требований'), stat(run.findings, 'нарушений'),
+          stat(run.critical, 'критичных', 'crit'), stat(run.questions, 'вопросов')));
+      });
     }).catch((err) => clear(runsBox).append(errorBox(err, loadRuns)));
   }
   loadRuns();
 }
 
-// ---------------------------------------------------------------- stage chain
+// ---------------------------------------------------------------- stage track
+// The track is built once and then only updated, so its animations are not restarted by every poll.
 function stageChain(progress) {
-  const now = Date.now();
-  return h('div', { class: 'chain', style: `--stages:${progress.stages.length}` }, progress.stages.map((s) => {
-    const meta = [];
-    const time = s.status === 'running' && s.started_at
-      ? fmtSeconds(Math.max(0, (now - Date.parse(s.started_at)) / 1000)) : fmtSeconds(s.seconds);
-    if (time) meta.push(h('div', null, time));
-    if (s.llm_calls) meta.push(h('div', null, `модель: ${s.llm_calls} ${plural(s.llm_calls, 'вызов', 'вызова', 'вызовов')}`));
-    else if (s.status === 'done' && !s.cache_hits && !s.llm_failed) meta.push(h('div', null, 'без вызовов модели'));
-    if (s.cache_hits) meta.push(h('div', null, `из кэша: ${s.cache_hits}`));
-    if (s.llm_failed) meta.push(h('div', null, `без ответа: ${s.llm_failed}`));
-    for (const [key, label] of SUMMARY_RU[s.code] || []) {
-      if (s.summary && typeof s.summary[key] === 'number') meta.push(h('div', null, `${label}: ${s.summary[key]}`));
+  const el = h('div', { class: 'chain' });
+  const parts = new Map();
+  el.update = (p) => {
+    const now = Date.now();
+    el.style.setProperty('--stages', p.stages.length);
+    for (const s of p.stages) {
+      let part = parts.get(s.code);
+      if (!part) {
+        part = { state: h('div', { class: 'state' }), meta: h('div', { class: 'meta' }) };
+        part.root = h('div', null, h('div', { class: 'node' }), h('div', { class: 'code' }, s.code),
+          h('div', { class: 'name' }, s.title), part.state, part.meta);
+        parts.set(s.code, part);
+        el.append(part.root);
+      }
+      const meta = [];
+      const time = s.status === 'running' && s.started_at
+        ? fmtSeconds(Math.max(0, (now - Date.parse(s.started_at)) / 1000)) : fmtSeconds(s.seconds);
+      if (time) meta.push(h('div', null, time));
+      if (s.llm_calls) meta.push(h('div', null, `${s.llm_calls} ${plural(s.llm_calls, 'вызов', 'вызова', 'вызовов')} модели`));
+      if (s.cache_hits) meta.push(h('div', null, `из кэша ${s.cache_hits}`));
+      if (s.llm_failed) meta.push(h('div', null, `без ответа ${s.llm_failed}`));
+      for (const [key, label] of SUMMARY_RU[s.code] || []) {
+        if (s.summary && typeof s.summary[key] === 'number') meta.push(h('div', null, `${s.summary[key]} ${label}`));
+      }
+      if (s.error) meta.push(h('div', null, s.error));
+      part.root.className = `stage ${s.status}`;
+      if (s.status === 'running') part.root.setAttribute('aria-current', 'step'); else part.root.removeAttribute('aria-current');
+      part.state.textContent = STAGE_STATE[s.status] || s.status;
+      append(clear(part.meta), meta);
     }
-    if (s.error) meta.push(h('div', null, s.error));
-    return h('div', { class: `stage ${s.status}`, 'aria-current': s.status === 'running' ? 'step' : null },
-      h('div', { class: 'code' }, s.code),
-      h('div', { class: 'name' }, s.title),
-      h('div', { class: 'state' }, STAGE_STATE[s.status] || s.status),
-      h('div', { class: 'meta' }, meta));
-  }));
+  };
+  el.update(progress);
+  return el;
 }
 function runNotice(progress) {
   const failed = progress.stages.find((s) => s.status === 'error');
   switch (progress.status) {
-    case 'running':
-      return h('div', { class: 'notice ok' }, h('p', null, 'Идёт проверка. Страница обновляется сама раз в секунду.'));
-    case 'completed':
-      return h('div', { class: 'notice ok' }, h('p', null, 'Прогон завершён, все этапы выполнены.'));
     case 'checks_incomplete':
-      return h('div', { class: 'notice' }, h('p', null, 'Прогон завершён, но часть проверок модель не выполнила. ' +
-        'Отчёт записан; что осталось без оценки, перечислено в нём.'));
+      return h('div', { class: 'notice' }, h('p', null, 'Модель не ответила на часть проверок. Что осталось без оценки, отмечено в отчёте.'));
     case 'partial':
-      return h('div', { class: 'notice error' }, h('p', null, `Этап ${failed ? failed.code : ''} остановился с ошибкой, ` +
-        'отчёт собран из того, что успели. Исправьте причину и запустите проверку заново.'),
-        failed && failed.error ? h('p', null, failed.error) : null);
+      return h('div', { class: 'notice error' }, h('p', null, h('b', null, `Этап ${failed ? failed.code : ''} остановился. `),
+        failed && failed.error ? failed.error : ''));
     case 'input_rejected':
-      return h('div', { class: 'notice error' }, h('p', null, h('b', null, 'Документ не принят.'), ' ',
-        failed && failed.error ? failed.error : ''), h('p', null, 'Загрузите другой файл.'));
+      return h('div', { class: 'notice error' }, h('p', null, h('b', null, 'Документ не принят. '),
+        failed && failed.error ? failed.error : ''));
     case 'interrupted':
-      return h('div', { class: 'notice error' }, h('p', null, 'Прогон прерван: процесс агента остановился, ' +
-        'не дописав отчёт. Запустите проверку заново.'));
+      return h('div', { class: 'notice error' }, h('p', null, 'Прогон прерван до записи отчёта.'));
     default:
       return null;
   }
@@ -633,22 +850,49 @@ function runNotice(progress) {
 
 // ---------------------------------------------------------------- run screen
 function screenRun(runId) {
-  const box = h('div', { class: 'wrap', style: 'padding:20px 20px 40px' });
+  // The sheet fills with lines as stages finish; three of them come out highlighted.
+  const TINT = { 1: 'major', 3: 'critical', 6: 'minor' };
+  const lines = [92, 70, 96, 58, 84, 66, 90, 48, 76].map((w, i) => h('i', { class: TINT[i] || null, style: `--w:${w}%` }));
+  const badge = h('div', { class: 'badge' });
+  const title = h('h1', null, 'Прогон');
+  const nowText = h('span');
+  const clock = h('div', { class: 'clock' }, '00:00');
+  const actions = h('div');
+  const scan = h('div', { class: 'scan' },
+    h('div', { class: 'sheet', 'aria-hidden': 'true' }, lines, h('div', { class: 'beam' }), badge),
+    h('div', { class: 'scan-info' }, title,
+      h('div', { class: 'now', role: 'status' }, h('span', { class: 'dot' }), nowText), clock, actions));
+  const noticeBox = h('div');
+  const chainBox = h('div');
+  const box = h('div', { class: 'wrap runview' }, scan, noticeBox, chainBox);
   clear(app).append(box);
+  let chain = null;
   let sawRunning = false;
   let last = null;
 
   function draw(progress) {
     last = progress;
-    append(clear(box), [
-      h('div', { class: 'title-row' },
-        h('h1', null, progress.input || 'Прогон'),
-        progress.has_report ? h('a', { class: 'btn primary', href: `#/report/${runId}` }, 'Открыть отчёт') : null),
-      h('div', { class: 'muted' }, 'Прогон ', h('span', { class: 'mono' }, runId),
-        progress.profile ? [' · профиль ', h('span', { class: 'mono' }, progress.profile)] : null,
-        progress.started_at ? ` · начат ${fmtDate(progress.started_at)}` : ''),
-      runNotice(progress),
-      stageChain(progress)]);
+    const stages = progress.stages;
+    const running = progress.status === 'running';
+    const failed = ['partial', 'input_rejected', 'interrupted'].includes(progress.status);
+    const done = stages.filter((s) => s.status === 'done' || s.status === 'not_needed').length;
+    const lit = Math.round(done / Math.max(1, stages.length) * lines.length);
+    lines.forEach((line, i) => line.classList.toggle('on', i < lit));
+    title.textContent = progress.input || 'Прогон';
+    scan.className = `scan ${running ? 'running' : 'finished'}${failed ? ' failed' : ''}`;
+    badge.textContent = failed ? '!' : '✓';
+    const current = stages.find((s) => s.status === 'running');
+    nowText.textContent = running ? (current ? current.title : 'Запуск') : cap(RUN_STATUS[progress.status] || progress.status);
+    const startedMs = Date.parse(progress.started_at || '');
+    const seconds = running && !Number.isNaN(startedMs)
+      ? Math.max(0, (Date.now() - startedMs) / 1000) : stages.reduce((sum, s) => sum + (s.seconds || 0), 0);
+    clock.textContent = fmtClock(seconds);
+    clear(actions);
+    if (progress.has_report) actions.append(h('a', { class: 'btn primary big', href: `#/report/${runId}` }, 'Открыть отчёт'));
+    const notice = runNotice(progress);
+    clear(noticeBox);
+    if (notice) noticeBox.append(notice);
+    if (chain) chain.update(progress); else { chain = stageChain(progress); chainBox.append(chain); }
   }
   async function tick() {
     let progress;
@@ -673,7 +917,7 @@ function screenRun(runId) {
 
 // ---------------------------------------------------------------- report screen
 function screenReport(runId) {
-  clear(app).append(h('div', { class: 'wrap empty' }, 'Читаю файлы прогона…'));
+  clear(app).append(h('div', { class: 'wrap empty' }, 'Открываю отчёт…'));
   api(`/api/runs/${runId}/report`).then(showReport).catch((err) => {
     clear(app).append(h('div', { class: 'wrap', style: 'padding-top:20px' }, errorBox(err),
       h('p', null, h('a', { href: `#/run/${runId}` }, 'Открыть ход прогона'))));
@@ -722,20 +966,21 @@ function showReport(R) {
     downloads.push(h('a', { class: 'btn', href: `/api/runs/${R.run_id}/report.html`, download: '' }, 'Скачать report.html'));
   }
   head.append(h('div', { class: 'title-row' },
-    h('h1', null, P.document_title || P.document_name || 'Отчёт о проверке требований'), downloads));
+    h('h1', null, P.document_title || P.document_name || 'Отчёт'), downloads));
 
   const passportItems = [];
   const item = (label, value) => { if (value != null && value !== '') passportItems.push(h('div', null, h('dt', null, label), h('dd', null, value))); };
   item('Документ', P.document_name);
-  item('Дата прогона', P.started_at ? fmtDate(P.started_at) : null);
+  item('Дата', P.started_at ? fmtDate(P.started_at) : null);
   item('Модель', P.models_used && P.models_used.length
     ? h('span', { class: 'mono' }, P.models_used.join(', ')) : (P.models_used ? 'не вызывалась' : null));
-  item('Коммит агента', P.git_commit
-    ? [h('span', { class: 'mono' }, P.git_commit.slice(0, 12)), P.git_dirty ? ' (есть незакоммиченные изменения)' : '']
-    : (P.agent_version ? `версия ${P.agent_version}, коммит неизвестен` : null));
-  item('Отпечаток промптов', P.prompts_fingerprint ? h('span', { class: 'mono' }, P.prompts_fingerprint) : null);
-  item('Профиль и статус', P.profile ? [h('span', { class: 'mono' }, P.profile), P.status ? ` · ${RUN_STATUS[P.status] || P.status}` : ''] : null);
-  if (passportItems.length) head.append(h('dl', { class: 'card passport', style: 'margin-top:0' }, passportItems));
+  item('Коммит', P.git_commit
+    ? [h('span', { class: 'mono' }, P.git_commit.slice(0, 12)), P.git_dirty ? ' + правки' : '']
+    : (P.agent_version ? `версия ${P.agent_version}` : null));
+  item('Промпты', P.prompts_fingerprint ? h('span', { class: 'mono' }, P.prompts_fingerprint) : null);
+  item('Профиль', P.profile ? h('span', { class: 'mono' }, P.profile) : null);
+  item('Статус', P.status ? (RUN_STATUS[P.status] || P.status) : null);
+  if (passportItems.length) head.append(h('dl', { class: 'passport' }, passportItems));
 
   for (const err of R.errors || []) {
     head.append(h('div', { class: 'notice error' }, h('p', null, h('b', null, `Этап ${err.stage} остановился. `), err.message)));
@@ -747,12 +992,10 @@ function showReport(R) {
       .map((c) => cellTitle.get(c.cell) || c.cell))];
     const lines = [];
     if (areas('s5').length) lines.push(h('p', null, 'Не проверены рецензентом (s5): ', areas('s5').join('; '), '.'));
-    if (areas('s6').length) lines.push(h('p', null, 'Найденное не перепроверено оппонентом (s6): ', areas('s6').join('; '), '.'));
+    if (areas('s6').length) lines.push(h('p', null, 'Не перепроверены оппонентом (s6): ', areas('s6').join('; '), '.'));
     if (areas(null).length) lines.push(h('p', null, 'Также не выполнено: ', areas(null).join('; '), '.'));
     head.append(h('div', { class: 'notice' },
-      h('p', null, h('b', null, 'Часть проверок не выполнена: модель не ответила. '),
-        'Отчёт построен на том, что проверить удалось.'),
-      h('details', null, h('summary', { style: 'cursor:pointer' }, 'Что осталось без проверки и почему'),
+      h('details', null, h('summary', { style: 'cursor:pointer' }, h('b', null, 'Часть проверок не выполнена: модель не ответила')),
         lines,
         R.check_failures.map((c) => h('p', { style: 'margin:6px 0 0; overflow-wrap:anywhere' },
           h('span', { class: 'mono' }, c.stage), ` · ${c.cell}: ${c.message}`)))));
@@ -763,59 +1006,70 @@ function showReport(R) {
   if (R.verdict) {
     const V = R.verdict;
     const first = V.first.slice(0, 3).map((id) => findingById.get(id)).filter(Boolean);
-    verdictCard = h('section', { class: `card verdict ${V.level}` },
+    verdictCard = h('section', { class: `verdict ${V.level}` },
       h('div', null,
-        h('div', { class: 'q' }, 'Можно ли начинать разработку по этому документу?'),
-        h('div', { class: 'word' }, V.word),
+        h('div', { class: 'q' }, 'Можно начинать разработку?'),
+        h('div', { class: 'word' }, V.word)),
+      h('div', null,
         h('p', null, V.text),
-        V.incomplete ? h('p', { class: 'muted' }, 'Вывод неполный: часть проверок не выполнена.') : null),
-      first.length ? h('div', null, h('div', { class: 'section-title' }, 'Исправить в первую очередь'),
-        h('ol', { class: 'fixes' }, first.map((f) => h('li', null, h('span', { class: `sev ${f.severity}` }, SEV[f.severity].word),
-          h('button', { class: 'linkish', type: 'button', onclick: () => select(f.id, 'jump') },
-            h('span', { class: 'mono' }, f.id), ' — ', f.title))))) : null);
+        V.incomplete ? h('p', { class: 'muted' }, 'Вывод неполный: часть проверок не выполнена.') : null,
+        first.length ? h('ol', { class: 'fixes', 'aria-label': 'Исправить в первую очередь' }, first.map((f, i) => h('li', { style: `--i:${i}` },
+          h('button', { type: 'button', onclick: () => select(f.id, 'jump') },
+            h('span', { class: `sev ${f.severity}` }, SEV[f.severity].word),
+            h('span', { class: 'mono' }, f.id), h('span', { class: 't' }, f.title))))) : null));
   } else {
-    verdictCard = h('section', { class: 'card verdict' },
-      h('div', { class: 'q' }, 'Можно ли начинать разработку по этому документу?'),
-      h('div', { class: 'word', style: 'font-size:22px' }, 'Вывод не сформирован'),
-      h('p', null, 'Проверка требований в этом прогоне не выполнялась, поэтому отсутствие замечаний не означает, ' +
-        'что документ без дефектов. Причина указана выше и на вкладке «Ход прогона».'));
+    verdictCard = h('section', { class: 'verdict' },
+      h('div', null,
+        h('div', { class: 'q' }, 'Можно начинать разработку?'),
+        h('div', { class: 'word plain' }, 'Нет вывода')),
+      h('div', null, h('p', null, 'Проверка требований в этом прогоне не выполнялась. Причина на вкладке «Ход прогона».')));
   }
-  const numbers = h('section', { class: 'card' });
+  const figures = h('section', { class: 'figures' });
+  const figure = (value, label, cls) => {
+    const number = h('b');
+    countUp(number, value);
+    return h('div', { class: cls || null }, number, h('span', null, label));
+  };
   if (R.checks_ran) {
-    numbers.append(h('div', { class: 'numbers' },
-      h('div', null, h('b', null, R.units.length), h('span', null, plural(R.units.length, 'требование', 'требования', 'требований'))),
-      h('div', null, h('b', null, R.findings.length), h('span', null, plural(R.findings.length, 'нарушение', 'нарушения', 'нарушений'))),
-      h('div', { class: 'crit' }, h('b', null, critical), h('span', null, plural(critical, 'критичное', 'критичных', 'критичных'))),
-      h('div', null, h('b', null, R.questions.length), h('span', null, plural(R.questions.length, 'вопрос автору', 'вопроса автору', 'вопросов автору')))));
+    figures.append(h('div', { class: 'numbers' },
+      figure(R.units.length, plural(R.units.length, 'требование', 'требования', 'требований')),
+      figure(R.findings.length, plural(R.findings.length, 'нарушение', 'нарушения', 'нарушений')),
+      figure(critical, plural(critical, 'критичное', 'критичных', 'критичных'), 'crit'),
+      figure(R.questions.length, plural(R.questions.length, 'вопрос автору', 'вопроса автору', 'вопросов автору'))));
+    if (R.findings.length) {
+      const share = Object.keys(SEV).map((code) => [code, R.findings.filter((f) => f.severity === code).length]).filter(([, n]) => n);
+      figures.append(h('div', { class: 'sevbar', role: 'img', 'aria-label': share.map(([code, n]) => `${SEV[code].word}: ${n}`).join(', ') },
+        share.map(([code, n]) => h('span', { class: code, style: `flex:${n}`, title: `${SEV[code].word}: ${n}` }))));
+    }
   } else if (R.units.length) {
-    numbers.append(h('div', { class: 'numbers' },
-      h('div', null, h('b', null, R.units.length), h('span', null, plural(R.units.length, 'требование', 'требования', 'требований')))));
+    figures.append(h('div', { class: 'numbers' },
+      figure(R.units.length, plural(R.units.length, 'требование', 'требования', 'требований'))));
   }
-  const headGrid = h('div', { class: 'head-grid' }, verdictCard, numbers.firstChild ? numbers : null);
+  const headGrid = h('div', { class: 'head-grid' }, verdictCard, figures.firstChild ? figures : null);
   head.append(headGrid);
   if (R.gate_stats) {
     const g = R.gate_stats;
-    const parts = [];
-    if (typeof g.in === 'number') parts.push(`на входе ${g.in} ${plural(g.in, 'находка', 'находки', 'находок')}`);
-    if (typeof g.no_evidence === 'number') parts.push(`отклонено без цитаты в документе: ${g.no_evidence}`);
-    if (typeof g.one_sided_conflict === 'number') parts.push(`противоречий с цитатой одной стороны: ${g.one_sided_conflict}`);
-    if (typeof g.merged === 'number') parts.push(`дублей объединено: ${g.merged}`);
-    if (typeof g.out === 'number') parts.push(`в отчёт прошло: ${g.out}`);
-    head.append(h('div', { class: 'gate-line' }, h('span', { class: 'verified' }, checkIcon()),
-      h('span', null, 'Гейт доказательств (этап s7) сверяет каждую цитату с текстом документа кодом, без модели: ',
-        parts.join('; '), '.')));
+    const tags = [];
+    const tag = (label, value) => { if (typeof value === 'number') tags.push(h('span', { class: 'tag' }, label, ' ', h('b', null, value))); };
+    tag('кандидатов', g.in);
+    tag('без цитаты', g.no_evidence);
+    tag('цитата одной стороны', g.one_sided_conflict);
+    tag('дублей', g.merged);
+    tag('в отчёте', g.out);
+    head.append(h('div', { class: 'gate-line' }, h('span', { class: 'verified' }, checkIcon(), 'Цитаты сверены с текстом кодом'), tags));
   }
 
   // ---- tabs
   const tabDefs = [
-    ['doc', 'Документ и находки', R.findings.length],
+    ['doc', 'Документ', R.findings.length],
     ['units', 'Нарезка', R.units.length],
     ['matrix', 'Матрица', null],
     ['set', 'Набор', null],
     ['questions', 'Вопросы автору', R.questions.length],
     ['run', 'Ход прогона', null],
   ];
-  const tabBar = h('div', { class: 'wrap', role: 'tablist' });
+  const tabInd = h('span', { class: 'tab-ind', 'aria-hidden': 'true' });
+  const tabBar = h('div', { class: 'wrap', role: 'tablist' }, tabInd);
   const tabs = h('div', { class: 'tabs' }, tabBar);
   const panel = h('div', { class: 'wrap', role: 'tabpanel' });
   const tabButtons = new Map();
@@ -825,6 +1079,14 @@ function showReport(R) {
     tabButtons.set(id, button);
     tabBar.append(button);
   }
+  // The pill under the chosen tab slides to it.
+  function moveIndicator() {
+    const button = tabButtons.get(state.tab);
+    if (!button) return;
+    tabInd.style.width = `${button.offsetWidth}px`;
+    tabInd.style.transform = `translateX(${button.offsetLeft}px)`;
+  }
+  window.onresize = moveIndicator;
 
   // ---- document pane
   const docPane = h('div', { class: 'pane doc-pane' });
@@ -947,8 +1209,19 @@ function showReport(R) {
       'Причина указана на вкладке «Ход прогона».'));
   }
 
+  const inkTargets = [...docPane.querySelectorAll('.blk')].filter((b) => b.querySelector('mark.q'));
+  if (REDUCED || !('IntersectionObserver' in window)) {
+    inkTargets.forEach((b) => b.classList.add('inked'));
+  } else {
+    const ink = new IntersectionObserver((entries) => {
+      for (const entry of entries) if (entry.isIntersecting) { entry.target.classList.add('inked'); ink.unobserve(entry.target); }
+    }, { threshold: 0.15 });
+    inkTargets.forEach((b) => ink.observe(b));
+  }
+
   // ---- findings pane
-  const listBox = h('div');
+  const listBox = h('div', { class: 'findings' });
+  let firstDraw = true;
   const shown = h('span', { class: 'shown' });
   const filterBar = h('div', { class: 'filters' });
   function severityToggle(code) {
@@ -983,7 +1256,7 @@ function showReport(R) {
   }
   filterBar.append(h('div', { class: 'line' }, severityButtons),
     h('div', { class: 'line' }, criterionSelect, unitSelect),
-    h('div', { class: 'line' }, shown, h('button', { class: 'linkish', type: 'button', onclick: () => { resetFilters(); drawList(); } }, 'Сбросить фильтры')));
+    h('div', { class: 'line' }, shown, h('button', { class: 'linkish', type: 'button', onclick: () => { resetFilters(); drawList(); } }, 'Сбросить')));
 
   function passes(f) {
     return (!state.severities.size || state.severities.has(f.severity))
@@ -998,7 +1271,7 @@ function showReport(R) {
     }
     return h('span', { class: 'verified no' }, 'цитата не проверена кодом');
   }
-  function findingCard(f) {
+  function findingCard(f, index) {
     const info = criterion(f.criterion);
     const open = state.active === f.id;
     const places = [...new Set(f.evidence.map((e) => e.place).filter((p) => p && p !== '—'))];
@@ -1010,7 +1283,8 @@ function showReport(R) {
         h('span', { class: 'mono' }, f.unit_ids.length ? f.unit_ids.join(', ') : 'документ целиком'),
         places.length ? h('span', null, places.join('; ')) : null));
     onActivate(headEl, () => select(state.active === f.id ? null : f.id, 'list'));
-    const card = h('article', { class: `finding ${f.severity}${open ? ' active' : ''}`, id: `finding-${f.id}`, dataset: { f: f.id } }, headEl);
+    const card = h('article', { class: `finding ${f.severity}${open ? ' active' : ''}`, id: `finding-${f.id}`, dataset: { f: f.id },
+      style: `--i:${index || 0}` }, headEl);
     if (open) {
       const body = h('div', { class: 'finding-body' });
       body.append(h('div', null, h('h4', null, 'Критерий'),
@@ -1035,22 +1309,24 @@ function showReport(R) {
       const trail = f.trail || [];
       if (trail.includes('arbiter:kept')) body.append(h('p', { class: 'muted' }, 'Оппонент оспаривал находку, арбитр её оставил.'));
       else if (trail.includes('opponent:unavailable')) body.append(h('p', { class: 'muted' }, 'Находка не проверена оппонентом: он был недоступен.'));
-      card.append(body);
+      card.append(h('div', { class: 'finding-open' }, body));
     }
     return card;
   }
   function drawList() {
     const visible = R.findings.filter(passes);
-    shown.textContent = `Показано ${visible.length} из ${R.findings.length}`;
+    shown.textContent = `${visible.length} из ${R.findings.length}`;
     clear(listBox);
+    listBox.classList.toggle('first', firstDraw);
+    firstDraw = false;
     if (!R.findings.length) {
       listBox.append(h('div', { class: 'empty' }, R.checks_ran
         ? 'Нарушений не найдено: ни одна находка не прошла оппонента и проверку цитат.'
         : 'Находок нет: проверка требований в этом прогоне не выполнялась.'));
     } else if (!visible.length) {
-      listBox.append(h('div', { class: 'empty' }, 'Под выбранные фильтры не подходит ни одна находка. Сбросьте фильтры, чтобы увидеть все.'));
+      listBox.append(h('div', { class: 'empty' }, 'Под фильтры ничего не подходит.'));
     } else {
-      append(listBox, visible.map(findingCard));
+      append(listBox, visible.map((f, i) => findingCard(f, i)));
     }
   }
   append(listPane, [R.findings.length ? filterBar : null, listBox]);
@@ -1092,7 +1368,7 @@ function showReport(R) {
   function paintActive() {
     docPane.querySelectorAll('mark.q.active, .chip.active').forEach((el) => el.classList.remove('active'));
     if (!state.active) return;
-    marksOf(state.active).forEach((m) => m.classList.add('active'));
+    marksOf(state.active).forEach((m) => { m.closest('.blk').classList.add('inked'); m.classList.add('active'); });
     docPane.querySelectorAll('.chip').forEach((c) => { if (c.dataset.f === state.active) c.classList.add('active'); });
   }
   function ensureDocVisible() {
@@ -1219,16 +1495,16 @@ function showReport(R) {
     }
     box.append(h('div', { class: 'legend' },
       Object.keys(SEV).map((s) => h('span', { class: 'swatch' }, h('span', { class: `cellbox ${s}` }, SEV[s].letter), SEV[s].word)),
-      h('span', { class: 'swatch' }, h('span', { class: 'cellbox ok' }, '✓'), 'проверено, замечаний нет'),
-      h('span', { class: 'swatch' }, h('span', { class: 'cellbox none' }, '·'), 'по этому критерию не проверялось')));
+      h('span', { class: 'swatch' }, h('span', { class: 'cellbox ok' }, '✓'), 'без замечаний'),
+      h('span', { class: 'swatch' }, h('span', { class: 'cellbox none' }, '·'), 'не проверялось')));
     const table = h('table', { class: 'matrix card' });
     table.append(h('thead', null,
       h('tr', null, h('th', { class: 'group corner', rowspan: '2' }, 'Требование'),
         groups.map((g) => h('th', { class: 'group', colspan: String(g.span) }, levels[g.level] || g.level))),
       h('tr', null, order.map((c) => h('th', { title: criterion(c).standard || '' }, h('div', { class: 'vert' }, criterion(c).label))))));
     const body = h('tbody');
-    for (const u of R.units) {
-      const row = h('tr', null, onActivate(h('th', { class: 'rowhead mono', tabindex: '0', title: u.summary }, unitLabel(u.id)),
+    for (const [n, u] of R.units.entries()) {
+      const row = h('tr', { style: `--i:${n}` }, onActivate(h('th', { class: 'rowhead mono', tabindex: '0', title: u.summary }, unitLabel(u.id)),
         () => flashBlocks(u.block_ids)));
       for (const c of order) {
         const hits = R.findings.filter((f) => f.criterion === c && f.unit_ids.includes(u.id))
@@ -1241,7 +1517,7 @@ function showReport(R) {
             onclick: () => select(worst.id, 'jump') },
             h('span', { class: `cellbox ${worst.severity}` }, hits.length > 1 ? hits.length : SEV[worst.severity].letter));
         } else if (checked.has(`${u.id}|${c}`) || setChecked.has(c)) {
-          cell = h('span', { class: 'cellbox ok', title: 'проверено, замечаний нет' }, '✓');
+          cell = h('span', { class: 'cellbox ok', title: 'без замечаний' }, '✓');
         } else {
           cell = h('span', { class: 'cellbox none', title: 'не проверялось' }, '·');
         }
@@ -1250,9 +1526,7 @@ function showReport(R) {
       body.append(row);
     }
     table.append(body);
-    box.append(h('div', { class: 'table-scroll', style: 'overflow:visible' }, table),
-      h('p', { class: 'muted' }, 'Буква в ячейке — критичность самой серьёзной находки, число — сколько находок по этому критерию. ' +
-        'Клик по ячейке открывает находку, клик по требованию — его место в документе.'));
+    box.append(h('div', { class: 'table-scroll', style: 'overflow:visible' }, table));
     return box;
   }
 
@@ -1301,9 +1575,7 @@ function showReport(R) {
     }
     if (R.facts && R.facts.conflicts && R.facts.conflicts.length) {
       const factById = new Map(R.facts.facts.map((x) => [x.id, x]));
-      box.append(h('h2', { style: 'margin:18px 0 4px' }, `Расхождения значений, найденные кодом: ${R.facts.conflicts.length}`),
-        h('p', { class: 'muted', style: 'margin:0 0 10px' }, `Этап s3 выписал из документа ${R.facts.facts.length} ` +
-          `${plural(R.facts.facts.length, 'факт', 'факта', 'фактов')} и сверил их кодом. Это кандидаты: дефектом их признаёт рецензент, подтверждённые вошли в находки.`));
+      box.append(h('h2', { style: 'margin:18px 0 10px' }, `Расхождения значений, найденные кодом: ${R.facts.conflicts.length}`));
       for (const c of R.facts.conflicts) {
         const facts = c.fact_ids.map((id) => factById.get(id)).filter(Boolean);
         box.append(h('section', { class: 'card pair' },
@@ -1337,8 +1609,7 @@ function showReport(R) {
     }
     box.append(h('div', { class: 'card table-scroll' }, h('table', { class: 'grid-table' },
       h('thead', null, h('tr', null, h('th', null, 'ID'), h('th', null, 'Приоритет'), h('th', null, 'Кому'), h('th', null, 'Вопрос'),
-        h('th', null, 'Блокирует разработку'), h('th', null, 'Находки'))), body)),
-      h('p', { class: 'muted' }, 'Приоритет 1 — самый срочный.'));
+        h('th', null, 'Блокирует разработку'), h('th', null, 'Находки'))), body)));
     return box;
   }
 
@@ -1388,6 +1659,7 @@ function showReport(R) {
       panel.className = 'wrap';
       panel.append(builders[id]());
     }
+    moveIndicator();
   }
 
   clear(app).append(head, tabs, panel);

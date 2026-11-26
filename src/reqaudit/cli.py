@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 from pathlib import Path
 
@@ -34,6 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="папка для артефактов прогона; по умолчанию runs/")
     parser.add_argument("--no-cache", action="store_true",
                         help="не брать ответы модели из кэша; новые ответы всё равно сохраняются")
+    parser.add_argument("--html", action="store_true",
+                        help="записать рядом с отчётом тот же отчёт одним HTML-файлом, "
+                             "который открывается без сервера")
     parser.add_argument("--version", action="version", version=f"reqaudit {__version__}")
     return parser
 
@@ -54,6 +58,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Проверяю {args.input} ...")
     result = run_pipeline(args.input, output, settings)
     print(f"Отчёт: {result.report_path}")
+    if args.html:
+        # Imported here: the page is read only when asked for.
+        from reqaudit.ui import rundata
+
+        html = rundata.write_html(result.run_dir, result.report_path.with_suffix(".html"))
+        shutil.copyfile(html, result.run_dir / "report.html")
+        print(f"Отчёт HTML: {html}")
     print(f"Артефакты прогона: {result.run_dir}")
     print(f"Расход модели: {result.spend}")
     if result.status != "completed":

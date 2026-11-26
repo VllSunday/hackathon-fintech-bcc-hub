@@ -1,0 +1,1398 @@
+<!doctype html>
+<html lang="ru" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>reqaudit — проверка требований</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --bg: #f3f2ef;
+  --surface: #ffffff;
+  --surface-2: #f8f7f5;
+  --line: #dcd9d3;
+  --line-strong: #c4c0b8;
+  --text: #1d1f1e;
+  --muted: #5a605c;
+  --accent: #0f5c43;
+  --accent-soft: #e3efe9;
+  --on-accent: #ffffff;
+  --crit: #a4261d;  --crit-soft: #fbe9e7;  --crit-mark: #f8d7d3;
+  --major: #7a4a00; --major-soft: #fbefd5; --major-mark: #f7e3b5;
+  --minor: #2a5580; --minor-soft: #e6eef7; --minor-mark: #d5e4f3;
+  --crit-active: #f0aaa3; --major-active: #efc968; --minor-active: #a9c9ea;
+  --flash: #dcebe4;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  --r: 6px;
+  --tabs-h: 46px;
+}
+:root[data-theme="dark"] {
+  --bg: #171918;
+  --surface: #1f2221;
+  --surface-2: #252928;
+  --line: #343937;
+  --line-strong: #4a504d;
+  --text: #e6e8e6;
+  --muted: #a3aaa6;
+  --accent: #5cc49b;
+  --accent-soft: #1d3a30;
+  --on-accent: #10231c;
+  --crit: #ff9d92;  --crit-soft: #3f1d1a;  --crit-mark: #5a2622;
+  --major: #f0be62; --major-soft: #3b2d10; --major-mark: #54400f;
+  --minor: #9cc3ea; --minor-soft: #1b2f43; --minor-mark: #223f5c;
+  --crit-active: #8a3029; --major-active: #7d5e12; --minor-active: #2f5a85;
+  --flash: #24443a;
+}
+* { box-sizing: border-box; }
+html { font-size: 15px; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans);
+  line-height: 1.45; -webkit-text-size-adjust: 100%; }
+button, select, input { font: inherit; color: inherit; }
+a { color: var(--accent); }
+.mono { font-family: var(--mono); font-size: 14px; }
+.muted { color: var(--muted); }
+.wrap { max-width: 1680px; margin: 0 auto; padding: 0 20px; }
+
+/* top bar */
+.top { background: var(--surface); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; align-items: center; gap: 16px; min-height: 48px; flex-wrap: wrap; }
+.brand { font-weight: 650; letter-spacing: .01em; }
+.brand small { font-weight: 400; color: var(--muted); font-size: 14px; margin-left: 8px; }
+.top .grow { flex: 1; }
+.btn { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 5px 12px;
+  border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--surface);
+  color: var(--text); text-decoration: none; cursor: pointer; font-size: 14px; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.btn.primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--accent); padding-left: 4px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.pad { padding: 16px 18px; }
+h1, h2, h3 { margin: 0; font-weight: 650; }
+h1 { font-size: 20px; }
+h2 { font-size: 16px; }
+.section-title { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .05em; margin: 0 0 8px; }
+.notice { border: 1px solid var(--line-strong); border-left: 4px solid var(--major); background: var(--major-soft);
+  border-radius: var(--r); padding: 10px 14px; margin: 12px 0; }
+.notice.error { border-left-color: var(--crit); background: var(--crit-soft); }
+.notice.ok { border-left-color: var(--accent); background: var(--accent-soft); }
+.notice p { margin: 0 0 4px; } .notice p:last-child { margin: 0; }
+.notice details p { margin: 6px 0 0; }
+.empty { padding: 28px 18px; text-align: center; color: var(--muted); }
+
+/* upload screen */
+.upload-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding-top: 20px; padding-bottom: 40px; }
+.drop { border: 1.5px dashed var(--line-strong); border-radius: 8px; background: var(--surface-2);
+  padding: 26px 18px; text-align: center; cursor: pointer; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop strong { display: block; font-size: 16px; margin-bottom: 4px; }
+.form-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-top: 14px; }
+.profiles { display: flex; gap: 8px; flex-wrap: wrap; border: 0; padding: 0; margin: 0; }
+.profiles legend { font-size: 14px; color: var(--muted); padding: 0; margin-bottom: 4px; }
+.profile { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: var(--r);
+  padding: 8px 12px; cursor: pointer; background: var(--surface); max-width: 320px; }
+.profile:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.profile span { display: block; font-size: 14px; color: var(--muted); }
+.profile b { font-family: var(--mono); font-size: 14px; }
+table { border-collapse: collapse; width: 100%; }
+.grid-table th, .grid-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line);
+  vertical-align: top; font-size: 14px; }
+.grid-table th { color: var(--muted); font-weight: 600; background: var(--surface-2); position: sticky; top: 0; }
+.grid-table td.mono, .grid-table td.prio, .grid-table th { white-space: nowrap; }
+.grid-table .chip { flex-wrap: nowrap; white-space: nowrap; }
+.grid-table tbody tr.click { cursor: pointer; }
+.grid-table tbody tr.click:hover { background: var(--surface-2); }
+.num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.table-scroll { overflow-x: auto; }
+
+/* stage chain */
+.chain { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 0; margin: 14px 0 4px; }
+.stage { position: relative; padding: 10px 10px 12px; border: 1px solid var(--line); border-right-width: 0;
+  background: var(--surface); min-height: 132px; }
+.stage:first-child { border-radius: 8px 0 0 8px; }
+.stage:last-child { border-right-width: 1px; border-radius: 0 8px 8px 0; }
+.stage .code { font-family: var(--mono); font-size: 14px; color: var(--muted); }
+.stage .name { font-weight: 600; font-size: 14px; margin: 2px 0 6px; min-height: 2.9em; }
+.stage .state { font-size: 14px; font-weight: 600; }
+.stage .meta { font-size: 14px; color: var(--muted); }
+.stage.done { border-top: 3px solid var(--accent); padding-top: 8px; }
+.stage.done .state { color: var(--accent); }
+.stage.running { border-top: 3px solid var(--accent); padding-top: 8px; background: var(--accent-soft); }
+.stage.error, .stage.interrupted { border-top: 3px solid var(--crit); padding-top: 8px; background: var(--crit-soft); }
+.stage.error .state, .stage.interrupted .state { color: var(--crit); }
+.stage.pending .state, .stage.skipped .state { color: var(--muted); font-weight: 400; }
+@media (max-width: 1100px) { .chain { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .stage { border-right-width: 1px; border-radius: 0 !important; margin: 0 -1px -1px 0; } }
+@media (max-width: 620px) { .chain { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* report head */
+.report-head { padding-top: 16px; padding-bottom: 14px; }
+.title-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.title-row h1 { flex: 1; min-width: 240px; }
+.passport { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0; margin-bottom: 12px; }
+.passport div { padding: 9px 14px; border-right: 1px solid var(--line); min-width: 0; }
+.passport div:last-child { border-right: 0; }
+.passport dt { font-size: 14px; color: var(--muted); }
+.passport dd { margin: 0; overflow-wrap: anywhere; }
+.head-grid { display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(260px, 1fr); gap: 12px; }
+.verdict { padding: 12px 18px; border-left: 5px solid var(--line-strong); display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(0, 1.2fr); gap: 8px 28px; align-items: start; }
+.verdict > div:only-child { grid-column: 1 / -1; }
+@media (max-width: 1180px) { .verdict { grid-template-columns: minmax(0, 1fr); } }
+.verdict.no { border-left-color: var(--crit); }
+.verdict.conditional { border-left-color: var(--major); }
+.verdict.yes { border-left-color: var(--accent); }
+.verdict .q { font-size: 14px; color: var(--muted); }
+.verdict .word { font-size: 34px; font-weight: 700; line-height: 1.1; margin: 2px 0 6px; }
+.verdict.no .word { color: var(--crit); } .verdict.conditional .word { color: var(--major); }
+.verdict.yes .word { color: var(--accent); }
+.verdict p { margin: 0 0 6px; max-width: 80ch; }
+.verdict p:last-child { margin-bottom: 0; }
+.fixes { margin: 0; padding: 0; list-style: none; counter-reset: fix; }
+.fixes li { counter-increment: fix; display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
+.fixes li::before { content: counter(fix) "."; color: var(--muted); font-variant-numeric: tabular-nums; }
+.linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-align: left;
+  text-decoration: underline; text-underline-offset: 2px; }
+.numbers { display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: 100%; }
+.numbers div { padding: 8px 16px; display: flex; flex-direction: column; justify-content: center; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.numbers div:nth-child(2n) { border-right: 0; }
+.numbers div:nth-last-child(-n+2) { border-bottom: 0; }
+.numbers b { display: block; font-size: 30px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.numbers span { font-size: 14px; color: var(--muted); }
+.numbers .crit b { color: var(--crit); }
+.gate-line { font-size: 14px; color: var(--muted); margin-top: 10px; display: flex; gap: 6px; align-items: flex-start; }
+@media (max-width: 980px) { .head-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* tabs */
+.tabs { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line-strong); }
+.tabs .wrap { display: flex; gap: 2px; min-height: var(--tabs-h); align-items: flex-end; overflow-x: auto; }
+.tab { border: 1px solid transparent; border-bottom: 0; background: transparent; padding: 9px 14px; cursor: pointer;
+  border-radius: var(--r) var(--r) 0 0; font-size: 15px; color: var(--muted); white-space: nowrap; }
+.tab[aria-selected="true"] { background: var(--surface); border-color: var(--line-strong); color: var(--text);
+  font-weight: 600; margin-bottom: -1px; padding-bottom: 10px; }
+.tab .count { font-family: var(--mono); font-size: 14px; color: var(--muted); margin-left: 6px; font-weight: 400; }
+.tabpanel { padding: 16px 0 40px; }
+
+/* split: document and findings */
+.split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr); height: calc(100vh - var(--tabs-h));
+  background: var(--surface); border: 1px solid var(--line); border-top: 0; }
+.pane { overflow: auto; min-height: 0; }
+.pane.doc-pane { border-right: 1px solid var(--line); }
+.pane-switch { display: none; }
+.doc { padding: 18px 20px 60px; }
+.blk { display: grid; grid-template-columns: minmax(0, 72ch) 156px; column-gap: 12px;
+  border-radius: 4px; transition: background-color .15s; }
+.blk.flash { background: var(--flash); }
+.blk-text { line-height: 1.6; padding: 3px 4px; white-space: pre-line; overflow-wrap: anywhere; min-width: 0; }
+.blk-side { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 3px 4px; padding-top: 5px; min-width: 0; }
+.blk.heading .blk-text { font-weight: 650; padding-top: 14px; }
+.blk.h1 .blk-text { font-size: 20px; } .blk.h2 .blk-text { font-size: 18px; } .blk.h3 .blk-text { font-size: 16px; }
+.blk.list_item .blk-text { padding-left: 22px; position: relative; }
+.blk.list_item .blk-text::before { content: "–"; position: absolute; left: 6px; color: var(--muted); }
+.blk.code .blk-text { font-family: var(--mono); font-size: 14px; white-space: pre-wrap; background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; margin: 4px 0; }
+.blk.hidden-text .blk-text, .blk.image_text .blk-text { border: 1px dashed var(--line-strong); border-radius: 4px;
+  padding: 6px 10px; margin: 4px 0; }
+.blk-note { display: block; font-size: 14px; color: var(--muted); font-style: normal; }
+.blk.header_footer .blk-text { color: var(--muted); font-size: 14px; }
+.blk.row .blk-text { padding: 0; }
+.row-table { table-layout: fixed; }
+.row-table td { border: 1px solid var(--line); padding: 5px 8px; vertical-align: top; line-height: 1.5; }
+.blk.table .row-table td { font-weight: 600; background: var(--surface-2); }
+.blk.row + .blk.row .row-table td { border-top: 0; }
+.uid { font-family: var(--mono); font-size: 14px; color: var(--muted); padding: 1px 0; }
+mark.q { background: var(--minor-mark); color: inherit; border-bottom: 2px solid var(--minor); cursor: pointer;
+  border-radius: 2px; padding: 1px 0; transition: background-color .15s, box-shadow .15s; }
+mark.q.critical { background: var(--crit-mark); border-bottom-color: var(--crit); }
+mark.q.major { background: var(--major-mark); border-bottom-color: var(--major); }
+mark.q.active { background: var(--minor-active); border-bottom-width: 3px; }
+mark.q.critical.active { background: var(--crit-active); }
+mark.q.major.active { background: var(--major-active); }
+.sev { display: inline-flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 600; border-radius: 4px;
+  padding: 1px 7px; border: 1px solid currentColor; white-space: nowrap; }
+.sev.critical { color: var(--crit); background: var(--crit-soft); }
+.sev.major { color: var(--major); background: var(--major-soft); }
+.sev.minor { color: var(--minor); background: var(--minor-soft); }
+.chip { display: inline-flex; flex-wrap: wrap; gap: 0 5px; align-items: baseline; font-size: 14px; border-radius: 4px;
+  padding: 0 5px; border: 1px solid currentColor; cursor: pointer; background: none; line-height: 1.45; text-align: left; }
+.chip.critical { color: var(--crit); background: var(--crit-soft); }
+.chip.major { color: var(--major); background: var(--major-soft); }
+.chip.minor { color: var(--minor); background: var(--minor-soft); }
+.chip.active { box-shadow: 0 0 0 2px var(--text); }
+.chip b { font-family: var(--mono); font-weight: 600; }
+
+/* findings list */
+.filters { position: sticky; top: 0; z-index: 2; background: var(--surface-2); border-bottom: 1px solid var(--line);
+  padding: 10px 14px; display: grid; gap: 8px; }
+.filters .line { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.filters select { min-height: 32px; border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--surface);
+  padding: 3px 6px; font-size: 14px; max-width: 100%; flex: 1; min-width: 150px; }
+.toggle { border: 1px solid var(--line-strong); background: var(--surface); border-radius: var(--r); padding: 3px 9px;
+  cursor: pointer; font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
+.toggle[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.toggle[aria-pressed="true"].critical { border-color: var(--crit); background: var(--crit-soft); color: var(--crit); font-weight: 600; }
+.toggle[aria-pressed="true"].major { border-color: var(--major); background: var(--major-soft); color: var(--major); font-weight: 600; }
+.toggle[aria-pressed="true"].minor { border-color: var(--minor); background: var(--minor-soft); color: var(--minor); font-weight: 600; }
+.toggle .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+.toggle.critical .dot { color: var(--crit); } .toggle.major .dot { color: var(--major); } .toggle.minor .dot { color: var(--minor); }
+.shown { font-size: 14px; color: var(--muted); }
+.finding { border-bottom: 1px solid var(--line); border-left: 4px solid transparent; }
+.finding.critical { border-left-color: var(--crit); }
+.finding.major { border-left-color: var(--major); }
+.finding.minor { border-left-color: var(--minor); }
+.finding.active { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.finding-head { padding: 10px 14px; cursor: pointer; display: grid; gap: 4px; }
+.finding-head:hover { background: var(--surface-2); }
+.finding-head .line1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.finding-head .fid { font-family: var(--mono); font-size: 14px; font-weight: 600; }
+.finding-head .crit-name { font-size: 14px; color: var(--muted); }
+.finding-head .ftitle { font-weight: 600; }
+.finding-head .line3 { display: flex; gap: 6px 12px; flex-wrap: wrap; align-items: center; font-size: 14px; color: var(--muted); }
+.verified { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 14px; font-weight: 600; }
+.verified.no { color: var(--major); }
+.verified svg { flex: none; }
+.finding-body { padding: 2px 14px 14px; display: grid; gap: 10px; }
+.finding-body h4 { margin: 0 0 2px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.finding-body p { margin: 0; }
+.quote { border-left: 3px solid var(--line-strong); padding: 6px 10px; background: var(--surface); margin: 0 0 6px;
+  font-family: var(--mono); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.quote footer { font-family: var(--sans); color: var(--muted); display: flex; gap: 6px 12px; flex-wrap: wrap;
+  align-items: center; margin-top: 4px; }
+.fix-text { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: var(--r); padding: 8px 10px; }
+
+/* other tabs */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 14px; margin: 0 0 12px; }
+.swatch { display: inline-flex; align-items: center; gap: 6px; }
+.cellbox { display: inline-flex; width: 26px; height: 22px; align-items: center; justify-content: center; border-radius: 3px;
+  font-size: 14px; font-weight: 700; border: 1px solid var(--line); }
+.cellbox.critical { background: var(--crit-soft); color: var(--crit); border-color: var(--crit); }
+.cellbox.major { background: var(--major-soft); color: var(--major); border-color: var(--major); }
+.cellbox.minor { background: var(--minor-soft); color: var(--minor); border-color: var(--minor); }
+.cellbox.ok { background: var(--accent-soft); color: var(--accent); }
+.cellbox.none { background: var(--surface-2); color: var(--muted); font-weight: 400; }
+.matrix { border-collapse: separate; border-spacing: 0; width: auto; }
+.matrix th, .matrix td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 3px; text-align: center;
+  font-size: 14px; }
+.matrix thead th { position: sticky; top: var(--tabs-h); background: var(--surface-2); z-index: 2; vertical-align: bottom;
+  height: 240px; font-weight: 600; }
+.matrix thead th .vert { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; }
+.matrix thead th.group { height: auto; position: static; font-size: 14px; color: var(--muted); padding: 5px; }
+.matrix th.rowhead { position: sticky; left: 0; background: var(--surface); text-align: left; padding: 4px 10px; white-space: nowrap;
+  font-weight: 400; z-index: 1; cursor: pointer; }
+.matrix thead th.corner { left: 0; z-index: 3; text-align: left; padding: 6px 10px; }
+.matrix td button { border: 0; padding: 0; background: none; cursor: pointer; }
+.pair { margin-bottom: 12px; }
+.pair-head { padding: 10px 14px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid var(--line); }
+.pair-head .ftitle { font-weight: 600; flex: 1; min-width: 220px; }
+.pair-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pair-body .side { padding: 10px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.pair-body .side:nth-child(2n) { border-right: 0; }
+.pair-body .quote { margin: 4px 0 0; background: var(--surface-2); }
+.pair-note { padding: 10px 14px; }
+@media (max-width: 720px) { .pair-body { grid-template-columns: minmax(0, 1fr); } .pair-body .side { border-right: 0; } }
+.prio { font-family: var(--mono); font-weight: 600; }
+
+/* narrow screens: columns become tabs */
+@media (max-width: 980px) {
+  .split { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .pane { overflow: visible; }
+  .pane.doc-pane { border-right: 0; }
+  .pane-switch { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2);
+    position: sticky; top: var(--tabs-h); z-index: 3; }
+  .split[data-pane="doc"] .list-pane, .split[data-pane="list"] .doc-pane { display: none; }
+  .filters { position: static; }
+  .blk { grid-template-columns: minmax(0, 1fr); }
+  .blk-side { padding: 0 4px 4px; }
+  .matrix thead th { top: 0; position: static; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+@media print {
+  .top, .tabs, .filters, .pane-switch { display: none; }
+  .split { height: auto; display: block; } .pane { overflow: visible; }
+}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <div class="brand">reqaudit<small>проверка требований по ISO/IEC/IEEE 29148 и IEEE 830</small></div>
+  <div class="grow"></div>
+  <nav id="nav"></nav>
+  <button class="btn" id="theme" type="button"></button>
+</div></header>
+<main id="app"></main>
+<!--REPORT_DATA-->
+<script>
+(function () {
+'use strict';
+
+// ---------------------------------------------------------------- basics
+const app = document.getElementById('app');
+const nav = document.getElementById('nav');
+const embeddedTag = document.getElementById('report-data');
+const EMBEDDED = embeddedTag ? JSON.parse(embeddedTag.textContent) : null;
+const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const SEV = {
+  critical: { word: 'критично', letter: 'К', rank: 0 },
+  major: { word: 'существенно', letter: 'С', rank: 1 },
+  minor: { word: 'замечание', letter: 'З', rank: 2 },
+};
+const KIND_RU = { functional: 'функциональное', non_functional: 'нефункциональное', data: 'данные',
+  integration: 'интеграция', ui: 'интерфейс', acceptance_criterion: 'критерий приёмки',
+  api_contract: 'контракт API', constraint: 'ограничение', other: 'прочее' };
+const PART_RU = { main: 'основная спецификация', child_spec: 'дочерняя спецификация',
+  appendix: 'приложение', other: 'прочее' };
+const SKIP_RU = { goal: 'цели', context: 'пояснения', metadata: 'служебные сведения',
+  template: 'незаполненный шаблон', example: 'примеры', approval: 'согласование', empty: 'пустые', other: 'прочее' };
+const ROLE_RU = { analyst: 'аналитик', product_owner: 'владелец продукта', architect: 'архитектор',
+  developer: 'разработчик', tester: 'тестировщик', security: 'специалист по безопасности' };
+const RUN_STATUS = {
+  completed: 'завершён',
+  partial: 'завершён частично',
+  checks_incomplete: 'завершён, часть проверок не выполнена',
+  input_rejected: 'документ не принят',
+  running: 'выполняется',
+  interrupted: 'прерван',
+};
+const STAGE_STATE = { pending: 'ожидает', running: 'выполняется', done: 'выполнен', error: 'ошибка',
+  skipped: 'не выполнялся', interrupted: 'прерван' };
+const SUMMARY_RU = {
+  s1: [['blocks', 'блоков текста']],
+  s2: [['units', 'требований']],
+  s3: [['facts', 'фактов'], ['conflicts', 'расхождений']],
+  s5: [['candidates', 'кандидатов']],
+  s6: [['confirmed', 'подтверждено'], ['rejected', 'отклонено']],
+  s7: [['out', 'прошло гейт'], ['no_evidence', 'без цитаты']],
+  s8: [['questions', 'вопросов']],
+};
+
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  if (props) {
+    for (const [key, value] of Object.entries(props)) {
+      if (value == null || value === false) continue;
+      if (key === 'class') el.className = value;
+      else if (key === 'dataset') Object.assign(el.dataset, value);
+      else if (key.startsWith('on')) el.addEventListener(key.slice(2), value);
+      else el.setAttribute(key, value === true ? '' : value);
+    }
+  }
+  append(el, kids);
+  return el;
+}
+function append(el, kids) {
+  for (const kid of kids.flat(Infinity)) {
+    if (kid == null || kid === false) continue;
+    el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+}
+function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }
+function checkIcon() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', '15'); svg.setAttribute('height', '15'); svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', 'M8 1.2l5.5 2v4.3c0 3.4-2.3 6.2-5.5 7.3-3.2-1.1-5.5-3.9-5.5-7.3V3.2L8 1.2zm3 4.6L7.2 9.7 5.4 7.9l-1 1 2.8 2.8 4.8-4.9-1-1z');
+  path.setAttribute('fill', 'currentColor');
+  svg.append(path);
+  return svg;
+}
+function plural(n, one, few, many) {
+  const a = n % 10, b = n % 100;
+  if (a === 1 && b !== 11) return one;
+  if (a >= 2 && a <= 4 && !(b >= 12 && b <= 14)) return few;
+  return many;
+}
+// The run's own local time, as written by the agent; the viewer's time zone is not applied.
+function fmtDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso || '');
+  return m ? `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}` : (iso || '—');
+}
+function fmtSeconds(s) {
+  if (s == null) return null;
+  if (s < 0.01) return 'меньше 0,01 с';
+  if (s < 1) return s.toFixed(2).replace('.', ',') + ' с';
+  if (s < 60) return s.toFixed(1).replace('.', ',') + ' с';
+  return Math.floor(s / 60) + ' мин ' + Math.round(s % 60) + ' с';
+}
+function onActivate(el, fn) {
+  el.addEventListener('click', fn);
+  el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(e); } });
+  return el;
+}
+
+// ---------------------------------------------------------------- theme
+const themeButton = document.getElementById('theme');
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  themeButton.textContent = theme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
+  try { localStorage.setItem('reqaudit-theme', theme); } catch (e) { /* private mode */ }
+}
+themeButton.addEventListener('click', () =>
+  setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+(function () {
+  let saved = null;
+  try { saved = localStorage.getItem('reqaudit-theme'); } catch (e) { /* private mode */ }
+  setTheme(saved === 'dark' ? 'dark' : 'light');
+})();
+
+// ---------------------------------------------------------------- server
+async function api(path, options) {
+  let response;
+  try {
+    response = await fetch(path, options);
+  } catch (e) {
+    throw new Error('Сервер не отвечает. Проверьте, что в консоли запущен reqaudit-ui, и обновите страницу.');
+  }
+  let body = null;
+  try { body = await response.json(); } catch (e) { /* not JSON */ }
+  if (!response.ok) {
+    throw new Error((body && body.error) || `Сервер ответил ошибкой ${response.status}. Посмотрите вывод reqaudit-ui в консоли.`);
+  }
+  return body;
+}
+function errorBox(err, retry) {
+  return h('div', { class: 'notice error', role: 'alert' }, h('p', null, err.message || String(err)),
+    retry ? h('p', null, h('button', { class: 'btn', type: 'button', onclick: retry }, 'Повторить')) : null);
+}
+
+// ---------------------------------------------------------------- router
+let pollTimer = null;
+function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
+function route() {
+  stopPolling();
+  window.scrollTo(0, 0);
+  if (EMBEDDED) { nav.hidden = true; return showReport(EMBEDDED); }
+  const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  clear(nav);
+  if (parts[0] !== 'run' && parts[0] !== 'report') return screenUpload();
+  nav.append(h('a', { class: 'btn ghost', href: '#/' }, 'Все прогоны'));
+  if (parts[0] === 'run' && parts[1]) return screenRun(parts[1]);
+  if (parts[0] === 'report' && parts[1]) return screenReport(parts[1]);
+  return screenUpload();
+}
+window.addEventListener('hashchange', route);
+
+// ---------------------------------------------------------------- upload screen
+function screenUpload() {
+  let file = null;
+  let busy = false;
+  const dropTitle = h('strong', null, 'Перетащите сюда документ с требованиями');
+  const dropHint = h('span', { class: 'muted' }, 'или нажмите, чтобы выбрать файл: PDF, DOCX, Markdown, TXT, HTML, RTF');
+  const input = h('input', { type: 'file', hidden: true, accept: '.pdf,.md,.markdown,.docx,.txt,.html,.htm,.rtf' });
+  const drop = h('div', { class: 'drop', tabindex: '0', role: 'button', 'aria-label': 'Выбрать документ' }, dropTitle, dropHint, input);
+  const submit = h('button', { class: 'btn primary', type: 'button', disabled: true }, 'Проверить');
+  const message = h('div');
+  const modelLine = h('div', { class: 'muted', style: 'margin-top:12px' });
+  const profiles = h('fieldset', { class: 'profiles' }, h('legend', null, 'Профиль запуска'));
+  const runsBox = h('div');
+
+  function choose(f) {
+    if (!f) return;
+    file = f;
+    dropTitle.textContent = f.name;
+    dropHint.textContent = `${(f.size / 1024).toFixed(1).replace('.', ',')} КБ. Нажмите, чтобы выбрать другой файл.`;
+    submit.disabled = busy;
+    clear(message);
+  }
+  onActivate(drop, (e) => { if (e.target !== input) input.click(); });
+  input.addEventListener('change', () => choose(input.files[0]));
+  input.addEventListener('click', (e) => e.stopPropagation());
+  for (const type of ['dragenter', 'dragover']) drop.addEventListener(type, (e) => { e.preventDefault(); drop.classList.add('over'); });
+  for (const type of ['dragleave', 'drop']) drop.addEventListener(type, (e) => { e.preventDefault(); drop.classList.remove('over'); });
+  drop.addEventListener('drop', (e) => choose(e.dataTransfer.files[0]));
+
+  submit.addEventListener('click', async () => {
+    if (!file || busy) return;
+    busy = true; submit.disabled = true; submit.textContent = 'Запускаю агента…';
+    clear(message);
+    const profile = (profiles.querySelector('input:checked') || {}).value || 'quick';
+    try {
+      const started = await api(`/api/runs?name=${encodeURIComponent(file.name)}&profile=${encodeURIComponent(profile)}`,
+        { method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream' } });
+      go(`#/run/${started.run_id}`);
+    } catch (err) {
+      message.append(errorBox(err));
+      busy = false; submit.disabled = false; submit.textContent = 'Проверить';
+    }
+  });
+
+  clear(app).append(h('div', { class: 'wrap upload-grid' },
+    h('section', { class: 'card pad' },
+      h('h1', { style: 'margin-bottom:12px' }, 'Проверить документ'),
+      drop,
+      h('div', { class: 'form-row' }, profiles, h('div', { class: 'grow' }), submit),
+      modelLine, message),
+    h('section', null, h('h2', { style: 'margin:6px 0 10px' }, 'Прошлые прогоны'), runsBox)));
+
+  api('/api/config').then((config) => {
+    const about = { quick: 'быстрый прогон', thorough: 'полный прогон, дольше и дороже' };
+    for (const name of config.profiles) {
+      profiles.append(h('label', { class: 'profile' },
+        h('input', { type: 'radio', name: 'profile', value: name, checked: name === config.default_profile }),
+        h('div', null, h('b', null, name), h('span', null, about[name] || ''))));
+    }
+    if (config.model_ready) {
+      modelLine.append('Модель: ', h('span', { class: 'mono' }, config.models.join(', ')),
+        '. Ключ читается на сервере из файла .env и в браузер не передаётся.');
+    } else {
+      modelLine.replaceWith(h('div', { class: 'notice' },
+        h('p', null, h('b', null, 'Ключ модели не найден.')),
+        h('p', null, 'Впишите OPENAI_API_KEY или GEMINI_API_KEY в файл .env рядом с местом запуска сервера. ' +
+          'Без ключа агент прочитает документ, но не проверит его: отчёт будет с причиной и без находок.')));
+    }
+  }).catch((err) => message.append(errorBox(err)));
+
+  function loadRuns() {
+    api('/api/runs').then(({ runs }) => {
+      clear(runsBox);
+      if (!runs.length) {
+        runsBox.append(h('div', { class: 'card empty' },
+          'Прогонов пока нет. Загрузите документ выше: после проверки отчёт появится в этом списке.'));
+        return;
+      }
+      const body = h('tbody');
+      for (const run of runs) {
+        const target = run.has_report ? `#/report/${run.run_id}` : `#/run/${run.run_id}`;
+        const count = (v) => h('td', { class: 'num' }, run.has_report && run.checks_ran ? v : '—');
+        const row = h('tr', { class: 'click', tabindex: '0' },
+          h('td', null, h('a', { href: target }, run.document || 'без имени'),
+            run.title ? h('div', { class: 'muted' }, run.title) : null),
+          h('td', null, fmtDate(run.started_at)),
+          h('td', { class: 'mono' }, run.profile || '—'),
+          h('td', null, RUN_STATUS[run.status] || run.status || '—'),
+          count(run.units), count(run.findings), count(run.critical), count(run.questions));
+        onActivate(row, (e) => { if (e.target.tagName !== 'A') go(target); });
+        body.append(row);
+      }
+      runsBox.append(h('div', { class: 'card table-scroll' }, h('table', { class: 'grid-table' },
+        h('thead', null, h('tr', null, h('th', null, 'Документ'), h('th', null, 'Дата'), h('th', null, 'Профиль'),
+          h('th', null, 'Статус'), h('th', { class: 'num' }, 'Требований'), h('th', { class: 'num' }, 'Нарушений'),
+          h('th', { class: 'num' }, 'Критичных'), h('th', { class: 'num' }, 'Вопросов'))),
+        body)));
+    }).catch((err) => clear(runsBox).append(errorBox(err, loadRuns)));
+  }
+  loadRuns();
+}
+
+// ---------------------------------------------------------------- stage chain
+function stageChain(progress) {
+  const now = Date.now();
+  return h('div', { class: 'chain' }, progress.stages.map((s) => {
+    const meta = [];
+    const time = s.status === 'running' && s.started_at
+      ? fmtSeconds(Math.max(0, (now - Date.parse(s.started_at)) / 1000)) : fmtSeconds(s.seconds);
+    if (time) meta.push(h('div', null, time));
+    if (s.llm_calls) meta.push(h('div', null, `модель: ${s.llm_calls} ${plural(s.llm_calls, 'вызов', 'вызова', 'вызовов')}`));
+    else if (s.status === 'done' && !s.cache_hits && !s.llm_failed) meta.push(h('div', null, 'без вызовов модели'));
+    if (s.cache_hits) meta.push(h('div', null, `из кэша: ${s.cache_hits}`));
+    if (s.llm_failed) meta.push(h('div', null, `без ответа: ${s.llm_failed}`));
+    for (const [key, label] of SUMMARY_RU[s.code] || []) {
+      if (s.summary && typeof s.summary[key] === 'number') meta.push(h('div', null, `${label}: ${s.summary[key]}`));
+    }
+    if (s.error) meta.push(h('div', null, s.error));
+    return h('div', { class: `stage ${s.status}`, 'aria-current': s.status === 'running' ? 'step' : null },
+      h('div', { class: 'code' }, s.code),
+      h('div', { class: 'name' }, s.title),
+      h('div', { class: 'state' }, STAGE_STATE[s.status] || s.status),
+      h('div', { class: 'meta' }, meta));
+  }));
+}
+function runNotice(progress) {
+  const failed = progress.stages.find((s) => s.status === 'error');
+  switch (progress.status) {
+    case 'running':
+      return h('div', { class: 'notice ok' }, h('p', null, 'Идёт проверка. Страница обновляется сама раз в секунду.'));
+    case 'completed':
+      return h('div', { class: 'notice ok' }, h('p', null, 'Прогон завершён, все этапы выполнены.'));
+    case 'checks_incomplete':
+      return h('div', { class: 'notice' }, h('p', null, 'Прогон завершён, но часть проверок модель не выполнила. ' +
+        'Отчёт записан; что осталось без оценки, перечислено в нём.'));
+    case 'partial':
+      return h('div', { class: 'notice error' }, h('p', null, `Этап ${failed ? failed.code : ''} остановился с ошибкой, ` +
+        'отчёт собран из того, что успели. Исправьте причину и запустите проверку заново.'),
+        failed && failed.error ? h('p', null, failed.error) : null);
+    case 'input_rejected':
+      return h('div', { class: 'notice error' }, h('p', null, h('b', null, 'Документ не принят.'), ' ',
+        failed && failed.error ? failed.error : ''), h('p', null, 'Загрузите другой файл.'));
+    case 'interrupted':
+      return h('div', { class: 'notice error' }, h('p', null, 'Прогон прерван: процесс агента остановился, ' +
+        'не дописав отчёт. Запустите проверку заново.'));
+    default:
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------- run screen
+function screenRun(runId) {
+  const box = h('div', { class: 'wrap', style: 'padding:20px 20px 40px' });
+  clear(app).append(box);
+  let sawRunning = false;
+  let last = null;
+
+  function draw(progress) {
+    last = progress;
+    append(clear(box), [
+      h('div', { class: 'title-row' },
+        h('h1', null, progress.input || 'Прогон'),
+        progress.has_report ? h('a', { class: 'btn primary', href: `#/report/${runId}` }, 'Открыть отчёт') : null),
+      h('div', { class: 'muted' }, 'Прогон ', h('span', { class: 'mono' }, runId),
+        progress.profile ? [' · профиль ', h('span', { class: 'mono' }, progress.profile)] : null,
+        progress.started_at ? ` · начат ${fmtDate(progress.started_at)}` : ''),
+      runNotice(progress),
+      stageChain(progress)]);
+  }
+  async function tick() {
+    let progress;
+    try {
+      progress = await api(`/api/runs/${runId}/progress`);
+    } catch (err) {
+      stopPolling();
+      clear(box).append(errorBox(err, () => route()));
+      return;
+    }
+    if (progress.status === 'running') sawRunning = true;
+    draw(progress);
+    if (progress.status !== 'running') {
+      stopPolling();
+      // Watched live to the end: go straight to the result.
+      if (sawRunning && progress.has_report) go(`#/report/${runId}`);
+    }
+  }
+  tick();
+  pollTimer = setInterval(() => { if (last && last.status === 'running') tick(); }, 1000);
+}
+
+// ---------------------------------------------------------------- report screen
+function screenReport(runId) {
+  clear(app).append(h('div', { class: 'wrap empty' }, 'Читаю файлы прогона…'));
+  api(`/api/runs/${runId}/report`).then(showReport).catch((err) => {
+    clear(app).append(h('div', { class: 'wrap', style: 'padding-top:20px' }, errorBox(err),
+      h('p', null, h('a', { href: `#/run/${runId}` }, 'Открыть ход прогона'))));
+  });
+}
+
+function showReport(R) {
+  const P = R.passport || {};
+  const blocks = (R.document && R.document.blocks) || [];
+  const blockById = new Map(blocks.map((b) => [b.id, b]));
+  const findingById = new Map(R.findings.map((f) => [f.id, f]));
+  const unitById = new Map(R.units.map((u) => [u.id, u]));
+  const unitsOfBlock = new Map();
+  for (const u of R.units) for (const id of u.block_ids) {
+    if (!unitsOfBlock.has(id)) unitsOfBlock.set(id, []);
+    unitsOfBlock.get(id).push(u.id);
+  }
+  // Quote ranges per block: where each finding's evidence sits in the block text.
+  const marksOfBlock = new Map();
+  for (const f of R.findings) for (const ev of f.evidence) {
+    const block = blockById.get(ev.block_id);
+    if (!block) continue;
+    const [start, end] = ev.span || [0, block.text.length];
+    if (!marksOfBlock.has(block.id)) marksOfBlock.set(block.id, []);
+    marksOfBlock.get(block.id).push({ start, end, id: f.id, severity: f.severity });
+  }
+  const criterion = (code) => R.criteria[code] || { label: code, standard: null, level: null };
+  const state = { tab: 'doc', active: null, pane: 'doc', severities: new Set(), criterion: '', unit: '' };
+
+  document.title = `${P.document_name || 'Отчёт'} — reqaudit`;
+
+  // ---- head
+  const head = h('div', { class: 'wrap report-head' });
+  const downloads = [];
+  if (EMBEDDED) {
+    if (R.report_md) {
+      downloads.push(h('button', { class: 'btn', type: 'button', onclick: () => {
+        const url = URL.createObjectURL(new Blob([R.report_md], { type: 'text/markdown;charset=utf-8' }));
+        const link = h('a', { href: url, download: `${R.run_id}.report.md` });
+        document.body.append(link); link.click(); link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } }, 'Скачать report.md'));
+    }
+  } else {
+    if (R.report_md) downloads.push(h('a', { class: 'btn', href: `/api/runs/${R.run_id}/report.md`, download: '' }, 'Скачать report.md'));
+    downloads.push(h('a', { class: 'btn', href: `/api/runs/${R.run_id}/report.html`, download: '' }, 'Скачать report.html'));
+  }
+  head.append(h('div', { class: 'title-row' },
+    h('h1', null, P.document_title || P.document_name || 'Отчёт о проверке требований'), downloads));
+
+  const passportItems = [];
+  const item = (label, value) => { if (value != null && value !== '') passportItems.push(h('div', null, h('dt', null, label), h('dd', null, value))); };
+  item('Документ', P.document_name);
+  item('Дата прогона', P.started_at ? fmtDate(P.started_at) : null);
+  item('Модель', P.models_used && P.models_used.length
+    ? h('span', { class: 'mono' }, P.models_used.join(', ')) : (P.models_used ? 'не вызывалась' : null));
+  item('Коммит агента', P.git_commit
+    ? [h('span', { class: 'mono' }, P.git_commit.slice(0, 12)), P.git_dirty ? ' (есть незакоммиченные изменения)' : '']
+    : (P.agent_version ? `версия ${P.agent_version}, коммит неизвестен` : null));
+  item('Отпечаток промптов', P.prompts_fingerprint ? h('span', { class: 'mono' }, P.prompts_fingerprint) : null);
+  item('Профиль и статус', P.profile ? [h('span', { class: 'mono' }, P.profile), P.status ? ` · ${RUN_STATUS[P.status] || P.status}` : ''] : null);
+  if (passportItems.length) head.append(h('dl', { class: 'card passport', style: 'margin-top:0' }, passportItems));
+
+  for (const err of R.errors || []) {
+    head.append(h('div', { class: 'notice error' }, h('p', null, h('b', null, `Этап ${err.stage} остановился. `), err.message)));
+  }
+  if (R.check_failures && R.check_failures.length) {
+    // s5 names a cell by its title, s6 by its id: show titles in both cases.
+    const cellTitle = new Map((R.cells || []).map((c) => [c.id, c.title]));
+    const areas = (stage) => [...new Set(R.check_failures.filter((c) => (stage ? c.stage === stage : !['s5', 's6'].includes(c.stage)))
+      .map((c) => cellTitle.get(c.cell) || c.cell))];
+    const lines = [];
+    if (areas('s5').length) lines.push(h('p', null, 'Не проверены рецензентом (s5): ', areas('s5').join('; '), '.'));
+    if (areas('s6').length) lines.push(h('p', null, 'Найденное не перепроверено оппонентом (s6): ', areas('s6').join('; '), '.'));
+    if (areas(null).length) lines.push(h('p', null, 'Также не выполнено: ', areas(null).join('; '), '.'));
+    head.append(h('div', { class: 'notice' },
+      h('p', null, h('b', null, 'Часть проверок не выполнена: модель не ответила. '),
+        'Отчёт построен на том, что проверить удалось.'),
+      h('details', null, h('summary', { style: 'cursor:pointer' }, 'Что осталось без проверки и почему'),
+        lines,
+        R.check_failures.map((c) => h('p', { style: 'margin:6px 0 0; overflow-wrap:anywhere' },
+          h('span', { class: 'mono' }, c.stage), ` · ${c.cell}: ${c.message}`)))));
+  }
+
+  const critical = R.findings.filter((f) => f.severity === 'critical').length;
+  let verdictCard;
+  if (R.verdict) {
+    const V = R.verdict;
+    const first = V.first.slice(0, 3).map((id) => findingById.get(id)).filter(Boolean);
+    verdictCard = h('section', { class: `card verdict ${V.level}` },
+      h('div', null,
+        h('div', { class: 'q' }, 'Можно ли начинать разработку по этому документу?'),
+        h('div', { class: 'word' }, V.word),
+        h('p', null, V.text),
+        V.incomplete ? h('p', { class: 'muted' }, 'Вывод неполный: часть проверок не выполнена.') : null),
+      first.length ? h('div', null, h('div', { class: 'section-title' }, 'Исправить в первую очередь'),
+        h('ol', { class: 'fixes' }, first.map((f) => h('li', null, h('span', { class: `sev ${f.severity}` }, SEV[f.severity].word),
+          h('button', { class: 'linkish', type: 'button', onclick: () => select(f.id, 'jump') },
+            h('span', { class: 'mono' }, f.id), ' — ', f.title))))) : null);
+  } else {
+    verdictCard = h('section', { class: 'card verdict' },
+      h('div', { class: 'q' }, 'Можно ли начинать разработку по этому документу?'),
+      h('div', { class: 'word', style: 'font-size:22px' }, 'Вывод не сформирован'),
+      h('p', null, 'Проверка требований в этом прогоне не выполнялась, поэтому отсутствие замечаний не означает, ' +
+        'что документ без дефектов. Причина указана выше и на вкладке «Ход прогона».'));
+  }
+  const numbers = h('section', { class: 'card' });
+  if (R.checks_ran) {
+    numbers.append(h('div', { class: 'numbers' },
+      h('div', null, h('b', null, R.units.length), h('span', null, plural(R.units.length, 'требование', 'требования', 'требований'))),
+      h('div', null, h('b', null, R.findings.length), h('span', null, plural(R.findings.length, 'нарушение', 'нарушения', 'нарушений'))),
+      h('div', { class: 'crit' }, h('b', null, critical), h('span', null, plural(critical, 'критичное', 'критичных', 'критичных'))),
+      h('div', null, h('b', null, R.questions.length), h('span', null, plural(R.questions.length, 'вопрос автору', 'вопроса автору', 'вопросов автору')))));
+  } else if (R.units.length) {
+    numbers.append(h('div', { class: 'numbers' },
+      h('div', null, h('b', null, R.units.length), h('span', null, plural(R.units.length, 'требование', 'требования', 'требований')))));
+  }
+  const headGrid = h('div', { class: 'head-grid' }, verdictCard, numbers.firstChild ? numbers : null);
+  head.append(headGrid);
+  if (R.gate_stats) {
+    const g = R.gate_stats;
+    const parts = [];
+    if (typeof g.in === 'number') parts.push(`на входе ${g.in} ${plural(g.in, 'находка', 'находки', 'находок')}`);
+    if (typeof g.no_evidence === 'number') parts.push(`отклонено без цитаты в документе: ${g.no_evidence}`);
+    if (typeof g.one_sided_conflict === 'number') parts.push(`противоречий с цитатой одной стороны: ${g.one_sided_conflict}`);
+    if (typeof g.merged === 'number') parts.push(`дублей объединено: ${g.merged}`);
+    if (typeof g.out === 'number') parts.push(`в отчёт прошло: ${g.out}`);
+    head.append(h('div', { class: 'gate-line' }, h('span', { class: 'verified' }, checkIcon()),
+      h('span', null, 'Гейт доказательств (этап s7) сверяет каждую цитату с текстом документа кодом, без модели: ',
+        parts.join('; '), '.')));
+  }
+
+  // ---- tabs
+  const tabDefs = [
+    ['doc', 'Документ и находки', R.findings.length],
+    ['units', 'Нарезка', R.units.length],
+    ['matrix', 'Матрица', null],
+    ['set', 'Набор', null],
+    ['questions', 'Вопросы автору', R.questions.length],
+    ['run', 'Ход прогона', null],
+  ];
+  const tabBar = h('div', { class: 'wrap', role: 'tablist' });
+  const tabs = h('div', { class: 'tabs' }, tabBar);
+  const panel = h('div', { class: 'wrap', role: 'tabpanel' });
+  const tabButtons = new Map();
+  for (const [id, label, count] of tabDefs) {
+    const button = h('button', { class: 'tab', type: 'button', role: 'tab', onclick: () => showTab(id) },
+      label, count != null ? h('span', { class: 'count' }, count) : null);
+    tabButtons.set(id, button);
+    tabBar.append(button);
+  }
+
+  // ---- document pane
+  const docPane = h('div', { class: 'pane doc-pane' });
+  const listPane = h('div', { class: 'pane list-pane' });
+  const split = h('div', { class: 'split', dataset: { pane: 'doc' } }, docPane, listPane);
+  const paneSwitch = h('div', { class: 'pane-switch' });
+  function setPane(name) {
+    state.pane = name;
+    split.dataset.pane = name;
+    clear(paneSwitch).append(
+      h('button', { class: 'toggle', type: 'button', 'aria-pressed': String(name === 'doc'), onclick: () => setPane('doc') }, 'Документ'),
+      h('button', { class: 'toggle', type: 'button', 'aria-pressed': String(name === 'list'), onclick: () => setPane('list') },
+        `Находки (${R.findings.length})`));
+  }
+
+  const isMarkdown = R.document && R.document.format === 'markdown';
+  // Characters of a block shown to the reader: markdown emphasis marks are hidden, words are not touched.
+  function inlineStyle(text, plain) {
+    const hide = new Uint8Array(text.length), bold = new Uint8Array(text.length), code = new Uint8Array(text.length);
+    if (plain || !isMarkdown) return { hide, bold, code };
+    const stars = (text.match(/\*\*/g) || []).length % 2 === 0;
+    const ticks = (text.match(/`/g) || []).length % 2 === 0;
+    let b = 0, c = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (ticks && text[i] === '`') { c ^= 1; hide[i] = 1; continue; }
+      if (stars && !c && text[i] === '*' && text[i + 1] === '*') { b ^= 1; hide[i] = hide[i + 1] = 1; i++; continue; }
+      bold[i] = b; code[i] = c;
+    }
+    return { hide, bold, code };
+  }
+  function runs(text, from, to, style, marks) {
+    const out = [];
+    let node = null, key = null;
+    for (let i = from; i < to; i++) {
+      if (style.hide[i]) continue;
+      const covering = marks.filter((m) => i >= m.start && i < m.end);
+      const ids = [...new Set(covering.map((m) => m.id))];
+      const k = `${style.bold[i]}|${style.code[i]}|${ids.join(',')}`;
+      if (k !== key) {
+        key = k;
+        let inner = document.createDocumentFragment();
+        let holder = inner;
+        if (ids.length) {
+          const worst = covering.reduce((a, m) => (SEV[m.severity].rank < SEV[a.severity].rank ? m : a), covering[0]);
+          const mark = h('mark', { class: `q ${worst.severity}`, tabindex: '0', role: 'button', dataset: { f: ids.join(',') },
+            title: ids.map((id) => `${id} · ${SEV[findingById.get(id).severity].word} · ${findingById.get(id).title}`).join('\n') });
+          onActivate(mark, (e) => { e.stopPropagation(); pickFromMark(ids); });
+          holder = mark;
+          out.push(mark);
+        }
+        let leaf = holder;
+        if (style.bold[i]) { const s = h('strong'); leaf.append(s); leaf = s; }
+        if (style.code[i]) { const s = h('span', { class: 'mono' }); leaf.append(s); leaf = s; }
+        if (!ids.length) out.push(inner);
+        node = document.createTextNode('');
+        leaf.append(node);
+      }
+      node.data += text[i];
+    }
+    return out;
+  }
+  function cellRanges(text) {
+    const cuts = [];
+    for (let i = 0; i < text.length; i++) if (text[i] === '|' && text[i - 1] !== '\\') cuts.push(i);
+    const ranges = [];
+    let from = 0;
+    for (const cut of [...cuts, text.length]) { ranges.push([from, cut]); from = cut + 1; }
+    if (ranges.length && !text.slice(...ranges[0]).trim()) ranges.shift();
+    if (ranges.length && !text.slice(...ranges[ranges.length - 1]).trim()) ranges.pop();
+    return ranges.map(([a, b]) => {
+      while (a < b && /\s/.test(text[a])) a++;
+      while (b > a && /\s/.test(text[b - 1])) b--;
+      return [a, b];
+    });
+  }
+  function renderBlock(block) {
+    const marks = marksOfBlock.get(block.id) || [];
+    const text = block.text;
+    const classes = ['blk', block.kind];
+    let from = 0;
+    let body;
+    if (block.kind === 'table' || block.kind === 'table_row') {
+      classes.push('row');
+      const style = inlineStyle(text, false);
+      body = h('div', { class: 'blk-text' }, h('table', { class: 'row-table' }, h('tbody', null, h('tr', null,
+        cellRanges(text).map(([a, b]) => h('td', null, runs(text, a, b, style, marks)))))));
+    } else {
+      if (block.kind === 'heading') {
+        const hashes = /^\s{0,3}(#{1,6})\s+/.exec(text);
+        if (isMarkdown && hashes) from = hashes[0].length;
+        const level = hashes && isMarkdown ? hashes[1].length : Math.max(1, (block.anchor.section_path || []).length);
+        classes.push(`h${Math.min(level, 4)}`);
+      } else if (block.kind === 'list_item') {
+        const bullet = /^\s*[-*+•]\s+/.exec(text);
+        if (bullet) from = bullet[0].length;
+      }
+      const style = inlineStyle(text, block.kind === 'code');
+      body = h('div', { class: 'blk-text' }, runs(text, from, text.length, style, marks));
+      if (block.hidden) {
+        classes.push('hidden-text');
+        body.prepend(h('em', { class: 'blk-note' }, 'Скрытый текст: в отображаемом документе его не видно'));
+      } else if (block.kind === 'image_text' || block.source === 'vlm') {
+        body.prepend(h('em', { class: 'blk-note' }, 'Распознано моделью по изображению'));
+      }
+    }
+    const side = h('div', { class: 'blk-side' });
+    const unitIds = unitsOfBlock.get(block.id) || [];
+    if (unitIds.length) side.append(h('span', { class: 'uid', title: 'Идентификатор требования в отчёте' }, unitIds.join(' ')));
+    for (const id of [...new Set(marks.map((m) => m.id))]) {
+      const f = findingById.get(id);
+      side.append(h('button', { class: `chip ${f.severity}`, type: 'button', dataset: { f: id }, title: f.title,
+        onclick: () => select(id, 'doc') }, h('b', null, id), SEV[f.severity].word));
+    }
+    return h('div', { class: classes.join(' '), id: `blk-${block.id}`, dataset: { block: block.id } }, body, side);
+  }
+  if (blocks.length) {
+    docPane.append(h('div', { class: 'doc' }, blocks.map(renderBlock)));
+  } else {
+    docPane.append(h('div', { class: 'empty' }, 'Текст документа не прочитан: прогон остановился до этапа чтения. ' +
+      'Причина указана на вкладке «Ход прогона».'));
+  }
+
+  // ---- findings pane
+  const listBox = h('div');
+  const shown = h('span', { class: 'shown' });
+  const filterBar = h('div', { class: 'filters' });
+  function severityToggle(code) {
+    const count = R.findings.filter((f) => f.severity === code).length;
+    const button = h('button', { class: `toggle ${code}`, type: 'button', 'aria-pressed': 'false' },
+      h('span', { class: 'dot' }), `${SEV[code].word} ${count}`);
+    button.addEventListener('click', () => {
+      if (state.severities.has(code)) state.severities.delete(code); else state.severities.add(code);
+      button.setAttribute('aria-pressed', String(state.severities.has(code)));
+      drawList();
+    });
+    return button;
+  }
+  const criterionSelect = h('select', { 'aria-label': 'Критерий', onchange: (e) => { state.criterion = e.target.value; drawList(); } },
+    h('option', { value: '' }, 'Все критерии'));
+  const byCriterion = new Map();
+  for (const f of R.findings) byCriterion.set(f.criterion, (byCriterion.get(f.criterion) || 0) + 1);
+  for (const [code, count] of [...byCriterion].sort((a, b) => b[1] - a[1])) {
+    criterionSelect.append(h('option', { value: code }, `${criterion(code).label} (${count})`));
+  }
+  const unitSelect = h('select', { 'aria-label': 'Требование', onchange: (e) => { state.unit = e.target.value; drawList(); } },
+    h('option', { value: '' }, 'Все требования'));
+  for (const u of R.units) {
+    const count = R.findings.filter((f) => f.unit_ids.includes(u.id)).length;
+    if (count) unitSelect.append(h('option', { value: u.id }, `${u.id}${u.doc_label ? ' · ' + u.doc_label : ''} (${count})`));
+  }
+  const severityButtons = Object.keys(SEV).map(severityToggle);
+  function resetFilters() {
+    state.severities.clear(); state.criterion = ''; state.unit = '';
+    criterionSelect.value = ''; unitSelect.value = '';
+    severityButtons.forEach((b) => b.setAttribute('aria-pressed', 'false'));
+  }
+  filterBar.append(h('div', { class: 'line' }, severityButtons),
+    h('div', { class: 'line' }, criterionSelect, unitSelect),
+    h('div', { class: 'line' }, shown, h('button', { class: 'linkish', type: 'button', onclick: () => { resetFilters(); drawList(); } }, 'Сбросить фильтры')));
+
+  function passes(f) {
+    return (!state.severities.size || state.severities.has(f.severity))
+      && (!state.criterion || f.criterion === state.criterion)
+      && (!state.unit || f.unit_ids.includes(state.unit));
+  }
+  function verifiedBadge(evidence) {
+    const all = evidence.length > 0 && evidence.every((e) => e.verified);
+    if (all) {
+      return h('span', { class: 'verified', title: 'Гейт s7 нашёл цитату в тексте документа точным сравнением, без модели' },
+        checkIcon(), evidence.length > 1 ? `цитаты подтверждены кодом (${evidence.length})` : 'цитата подтверждена кодом');
+    }
+    return h('span', { class: 'verified no' }, 'цитата не проверена кодом');
+  }
+  function findingCard(f) {
+    const info = criterion(f.criterion);
+    const open = state.active === f.id;
+    const places = [...new Set(f.evidence.map((e) => e.place).filter((p) => p && p !== '—'))];
+    const headEl = h('div', { class: 'finding-head', tabindex: '0', role: 'button', 'aria-expanded': String(open) },
+      h('div', { class: 'line1' }, h('span', { class: `sev ${f.severity}` }, SEV[f.severity].word),
+        h('span', { class: 'fid' }, f.id), h('span', { class: 'crit-name' }, info.label)),
+      h('div', { class: 'ftitle' }, f.title),
+      h('div', { class: 'line3' }, verifiedBadge(f.evidence),
+        h('span', { class: 'mono' }, f.unit_ids.length ? f.unit_ids.join(', ') : 'документ целиком'),
+        places.length ? h('span', null, places.join('; ')) : null));
+    onActivate(headEl, () => select(state.active === f.id ? null : f.id, 'list'));
+    const card = h('article', { class: `finding ${f.severity}${open ? ' active' : ''}`, id: `finding-${f.id}`, dataset: { f: f.id } }, headEl);
+    if (open) {
+      const body = h('div', { class: 'finding-body' });
+      body.append(h('div', null, h('h4', null, 'Критерий'),
+        h('p', null, info.label, info.standard ? [' — ', h('span', { class: 'mono' }, info.standard)] : null)));
+      if (f.explanation) body.append(h('div', null, h('h4', null, 'Объяснение'), h('p', null, f.explanation)));
+      if (f.evidence.length) {
+        body.append(h('div', null, h('h4', null, f.evidence.length > 1 ? 'Цитаты из документа' : 'Цитата из документа'),
+          f.evidence.map((ev, n) => h('blockquote', { class: 'quote' }, ev.display || ev.quote,
+            h('footer', null, ev.place && ev.place !== '—' ? h('span', null, ev.place) : null,
+              ev.verified ? h('span', { class: 'verified' }, checkIcon(), 'подтверждена кодом') : h('span', { class: 'verified no' }, 'не проверена кодом'),
+              h('button', { class: 'linkish', type: 'button', onclick: () => { ensureDocVisible(); scrollToEvidence(f, n); } }, 'показать в документе'))))));
+      }
+      if (f.suggestion) body.append(h('div', null, h('h4', null, 'Вариант исправленной формулировки'), h('p', { class: 'fix-text' }, f.suggestion)));
+      if (f.question) {
+        body.append(h('div', null, h('h4', null, 'Вопрос автору' + (f.question_to && ROLE_RU[f.question_to] ? ` (${ROLE_RU[f.question_to]})` : '')),
+          h('p', null, f.question)));
+      }
+      const trail = f.trail || [];
+      if (trail.includes('arbiter:kept')) body.append(h('p', { class: 'muted' }, 'Оппонент оспаривал находку, арбитр её оставил.'));
+      else if (trail.includes('opponent:unavailable')) body.append(h('p', { class: 'muted' }, 'Находка не проверена оппонентом: он был недоступен.'));
+      card.append(body);
+    }
+    return card;
+  }
+  function drawList() {
+    const visible = R.findings.filter(passes);
+    shown.textContent = `Показано ${visible.length} из ${R.findings.length}`;
+    clear(listBox);
+    if (!R.findings.length) {
+      listBox.append(h('div', { class: 'empty' }, R.checks_ran
+        ? 'Нарушений не найдено: ни одна находка не прошла оппонента и проверку цитат.'
+        : 'Находок нет: проверка требований в этом прогоне не выполнялась.'));
+    } else if (!visible.length) {
+      listBox.append(h('div', { class: 'empty' }, 'Под выбранные фильтры не подходит ни одна находка. Сбросьте фильтры, чтобы увидеть все.'));
+    } else {
+      append(listBox, visible.map(findingCard));
+    }
+  }
+  append(listPane, [R.findings.length ? filterBar : null, listBox]);
+
+  // ---- selection: list <-> document
+  function narrow() { return window.matchMedia('(max-width: 980px)').matches; }
+  // Scrolling takes 150 ms whatever the distance; with reduced motion it is instant.
+  function glide(target, top) {
+    const page = target === window;
+    const read = () => (page ? window.scrollY : target.scrollTop);
+    const write = (value) => { if (page) window.scrollTo(0, value); else target.scrollTop = value; };
+    top = Math.max(0, top);
+    if (REDUCED) { write(top); return; }
+    const from = read();
+    const started = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - started) / 150);
+      write(from + (top - from) * (1 - (1 - t) * (1 - t)));
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+  function scrollPageTo(el, share) {
+    glide(window, window.scrollY + el.getBoundingClientRect().top - tabs.offsetHeight - window.innerHeight * share);
+  }
+  function scrollInPane(pane, el) {
+    if (narrow()) { scrollPageTo(el, 0.25); return; }
+    const top = el.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop;
+    glide(pane, top - pane.clientHeight / 3);
+  }
+  function bringSplitIntoView() {
+    const top = split.getBoundingClientRect().top;
+    const offset = tabs.offsetHeight;
+    if (top > offset + 4 || top < offset - 4) glide(window, window.scrollY + top - offset);
+  }
+  function marksOf(id) {
+    return [...docPane.querySelectorAll('mark.q')].filter((m) => m.dataset.f.split(',').includes(id));
+  }
+  function paintActive() {
+    docPane.querySelectorAll('mark.q.active, .chip.active').forEach((el) => el.classList.remove('active'));
+    if (!state.active) return;
+    marksOf(state.active).forEach((m) => m.classList.add('active'));
+    docPane.querySelectorAll('.chip').forEach((c) => { if (c.dataset.f === state.active) c.classList.add('active'); });
+  }
+  function ensureDocVisible() {
+    if (state.tab !== 'doc') showTab('doc');
+    if (narrow()) setPane('doc');
+    if (!narrow()) bringSplitIntoView();
+  }
+  function scrollToEvidence(f, n) {
+    const ev = f.evidence[n];
+    if (!ev) return;
+    const block = docPane.querySelector(`[data-block="${ev.block_id}"]`);
+    if (!block) return;
+    const mark = [...block.querySelectorAll('mark.q')].find((m) => m.dataset.f.split(',').includes(f.id));
+    scrollInPane(docPane, mark || block);
+  }
+  // origin: 'list' — a card was clicked; 'doc' — a quote or a chip; 'jump' — from another tab or the verdict.
+  function select(id, origin) {
+    state.active = id;
+    if (id && !passes(findingById.get(id))) resetFilters();
+    if (origin === 'jump' && state.tab !== 'doc') showTab('doc');
+    drawList();
+    paintActive();
+    if (!id) return;
+    const f = findingById.get(id);
+    const card = document.getElementById(`finding-${id}`);
+    if (narrow()) {
+      // One column: the finding opens in the list; "показать в документе" switches the pane.
+      setPane('list');
+      const opened = document.getElementById(`finding-${id}`);
+      if (opened) scrollPageTo(opened, 0.02);
+      return;
+    }
+    if (origin === 'jump') bringSplitIntoView();
+    if (origin !== 'doc') scrollToEvidence(f, 0);
+    if (origin !== 'list' && card) scrollInPane(listPane, card);
+  }
+  function pickFromMark(ids) {
+    // Several findings may quote the same words: each click moves to the next one.
+    const at = ids.indexOf(state.active);
+    select(ids[(at + 1) % ids.length], 'doc');
+  }
+  function flashBlocks(ids) {
+    ensureDocVisible();
+    const els = ids.map((id) => docPane.querySelector(`[data-block="${id}"]`)).filter(Boolean);
+    if (!els.length) return;
+    scrollInPane(docPane, els[0]);
+    els.forEach((el) => el.classList.add('flash'));
+    setTimeout(() => els.forEach((el) => el.classList.remove('flash')), 1800);
+  }
+
+  // ---- other tabs
+  function unitLabel(id) {
+    const u = unitById.get(id);
+    return u && u.doc_label ? `${id} · ${u.doc_label}` : id;
+  }
+  function tabUnits() {
+    const box = h('div', { class: 'tabpanel' });
+    if (R.profile) {
+      box.append(h('div', { class: 'card pad', style: 'margin-bottom:12px' },
+        h('p', { style: 'margin:0 0 6px' }, R.profile.summary),
+        h('p', { class: 'muted', style: 'margin:0' }, 'Части документа: ',
+          R.profile.parts.map((p) => `«${p.name}» — ${PART_RU[p.role] || p.role}${p.parent ? `, детализирует «${p.parent}»` : ''}`).join('; '),
+          '. Нумерация требований: ', R.profile.numbering, '.'),
+        R.coverage ? h('p', { class: 'muted', style: 'margin:6px 0 0' },
+          `Учтено блоков текста: ${R.coverage.blocks_checked}. Входят в требования: ${R.coverage.in_units}. Не содержат требований: ${R.coverage.skipped}`,
+          Object.keys(R.coverage.skipped_by_reason || {}).length
+            ? ` (${Object.entries(R.coverage.skipped_by_reason).map(([k, v]) => `${SKIP_RU[k] || k} — ${v}`).join(', ')})` : '',
+          '.', R.coverage.unclassified && R.coverage.unclassified.length
+            ? ` Не удалось классифицировать: ${R.coverage.unclassified.length}; эти блоки не проверялись.` : '') : null));
+    }
+    if (!R.units.length) {
+      box.append(h('div', { class: 'card empty' }, 'Требования не выделены: прогон не дошёл до нарезки или в документе их не нашлось. ' +
+        'Причина указана на вкладке «Ход прогона».'));
+      return box;
+    }
+    const body = h('tbody');
+    for (const u of R.units) {
+      const related = R.findings.filter((f) => f.unit_ids.includes(u.id));
+      const row = h('tr', { class: 'click', tabindex: '0', title: 'Показать в документе' },
+        h('td', { class: 'mono' }, u.id),
+        h('td', { class: 'mono' }, u.doc_label || h('span', { class: 'muted', style: 'font-family:var(--sans)' }, 'нет, присвоен агентом')),
+        h('td', null, KIND_RU[u.kind] || u.kind),
+        h('td', null, u.place),
+        h('td', null, u.summary),
+        h('td', null, related.length ? related.map((f) => h('button', { class: `chip ${f.severity}`, type: 'button', style: 'margin:0 4px 4px 0',
+          title: f.title, onclick: (e) => { e.stopPropagation(); select(f.id, 'jump'); } }, h('b', null, f.id), SEV[f.severity].word))
+          : h('span', { class: 'muted' }, R.checks_ran ? 'замечаний нет' : '—')));
+      onActivate(row, (e) => { if (!e.target.closest('.chip')) flashBlocks(u.block_ids); });
+      body.append(row);
+    }
+    box.append(h('div', { class: 'card table-scroll' }, h('table', { class: 'grid-table' },
+      h('thead', null, h('tr', null, h('th', null, 'ID в отчёте'), h('th', null, 'ID в документе'), h('th', null, 'Тип'),
+        h('th', null, 'Место'), h('th', null, 'Формулировка'), h('th', null, 'Находки'))), body)));
+    return box;
+  }
+
+  function tabMatrix() {
+    const box = h('div', { class: 'tabpanel' });
+    if (!R.units.length || !R.checks_ran) {
+      box.append(h('div', { class: 'card empty' }, 'Матрица строится по результатам проверки требований, а в этом прогоне она не выполнялась.'));
+      return box;
+    }
+    const failed = new Set((R.check_failures || []).filter((c) => c.stage === 's5').map((c) => c.cell));
+    const checked = new Map(); // "unit|criterion" -> true
+    const setChecked = new Set();
+    for (const cell of R.cells || []) {
+      if (failed.has(cell.title)) continue;
+      for (const c of cell.criteria) {
+        // A cell over the whole set says nothing about one requirement's own criteria.
+        if (!cell.unit_ids.length && criterion(c).level !== 'requirement') setChecked.add(c);
+        for (const u of cell.unit_ids) checked.set(`${u}|${c}`, true);
+      }
+    }
+    const used = new Set();
+    for (const cell of R.cells || []) for (const c of cell.criteria) if (cell.unit_ids.length) used.add(c);
+    for (const f of R.findings) if (f.unit_ids.length) used.add(f.criterion);
+    const order = Object.keys(R.criteria).filter((c) => used.has(c));
+    const levels = { requirement: 'Отдельное требование', set: 'Набор требований', document: 'Документ' };
+    const groups = [];
+    for (const c of order) {
+      const level = criterion(c).level;
+      if (groups.length && groups[groups.length - 1].level === level) groups[groups.length - 1].span++;
+      else groups.push({ level, span: 1 });
+    }
+    box.append(h('div', { class: 'legend' },
+      Object.keys(SEV).map((s) => h('span', { class: 'swatch' }, h('span', { class: `cellbox ${s}` }, SEV[s].letter), SEV[s].word)),
+      h('span', { class: 'swatch' }, h('span', { class: 'cellbox ok' }, '✓'), 'проверено, замечаний нет'),
+      h('span', { class: 'swatch' }, h('span', { class: 'cellbox none' }, '·'), 'по этому критерию не проверялось')));
+    const table = h('table', { class: 'matrix card' });
+    table.append(h('thead', null,
+      h('tr', null, h('th', { class: 'group corner', rowspan: '2' }, 'Требование'),
+        groups.map((g) => h('th', { class: 'group', colspan: String(g.span) }, levels[g.level] || g.level))),
+      h('tr', null, order.map((c) => h('th', { title: criterion(c).standard || '' }, h('div', { class: 'vert' }, criterion(c).label))))));
+    const body = h('tbody');
+    for (const u of R.units) {
+      const row = h('tr', null, onActivate(h('th', { class: 'rowhead mono', tabindex: '0', title: u.summary }, unitLabel(u.id)),
+        () => flashBlocks(u.block_ids)));
+      for (const c of order) {
+        const hits = R.findings.filter((f) => f.criterion === c && f.unit_ids.includes(u.id))
+          .sort((a, b) => SEV[a.severity].rank - SEV[b.severity].rank);
+        let cell;
+        if (hits.length) {
+          const worst = hits[0];
+          cell = h('button', { type: 'button', title: hits.map((f) => `${f.id} · ${SEV[f.severity].word} · ${f.title}`).join('\n'),
+            'aria-label': `${u.id}, ${criterion(c).label}: ${SEV[worst.severity].word}, ${hits.map((f) => f.id).join(', ')}`,
+            onclick: () => select(worst.id, 'jump') },
+            h('span', { class: `cellbox ${worst.severity}` }, hits.length > 1 ? hits.length : SEV[worst.severity].letter));
+        } else if (checked.has(`${u.id}|${c}`) || setChecked.has(c)) {
+          cell = h('span', { class: 'cellbox ok', title: 'проверено, замечаний нет' }, '✓');
+        } else {
+          cell = h('span', { class: 'cellbox none', title: 'не проверялось' }, '·');
+        }
+        row.append(h('td', null, cell));
+      }
+      body.append(row);
+    }
+    table.append(body);
+    box.append(h('div', { class: 'table-scroll', style: 'overflow:visible' }, table),
+      h('p', { class: 'muted' }, 'Буква в ячейке — критичность самой серьёзной находки, число — сколько находок по этому критерию. ' +
+        'Клик по ячейке открывает находку, клик по требованию — его место в документе.'));
+    return box;
+  }
+
+  function evidenceSide(f, ev, n) {
+    const owners = unitsOfBlock.get(ev.block_id) || [];
+    return h('div', { class: 'side' },
+      h('div', { class: 'muted' }, owners.length ? h('span', { class: 'mono' }, owners.map(unitLabel).join(', ')) : 'вне требований',
+        ev.place && ev.place !== '—' ? ` · ${ev.place}` : ''),
+      h('blockquote', { class: 'quote' }, ev.display || ev.quote,
+        h('footer', null, ev.verified ? h('span', { class: 'verified' }, checkIcon(), 'подтверждена кодом') : h('span', { class: 'verified no' }, 'не проверена кодом'),
+          h('button', { class: 'linkish', type: 'button', onclick: () => { select(f.id, 'jump'); scrollToEvidence(f, n); } }, 'показать в документе'))));
+  }
+  function tabSet() {
+    const box = h('div', { class: 'tabpanel' });
+    if (!R.checks_ran) {
+      box.append(h('div', { class: 'card empty' }, 'Набор требований не проверялся: прогон остановился раньше.'));
+      return box;
+    }
+    const setLevel = R.findings.filter((f) => f.scope !== 'requirement');
+    const conflicts = setLevel.filter((f) => f.criterion === 'set_consistent');
+    const others = setLevel.filter((f) => f.criterion !== 'set_consistent');
+    box.append(h('h2', { style: 'margin-bottom:10px' }, `Противоречия между требованиями: ${conflicts.length}`));
+    if (!conflicts.length) box.append(h('div', { class: 'card empty' }, 'Противоречий между требованиями не найдено.'));
+    for (const f of conflicts) {
+      box.append(h('section', { class: 'card pair' },
+        h('div', { class: 'pair-head' }, h('span', { class: `sev ${f.severity}` }, SEV[f.severity].word),
+          h('span', { class: 'mono' }, f.id), h('span', { class: 'ftitle' }, f.title),
+          h('button', { class: 'linkish', type: 'button', onclick: () => select(f.id, 'jump') }, 'открыть находку')),
+        h('div', { class: 'pair-body' }, f.evidence.map((ev, n) => evidenceSide(f, ev, n))),
+        h('div', { class: 'pair-note' }, f.explanation)));
+    }
+    if (others.length) {
+      box.append(h('h2', { style: 'margin:18px 0 10px' }, `Другие дефекты набора и документа: ${others.length}`));
+      const body = h('tbody');
+      for (const f of others) {
+        const row = h('tr', { class: 'click', tabindex: '0' },
+          h('td', null, h('span', { class: `sev ${f.severity}` }, SEV[f.severity].word)),
+          h('td', { class: 'mono' }, f.id), h('td', null, criterion(f.criterion).label), h('td', null, f.title),
+          h('td', { class: 'mono' }, f.unit_ids.join(', ') || '—'));
+        onActivate(row, () => select(f.id, 'jump'));
+        body.append(row);
+      }
+      box.append(h('div', { class: 'card table-scroll' }, h('table', { class: 'grid-table' },
+        h('thead', null, h('tr', null, h('th', null, 'Критичность'), h('th', null, 'ID'), h('th', null, 'Критерий'),
+          h('th', null, 'Находка'), h('th', null, 'Требования'))), body)));
+    }
+    if (R.facts && R.facts.conflicts && R.facts.conflicts.length) {
+      const factById = new Map(R.facts.facts.map((x) => [x.id, x]));
+      box.append(h('h2', { style: 'margin:18px 0 4px' }, `Расхождения значений, найденные кодом: ${R.facts.conflicts.length}`),
+        h('p', { class: 'muted', style: 'margin:0 0 10px' }, `Этап s3 выписал из документа ${R.facts.facts.length} ` +
+          `${plural(R.facts.facts.length, 'факт', 'факта', 'фактов')} и сверил их кодом. Это кандидаты: дефектом их признаёт рецензент, подтверждённые вошли в находки.`));
+      for (const c of R.facts.conflicts) {
+        const facts = c.fact_ids.map((id) => factById.get(id)).filter(Boolean);
+        box.append(h('section', { class: 'card pair' },
+          h('div', { class: 'pair-head' }, h('span', { class: 'ftitle' }, c.summary)),
+          h('div', { class: 'pair-body' }, facts.map((x) => h('div', { class: 'side' },
+            h('div', { class: 'muted' }, h('span', { class: 'mono' }, x.id), ` · ${x.entity_label}: `, h('b', null, x.value)),
+            h('blockquote', { class: 'quote' }, x.display || x.quote, h('footer', null,
+              h('button', { class: 'linkish', type: 'button', onclick: () => flashBlocks([x.block_id]) }, 'показать в документе'))))))));
+      }
+    }
+    return box;
+  }
+
+  function tabQuestions() {
+    const box = h('div', { class: 'tabpanel' });
+    if (!R.questions.length) {
+      box.append(h('div', { class: 'card empty' }, (R.completed || []).includes('s8')
+        ? 'Вопросов к автору нет: находки не требуют уточнений.'
+        : 'Вопросы не сформулированы: прогон не дошёл до этапа s8.'));
+      return box;
+    }
+    const body = h('tbody');
+    for (const q of R.questions) {
+      body.append(h('tr', null,
+        h('td', { class: 'mono' }, q.id), h('td', { class: 'prio' }, q.priority), h('td', null, q.addressee),
+        h('td', null, q.text), h('td', null, q.blocks_development ? h('b', null, 'да') : 'нет'),
+        h('td', null, q.finding_ids.map((id) => findingById.get(id)).filter(Boolean).map((f) =>
+          h('button', { class: `chip ${f.severity}`, type: 'button', style: 'margin:0 4px 4px 0', title: f.title,
+            onclick: () => select(f.id, 'jump') }, h('b', null, f.id), SEV[f.severity].word)))));
+    }
+    box.append(h('div', { class: 'card table-scroll' }, h('table', { class: 'grid-table' },
+      h('thead', null, h('tr', null, h('th', null, 'ID'), h('th', null, 'Приоритет'), h('th', null, 'Кому'), h('th', null, 'Вопрос'),
+        h('th', null, 'Блокирует разработку'), h('th', null, 'Находки'))), body)),
+      h('p', { class: 'muted' }, 'Приоритет 1 — самый срочный.'));
+    return box;
+  }
+
+  function tabRun() {
+    const box = h('div', { class: 'tabpanel' });
+    append(box, [runNotice(R.progress), stageChain(R.progress)]);
+    const rows = [];
+    const row = (label, value) => { if (value != null && value !== '') rows.push(h('tr', null, h('td', { class: 'muted', style: 'width:260px' }, label), h('td', null, value))); };
+    row('Идентификатор прогона', h('span', { class: 'mono' }, R.run_id));
+    row('SHA-256 входного файла', P.input_sha256 ? h('span', { class: 'mono' }, P.input_sha256) : null);
+    if (R.intake) {
+      row('Формат по содержимому', R.intake.detected_format);
+      row('Размер', `${R.intake.size_bytes} байт`);
+      row('Кодировка', R.intake.encoding);
+    }
+    if (R.document) {
+      row('Цепочка чтения', (R.document.reader_chain || []).join(' → '));
+      row('Блоков текста', R.document.blocks.length);
+    }
+    if (typeof P.llm_calls === 'number') row('Запросов к модели', `${P.llm_calls}, ответов из кэша: ${P.llm_cache_hits}`);
+    if (P.llm_calls) {
+      row('Токены', `вход ${P.llm_input_tokens} (из кэша провайдера ${P.llm_cached_tokens}), выход ${P.llm_output_tokens}`);
+      row('Стоимость по справочнику цен', `≈ $${P.llm_cost_usd.toFixed(2)}`);
+    }
+    if (R.rejected && R.checks_ran) {
+      row('Кандидатов отклонено оппонентом и арбитром', R.rejected.by_review);
+      row('Кандидатов отклонено проверкой цитат', R.rejected.by_gate);
+    }
+    if (rows.length) box.append(h('div', { class: 'card table-scroll', style: 'margin-top:14px' }, h('table', { class: 'grid-table' }, h('tbody', null, rows))));
+    const notes = [...(P.setup_notes || []), ...((R.intake && R.intake.warnings) || []), ...((R.document && R.document.warnings) || []),
+      ...((R.document && R.document.issues) || []).map((i) => (i.line ? `строка ${i.line}: ` : '') + i.message)];
+    if (notes.length) box.append(h('div', { class: 'card pad', style: 'margin-top:12px' }, h('div', { class: 'section-title' }, 'Замечания настройки и чтения'),
+      notes.map((n) => h('p', { style: 'margin:0 0 4px' }, n))));
+    return box;
+  }
+
+  const builders = { units: tabUnits, matrix: tabMatrix, set: tabSet, questions: tabQuestions, run: tabRun };
+  function showTab(id) {
+    state.tab = id;
+    for (const [name, button] of tabButtons) button.setAttribute('aria-selected', String(name === id));
+    clear(panel);
+    if (id === 'doc') {
+      panel.className = 'wrap';
+      panel.append(paneSwitch, split);
+      paintActive();
+    } else {
+      panel.className = 'wrap';
+      panel.append(builders[id]());
+    }
+  }
+
+  clear(app).append(head, tabs, panel);
+  setPane('doc');
+  drawList();
+  showTab('doc');
+}
+
+route();
+})();
+</script>
+</body>
+</html>

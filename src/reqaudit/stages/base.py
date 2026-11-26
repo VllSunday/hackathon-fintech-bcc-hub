@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
@@ -48,6 +49,7 @@ class RunState(BaseModel):
     check_failures: list[CheckFailure] = Field(default_factory=list)
     questions: list[Question] = Field(default_factory=list)
     completed: list[str] = Field(default_factory=list)
+    skipped: list[str] = Field(default_factory=list)
     errors: list[StageError] = Field(default_factory=list)
 
 
@@ -59,6 +61,10 @@ class RunContext:
     state: RunState
     trace: Trace
     llm: LLMClient
+    # The author's answers to the agent's questions: from a file (--answers) or asked in the
+    # terminal (--ask). Keyed by question fingerprint, see reqaudit.answers.
+    answers: dict[str, str] = field(default_factory=dict)
+    ask: Callable[[str], str] | None = None
 
 
 class Stage(ABC):
@@ -69,3 +75,7 @@ class Stage(ABC):
     @abstractmethod
     def run(self, ctx: RunContext) -> BaseModel:
         """Do the work, update `ctx.state`, return the artifact to persist."""
+
+    def applies(self, ctx: RunContext) -> bool:
+        """False when the stage has nothing to do in this run; it is then reported as skipped."""
+        return True

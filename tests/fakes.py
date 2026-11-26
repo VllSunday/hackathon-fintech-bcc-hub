@@ -96,6 +96,25 @@ def honest_editor(prompt: str) -> dict:
     return {"duplicates": groups, "questions": questions}
 
 
+_ANSWERED = re.compile(r"^Q-\d+: .*\n  Author's answer: (.*)\n((?:  .*\n?)*)", re.MULTILINE)
+_LISTED_FINDING = re.compile(r"^  (D-\d{3}): ", re.MULTILINE)
+
+
+def honest_reassess(prompt: str) -> dict:
+    """An answer saying the document already covers it resolves; others give a fix."""
+    out = []
+    for answer, body in _ANSWERED.findall(prompt):
+        for fid in _LISTED_FINDING.findall(body):
+            if "уже" in answer.lower():
+                out.append({"finding_id": fid, "decision": "resolved",
+                            "reasoning": "Документ уже это покрывает.", "document_fix": None})
+            else:
+                out.append({"finding_id": fid, "decision": "confirmed",
+                            "reasoning": "Ответ не меняет текст документа.",
+                            "document_fix": f"Добавить в документ: {answer}"})
+    return {"reassessments": out}
+
+
 def honest_page(prompt: str) -> dict:
     """What a transcriber would return for a scanned page of a small specification."""
     return {"blocks": [
@@ -129,7 +148,7 @@ def fake_team(mutate_segment: Mutate | None = None,
     arbiter's answer for them.
     """
     calls = {"profile": 0, "segment": 0, "review": 0, "opponent": 0, "arbiter": 0,
-             "editor": 0, "page": 0, "picture": 0, "facts": 0}
+             "editor": 0, "page": 0, "picture": 0, "facts": 0, "reassess": 0}
 
     def respond(messages, info: AgentInfo) -> ModelResponse:
         tool = info.output_tools[0]
@@ -169,6 +188,9 @@ def fake_team(mutate_segment: Mutate | None = None,
         elif "duplicates" in fields:
             calls["editor"] += 1
             args = editor(prompt)
+        elif fields == {"reassessments"}:
+            calls["reassess"] += 1
+            args = honest_reassess(prompt)
         elif fields == {"facts"}:
             calls["facts"] += 1
             args = facts(prompt)

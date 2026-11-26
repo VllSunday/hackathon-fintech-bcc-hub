@@ -330,6 +330,12 @@ class Finding(BaseModel):
     cell: str | None = None
     review_note: str | None = Field(default=None, description="Why the opponent, the arbiter "
                                     "or a gate kept, changed or rejected the finding.")
+    author_answer: str | None = None
+    answer_decision: str | None = Field(default=None, description="confirmed, resolved or "
+                                        "changed, after the author's answer (s8b).")
+    answer_note: str | None = None
+    document_fix: str | None = Field(default=None, description="Wording to put into the "
+                                     "document, following the author's answer.")
 
 
 class CheckFailure(BaseModel):
@@ -350,3 +356,4 @@ class Question(BaseModel):
     text: str
     priority: int = Field(ge=1, le=3, description="1 is the most urgent.")
     blocks_development: bool = False
+    answer: str | None = Field(default=None, description="The author's answer, if given.")

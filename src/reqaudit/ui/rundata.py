@@ -18,7 +18,7 @@ from typing import Any
 
 from reqaudit import criteria
 from reqaudit.evidence import _DASHES, _QUOTES, MIN_KEY_LENGTH, match_key
-from reqaudit.models import Block, FindingStatus, Severity
+from reqaudit.models import Block, Finding, Severity
 from reqaudit.passport import Passport
 from reqaudit.pipeline import IMPLEMENTED, STAGE_PLAN
 from reqaudit.report.render import _CHECK_STAGES, _place, _verdict, display_quote
@@ -160,12 +160,11 @@ def run_summary(run_dir: Path, alive: bool | None = None) -> dict[str, Any]:
                    status=live["status"], profile=live["profile"], models=[])
     state = _load_json(run_dir / "state.json")
     if state:
-        confirmed = [f for f in state.get("findings", [])
-                     if f.get("status") == FindingStatus.CONFIRMED.value]
+        reported = [f for f in (Finding.model_validate(raw) for raw in state.get("findings", []))
+                    if f.in_report]
         row.update(has_report=True, units=len(state.get("units", [])),
-                   findings=len(confirmed),
-                   critical=sum(1 for f in confirmed
-                                if f.get("severity") == Severity.CRITICAL.value),
+                   findings=len(reported),
+                   critical=sum(1 for f in reported if f.severity == Severity.CRITICAL),
                    questions=len(state.get("questions", [])),
                    checks_ran=set(state.get("completed", [])) >= _CHECK_STAGES)
     return row
@@ -175,7 +174,7 @@ def list_runs(runs_dir: Path, alive: dict[str, bool] | None = None) -> list[dict
     if not runs_dir.is_dir():
         return []
     alive = alive or {}
-    dirs = [d for d in runs_dir.iterdir() if d.is_dir() and RUN_ID.match(d.name)]
+    dirs = [d for d in runs_dir.iterdir() if d.is_dir() and RUN_ID.fullmatch(d.name)]
     return [run_summary(d, alive.get(d.name)) for d in sorted(dirs, key=lambda d: d.name,
                                                              reverse=True)]
 
@@ -251,6 +250,26 @@ def _verdict_data(state: RunState, confirmed: list) -> dict[str, Any]:
             "incomplete": bool(state.check_failures)}
 
 
+def _finding_view(f: Finding, blocks: dict[str, Block]) -> dict[str, Any]:
+    """A finding as the page shows it: each quote with its place and its span in the block."""
+    item = f.model_dump(mode="json")
+    for evidence, raw in zip(item["evidence"], f.evidence, strict=True):
+        block = blocks.get(raw.block_id)
+        span = quote_span(raw.quote, block.text) if block else None
+        evidence["place"] = _place([raw.block_id], blocks)
+        evidence["display"] = display_quote(raw.quote)
+        evidence["span"] = list(span) if span else None
+    return item
+
+
+def _editor_counts(run_dir: Path) -> dict[str, int] | None:
+    """How many findings the editor (s8) received and kept after merging duplicates."""
+    for event in reversed(read_trace(run_dir)):
+        if event.get("event") == "editor_summary":
+            return {"before": event.get("findings_before"), "after": event.get("findings_after")}
+    return None
+
+
 def build_report(run_dir: Path) -> dict[str, Any]:
     """Everything the report screen shows, from the files of one finished run.
 
@@ -261,19 +280,10 @@ def build_report(run_dir: Path) -> dict[str, Any]:
         (run_dir / "passport.json").read_text(encoding="utf-8"))
     blocks: dict[str, Block] = ({b.id: b for b in state.document.blocks}
                                 if state.document else {})
-    confirmed = [f for f in state.findings if f.status == FindingStatus.CONFIRMED]
+    confirmed = [f for f in state.findings if f.in_report]
     checks_ran = set(state.completed) >= _CHECK_STAGES
-
-    findings = []
-    for f in confirmed:
-        item = f.model_dump(mode="json")
-        for evidence, raw in zip(item["evidence"], f.evidence, strict=True):
-            block = blocks.get(raw.block_id)
-            span = quote_span(raw.quote, block.text) if block else None
-            evidence["place"] = _place([raw.block_id], blocks)
-            evidence["display"] = display_quote(raw.quote)
-            evidence["span"] = list(span) if span else None
-        findings.append(item)
+    findings = [_finding_view(f, blocks) for f in confirmed]
+    resolved = [_finding_view(f, blocks) for f in state.findings if f.resolved]
 
     units = []
     for u in state.units:
@@ -302,6 +312,14 @@ def build_report(run_dir: Path) -> dict[str, Any]:
         "facts": facts,
         "cells": [c.model_dump(mode="json") for c in state.cells],
         "findings": findings,
+        "resolved": resolved,
+        "markers": [m.model_dump(mode="json") for m in state.markers],
+        "plan_notes": state.plan_notes,
+        "rejected_findings": [{"id": f.id, "title": f.title, "criterion": f.criterion.value,
+                               "severity": f.severity.value, "review_note": f.review_note,
+                               "by_gate": any(t.startswith("gate:") for t in f.trail)}
+                              for f in state.rejected],
+        "editor": _editor_counts(run_dir),
         "questions": [q.model_dump(mode="json") for q in state.questions],
         "check_failures": [c.model_dump(mode="json") for c in state.check_failures],
         "errors": [e.model_dump(mode="json") for e in state.errors],

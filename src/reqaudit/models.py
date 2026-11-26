@@ -342,6 +342,17 @@ class Finding(BaseModel):
     document_fix: str | None = Field(default=None, description="Wording to put into the "
                                      "document, following the author's answer.")
 
+    @property
+    def resolved(self) -> bool:
+        """The author's answer showed the document covers it (s8b)."""
+        return self.answer_decision == "resolved"
+
+    @property
+    def in_report(self) -> bool:
+        """Counted as a defect: confirmed by review and not resolved by the author's answer.
+        The Markdown report, the web UI and the eval stand all use this one rule."""
+        return self.status == FindingStatus.CONFIRMED and not self.resolved
+
 
 class CheckFailure(BaseModel):
     """A cell or review batch the model could not do; its scope stays unchecked."""

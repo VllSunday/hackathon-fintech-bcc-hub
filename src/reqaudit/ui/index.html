@@ -294,6 +294,15 @@ table { border-collapse: collapse; width: 100%; }
   transition: transform .15s var(--ease), border-color .15s; }
 .fixes button:hover { transform: translateX(5px); border-color: var(--accent); }
 .fixes .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.blocking { margin-top: 14px; }
+.blocking ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.blocking li { overflow-wrap: anywhere; }
+.findings details.resolved { margin-top: 14px; }
+.findings details.resolved summary { cursor: pointer; color: var(--muted); }
+.notes h4 { margin: 0 0 4px; }
+.notes > div + div { margin-top: 12px; }
+.notes ul { margin: 4px 0 0; padding-left: 18px; }
+.blk.doubt { box-shadow: inset 3px 0 0 var(--major, #c98a00); }
 .fixes .mono { flex: none; white-space: nowrap; }
 @media (max-width: 760px) { .verdict { grid-template-columns: minmax(0, 1fr); } }
 .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-align: left;
@@ -542,15 +551,25 @@ const RUN_STATUS = {
 };
 const STAGE_STATE = { pending: 'ожидает', running: 'идёт', done: 'готов', error: 'ошибка',
   skipped: 'не выполнялся', interrupted: 'прерван', not_needed: 'не требовался' };
+// Stage summaries: a number and its noun in three forms (1, 2–4, 5+).
 const SUMMARY_RU = {
-  s1: [['blocks', 'блоков текста']],
-  s2: [['units', 'требований']],
-  s3: [['facts', 'фактов'], ['conflicts', 'расхождений']],
-  s5: [['candidates', 'кандидатов']],
-  s6: [['confirmed', 'подтверждено'], ['rejected', 'отклонено']],
-  s7: [['out', 'прошло гейт'], ['no_evidence', 'без цитаты']],
-  s8: [['questions', 'вопросов']],
+  s1: [['blocks', 'блок текста', 'блока текста', 'блоков текста']],
+  s2: [['units', 'требование', 'требования', 'требований']],
+  s3: [['facts', 'факт', 'факта', 'фактов'], ['conflicts', 'расхождение', 'расхождения', 'расхождений']],
+  s5: [['candidates', 'кандидат', 'кандидата', 'кандидатов']],
+  s6: [['confirmed', 'подтверждено', 'подтверждено', 'подтверждено'], ['rejected', 'отклонено', 'отклонено', 'отклонено']],
+  s7: [['out', 'прошло гейт', 'прошло гейт', 'прошло гейт'], ['no_evidence', 'без цитаты', 'без цитаты', 'без цитаты']],
+  s8: [['questions', 'вопрос', 'вопроса', 'вопросов']],
 };
+// What the agent decided after the author's answer (s8b); the same words as report.md.
+const DECISION_RU = {
+  confirmed: 'После ответа автора дефект остаётся: документ нужно исправить.',
+  changed: 'После ответа автора дефект остаётся, серьёзность изменена.',
+  resolved: 'Находка снята: ответ автора показывает, что документ это покрывает.',
+};
+const PRIORITY_RU = { 1: 'высокий', 2: 'средний', 3: 'низкий' };
+// Blocks of a scan whose two readings differ get this confidence (reading/vision.py).
+const DOUBT_CONFIDENCE = 0.6;
 
 function h(tag, props, ...kids) {
   const el = document.createElement(tag);
@@ -701,6 +720,7 @@ window.addEventListener('hashchange', route);
 
 // ---------------------------------------------------------------- upload screen
 function screenUpload() {
+  document.title = 'reqaudit — проверка требований';
   let file = null;
   let busy = false;
   const paper = h('div', { class: 'paper', 'aria-hidden': 'true' }, [100, 70, 88, 54, 80].map((w) => h('i', { style: `--w:${w}%` })));
@@ -756,8 +776,9 @@ function screenUpload() {
       modelLine.textContent = config.models.join(', ');
     } else {
       modelLine.replaceWith(h('div', { class: 'notice' },
-        h('p', null, h('b', null, 'Нет ключа модели. '), 'Добавьте ', h('code', null, 'GEMINI_API_KEY'), ' или ',
-          h('code', null, 'OPENAI_API_KEY'), ' в файл .env и перезапустите сервер.')));
+        h('p', null, h('b', null, 'Нет ключа модели. '), 'Добавьте в файл .env ', h('code', null, 'OPENAI_API_KEY'), ', ',
+          h('code', null, 'GEMINI_API_KEY'), ' или ключ Google Cloud ', h('code', null, 'VERTEX_API_KEY'),
+          ' и обновите страницу: сервер перечитывает настройки сам.')));
     }
   }).catch((err) => message.append(errorBox(err)));
 
@@ -772,7 +793,9 @@ function screenUpload() {
           h('div', { class: 'run-doc' }, h('b', null, run.document || 'без имени'),
             run.title ? h('span', { class: 'muted' }, run.title) : null),
           h('div', { class: 'run-date muted' }, fmtDate(run.started_at)),
-          h('span', { class: `pill ${run.status || ''}` }, RUN_STATUS[run.status] || run.status || '—'),
+          run.has_report && !run.checks_ran && run.status === 'completed'
+            ? h('span', { class: 'pill partial' }, 'без проверки')
+            : h('span', { class: `pill ${run.status || ''}` }, RUN_STATUS[run.status] || run.status || '—'),
           stat(run.units, 'требований'), stat(run.findings, 'нарушений'),
           stat(run.critical, 'критичных', 'crit'), stat(run.questions, 'вопросов')));
       });
@@ -805,8 +828,9 @@ function stageChain(progress) {
       if (s.llm_calls) meta.push(h('div', null, `${s.llm_calls} ${plural(s.llm_calls, 'вызов', 'вызова', 'вызовов')} модели`));
       if (s.cache_hits) meta.push(h('div', null, `из кэша ${s.cache_hits}`));
       if (s.llm_failed) meta.push(h('div', null, `без ответа ${s.llm_failed}`));
-      for (const [key, label] of SUMMARY_RU[s.code] || []) {
-        if (s.summary && typeof s.summary[key] === 'number') meta.push(h('div', null, `${s.summary[key]} ${label}`));
+      for (const [key, one, few, many] of SUMMARY_RU[s.code] || []) {
+        const n = s.summary && s.summary[key];
+        if (typeof n === 'number') meta.push(h('div', null, `${n} ${plural(n, one, few, many)}`));
       }
       if (s.error) meta.push(h('div', null, s.error));
       part.root.className = `stage ${s.status}`;
@@ -990,6 +1014,7 @@ function showReport(R) {
   }
 
   const critical = R.findings.filter((f) => f.severity === 'critical').length;
+  const blocking = R.questions.filter((q) => q.blocks_development && !q.answer);
   let verdictCard;
   if (R.verdict) {
     const V = R.verdict;
@@ -1004,7 +1029,12 @@ function showReport(R) {
         first.length ? h('ol', { class: 'fixes', 'aria-label': 'Исправить в первую очередь' }, first.map((f, i) => h('li', { style: `--i:${i}` },
           h('button', { type: 'button', onclick: () => select(f.id, 'jump') },
             h('span', { class: `sev ${f.severity}` }, SEV[f.severity].word),
-            h('span', { class: 'mono' }, f.id), h('span', { class: 't' }, f.title))))) : null));
+            h('span', { class: 'mono' }, f.id), h('span', { class: 't' }, f.title))))) : null,
+        blocking.length ? h('div', { class: 'blocking' },
+          h('div', { class: 'q' }, `Ответить до начала разработки: ${blocking.length} ${plural(blocking.length, 'вопрос', 'вопроса', 'вопросов')}`),
+          h('ul', null, blocking.slice(0, 3).map((q) => h('li', null,
+            h('span', { class: 'mono' }, q.id), ' ', h('span', { class: 'muted' }, `${q.addressee}: `), q.text))),
+          blocking.length > 3 ? h('button', { class: 'linkish', type: 'button', onclick: () => showTab('questions') }, 'Все вопросы автору') : null) : null));
   } else {
     verdictCard = h('section', { class: 'verdict' },
       h('div', null,
@@ -1043,7 +1073,10 @@ function showReport(R) {
     tag('без цитаты', g.no_evidence);
     tag('цитата одной стороны', g.one_sided_conflict);
     tag('дублей', g.merged);
-    tag('в отчёте', g.out);
+    tag('прошло гейт', g.out);
+    const merged = R.editor && R.editor.before - R.editor.after;
+    if (merged > 0) tag('сведено редактором', merged);
+    tag('в отчёте', R.findings.length);
     head.append(h('div', { class: 'gate-line' }, h('span', { class: 'verified' }, checkIcon(), 'Цитаты сверены с текстом кодом'), tags));
   }
 
@@ -1176,6 +1209,9 @@ function showReport(R) {
       if (block.hidden) {
         classes.push('hidden-text');
         body.prepend(h('em', { class: 'blk-note' }, 'Скрытый текст: в отображаемом документе его не видно'));
+      } else if (block.source === 'vlm' && block.confidence <= DOUBT_CONFIDENCE) {
+        classes.push('doubt');
+        body.prepend(h('em', { class: 'blk-note' }, 'Распознано по изображению; два прочтения скана расходятся — сверить с оригиналом'));
       } else if (block.kind === 'image_text' || block.source === 'vlm') {
         body.prepend(h('em', { class: 'blk-note' }, 'Распознано моделью по изображению'));
       }
@@ -1294,9 +1330,16 @@ function showReport(R) {
       if (f.author_answer) body.append(h('div', null, h('h4', null, 'Ответ автора'), h('p', null, f.author_answer)));
       if (f.answer_note) body.append(h('div', null, h('h4', null, 'Решение агента по ответу'), h('p', null, f.answer_note)));
       if (f.document_fix) body.append(h('div', null, h('h4', null, 'Правка текста документа по ответу автора'), h('p', { class: 'fix-text' }, f.document_fix)));
+      if (f.answer_decision && DECISION_RU[f.answer_decision]) body.append(h('p', { class: 'muted' }, DECISION_RU[f.answer_decision]));
       const trail = f.trail || [];
+      if (trail.includes('opponent:fix_rewritten')) {
+        body.append(h('p', { class: 'muted' }, 'Исправление переписал оппонент: исходный вариант не устранял дефект или противоречил другому месту документа.'));
+      }
       if (trail.includes('arbiter:kept')) body.append(h('p', { class: 'muted' }, 'Оппонент оспаривал находку, арбитр её оставил.'));
       else if (trail.includes('opponent:unavailable')) body.append(h('p', { class: 'muted' }, 'Находка не проверена оппонентом: он был недоступен.'));
+      if (f.review_note && !trail.includes('opponent:unavailable')) {
+        body.append(h('div', null, h('h4', null, 'Проверка оппонентом'), h('p', { class: 'muted' }, f.review_note)));
+      }
       card.append(h('div', { class: 'finding-open' }, body));
     }
     return card;
@@ -1315,6 +1358,14 @@ function showReport(R) {
       listBox.append(h('div', { class: 'empty' }, 'Под фильтры ничего не подходит.'));
     } else {
       append(listBox, visible.map((f, i) => findingCard(f, i)));
+    }
+    if ((R.resolved || []).length) {
+      listBox.append(h('details', { class: 'resolved' },
+        h('summary', null, `Сняты после ответов автора: ${R.resolved.length}`),
+        R.resolved.map((f) => h('div', { class: 'card pad', style: 'margin-top:8px' },
+          h('div', null, h('span', { class: 'mono' }, f.id), ' ', h('b', null, f.title)),
+          f.author_answer ? h('p', { class: 'muted', style: 'margin:6px 0 0' }, 'Ответ автора: ', f.author_answer) : null,
+          f.answer_note ? h('p', { class: 'muted', style: 'margin:6px 0 0' }, f.answer_note) : null))));
     }
   }
   append(listPane, [R.findings.length ? filterBar : null, listBox]);
@@ -1367,7 +1418,7 @@ function showReport(R) {
   function scrollToEvidence(f, n) {
     const ev = f.evidence[n];
     if (!ev) return;
-    const block = docPane.querySelector(`[data-block="${ev.block_id}"]`);
+    const block = docPane.querySelector(`[data-block="${CSS.escape(ev.block_id)}"]`);
     if (!block) return;
     const mark = [...block.querySelectorAll('mark.q')].find((m) => m.dataset.f.split(',').includes(f.id));
     scrollInPane(docPane, mark || block);
@@ -1400,7 +1451,7 @@ function showReport(R) {
   }
   function flashBlocks(ids) {
     ensureDocVisible();
-    const els = ids.map((id) => docPane.querySelector(`[data-block="${id}"]`)).filter(Boolean);
+    const els = ids.map((id) => docPane.querySelector(`[data-block="${CSS.escape(id)}"]`)).filter(Boolean);
     if (!els.length) return;
     scrollInPane(docPane, els[0]);
     els.forEach((el) => el.classList.add('flash'));
@@ -1427,6 +1478,31 @@ function showReport(R) {
           '.', R.coverage.unclassified && R.coverage.unclassified.length
             ? ` Не удалось классифицировать: ${R.coverage.unclassified.length}; эти блоки не проверялись.` : '') : null));
     }
+    const notes = [];
+    const cov = R.coverage || {};
+    const obligations = Object.entries(cov.obligations_outside || {});
+    if (obligations.length) {
+      notes.push(h('div', null, h('h4', null, `Сверка вторым способом: ${obligations.length} ${plural(obligations.length, 'блок', 'блока', 'блоков')} с явным обязательством вне требований`),
+        h('p', { class: 'muted' }, 'Код нашёл в них слова обязательства, а модель не выделила требование. Их читает общая проверка документа.'),
+        h('ul', null, obligations.map(([id, word]) => h('li', null,
+          h('button', { class: 'linkish', type: 'button', onclick: () => { ensureDocVisible(); flashBlocks([id]); } }, id), ` — «${word}»`)))));
+    }
+    if ((cov.dropped_units || []).length) {
+      notes.push(h('div', null, h('h4', null, 'Отброшены как не подтверждённые текстом документа'),
+        h('ul', null, cov.dropped_units.map((reason) => h('li', null, reason)))));
+    }
+    if ((R.plan_notes || []).length) {
+      notes.push(h('div', null, h('h4', null, 'Решения при планировании проверок'),
+        h('ul', null, R.plan_notes.map((note) => h('li', null, note)))));
+    }
+    if ((R.markers || []).length) {
+      const judged = R.markers.filter((m) => m.defect).length;
+      notes.push(h('div', null, h('h4', null, `Слова-маркеры: найдено кодом ${R.markers.length}, признано дефектом ${judged}`),
+        h('ul', null, R.markers.map((m) => h('li', null, h('span', { class: 'mono' }, m.unit_id), ` «${m.word}» (${m.category}): `,
+          m.defect == null ? 'рецензент не ответил' : m.defect ? h('b', null, 'дефект') : 'не дефект',
+          m.reason ? h('span', { class: 'muted' }, ` — ${m.reason}`) : null)))));
+    }
+    if (notes.length) box.append(h('div', { class: 'card pad notes', style: 'margin-bottom:12px' }, notes));
     if (!R.units.length) {
       box.append(h('div', { class: 'card empty' }, 'Требования не выделены: прогон не дошёл до нарезки или в документе их не нашлось. ' +
         'Причина указана на вкладке «Ход прогона».'));
@@ -1588,7 +1664,7 @@ function showReport(R) {
     const body = h('tbody');
     for (const q of R.questions) {
       body.append(h('tr', null,
-        h('td', { class: 'mono' }, q.id), h('td', { class: 'prio' }, q.priority), h('td', null, q.addressee),
+        h('td', { class: 'mono' }, q.id), h('td', { class: 'prio' }, PRIORITY_RU[q.priority] || q.priority), h('td', null, q.addressee),
         h('td', null, q.text, q.answer ? h('p', { class: 'fix-text', style: 'margin:6px 0 0' }, h('b', null, 'Ответ автора: '), q.answer) : null),
         h('td', null, q.blocks_development ? h('b', null, 'да') : 'нет'),
         h('td', null, q.finding_ids.map((id) => findingById.get(id)).filter(Boolean).map((f) =>
@@ -1620,7 +1696,7 @@ function showReport(R) {
     if (typeof P.llm_calls === 'number') row('Запросов к модели', `${P.llm_calls}, ответов из кэша: ${P.llm_cache_hits}`);
     if (P.llm_calls) {
       row('Токены', `вход ${P.llm_input_tokens} (из кэша провайдера ${P.llm_cached_tokens}), выход ${P.llm_output_tokens}`);
-      row('Стоимость по справочнику цен', `≈ $${P.llm_cost_usd.toFixed(2)}`);
+      row('Стоимость по справочнику цен', `≈ $${P.llm_cost_usd.toFixed(2).replace('.', ',')}`);
     }
     if (R.rejected && R.checks_ran) {
       row('Кандидатов отклонено оппонентом и арбитром', R.rejected.by_review);

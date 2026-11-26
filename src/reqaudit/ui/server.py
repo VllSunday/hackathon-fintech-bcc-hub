@@ -5,12 +5,19 @@
 The server starts the same console command a user would (`python -m reqaudit ...`) and
 then only reads the run folder. Model keys stay in the server's environment (.env);
 nothing about them is sent to the browser.
+
+A run spends the user's model budget, so the server only answers its own page: requests
+must name this machine as their host (no DNS rebinding), an upload must come as
+`application/octet-stream` from the same origin (a foreign site cannot send that without
+a CORS preflight, which this server never grants), one run goes at a time, and the runs
+the server started stop with it.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import atexit
 import os
 import re
 import secrets
@@ -32,13 +39,24 @@ from reqaudit.ui import rundata
 _UPLOADS = "_uploads"
 _START_TIMEOUT_S = 90.0
 _BAD_NAME = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
+LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
+_UPLOAD_TYPE = "application/octet-stream"
 
 
 def _problem(status: int, message: str) -> HTTPException:
     return HTTPException(status_code=status, detail=message)
 
 
-def create_app(runs_dir: Path | None = None) -> FastAPI:
+def _host_name(value: str) -> str:
+    """Host header without the port: «127.0.0.1:8000» → «127.0.0.1», «[::1]:80» → «::1»."""
+    if value.startswith("["):
+        return value[1:].split("]", 1)[0]
+    return value.rsplit(":", 1)[0] if value.count(":") == 1 else value
+
+
+def create_app(runs_dir: Path | None = None,
+               allowed_hosts: frozenset[str] | None = LOOPBACK) -> FastAPI:
+    """The web app. `allowed_hosts=None` turns the host check off (`--allow-network`)."""
     settings = load_settings(runs_dir=runs_dir)
     runs = settings.runs_dir
     app = FastAPI(title="reqaudit", version=__version__, docs_url=None, redoc_url=None,
@@ -50,9 +68,29 @@ def create_app(runs_dir: Path | None = None) -> FastAPI:
         with lock:
             return {run_id: proc.poll() is None for run_id, proc in processes.items()}
 
+    def stop_all() -> None:
+        """Runs started here stop with the server: they would go on spending the key."""
+        with lock:
+            for proc in processes.values():
+                if proc.poll() is None:
+                    proc.terminate()
+            processes.clear()
+
+    app.router.on_shutdown.append(stop_all)
+    atexit.register(stop_all)
+
+    @app.middleware("http")
+    async def _only_this_machine(request: Request, call_next):
+        host = _host_name(request.headers.get("host", ""))
+        if allowed_hosts is not None and host not in allowed_hosts:
+            return JSONResponse({"error": "Интерфейс отвечает только на адрес этого "
+                                          "компьютера (127.0.0.1 или localhost)."},
+                                status_code=421)
+        return await call_next(request)
+
     def run_dir(run_id: str) -> Path:
         # The id is checked against the pipeline's own format, so it cannot be a path.
-        if not rundata.RUN_ID.match(run_id) or not (runs / run_id).is_dir():
+        if not rundata.RUN_ID.fullmatch(run_id) or not (runs / run_id).is_dir():
             raise _problem(404, f"Прогон {run_id} не найден в папке {runs.as_posix()}/. "
                                 "Возможно, папку прогонов очистили; запустите проверку заново.")
         return runs / run_id
@@ -88,14 +126,27 @@ def create_app(runs_dir: Path | None = None) -> FastAPI:
     async def start_run(request: Request, name: str, profile: str = "quick") -> dict:
         if profile not in PROFILES:
             raise _problem(400, f"Неизвестный профиль «{profile}». Выберите quick или thorough.")
+        content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+        origin = request.headers.get("origin")
+        if content_type != _UPLOAD_TYPE or (
+                origin and _host_name(origin.split("://", 1)[-1]) !=
+                _host_name(request.headers.get("host", ""))):
+            raise _problem(403, "Загрузка принимается только со страницы этого интерфейса.")
+        if any(alive_map().values()):
+            raise _problem(409, "Уже идёт проверка другого документа. Дождитесь её окончания: "
+                                "один прогон за раз, чтобы не тратить ключ модели параллельно.")
+        limit = load_settings(runs_dir=runs).max_input_mb
+        too_big = (f"Файл больше {limit} МБ. Уменьшите его или поднимите "
+                   "REQAUDIT_MAX_INPUT_MB в файле .env.")
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > limit * 1024 * 1024:
+            raise _problem(413, too_big)
         file_name = _BAD_NAME.sub("_", Path(name).name).strip(" .") or "document"
         body = await request.body()
         if not body:
             raise _problem(400, "Файл пустой. Выберите документ с требованиями.")
-        limit = load_settings(runs_dir=runs).max_input_mb
         if len(body) > limit * 1024 * 1024:
-            raise _problem(413, f"Файл больше {limit} МБ. Уменьшите его или поднимите "
-                                "REQAUDIT_MAX_INPUT_MB в файле .env.")
+            raise _problem(413, too_big)
 
         # Starting the agent waits for its run folder; keep that off the event loop.
         return await asyncio.to_thread(launch, file_name, body, profile)
@@ -120,7 +171,7 @@ def create_app(runs_dir: Path | None = None) -> FastAPI:
         deadline = time.monotonic() + _START_TIMEOUT_S
         while time.monotonic() < deadline:
             for d in runs.iterdir():
-                if d.is_dir() and d.name not in known and rundata.RUN_ID.match(d.name):
+                if d.is_dir() and d.name not in known and rundata.RUN_ID.fullmatch(d.name):
                     events = rundata.read_trace(d)
                     if events and Path(str(events[0].get("input", ""))) == source:
                         with lock:
@@ -187,12 +238,22 @@ def main(argv: list[str] | None = None) -> int:
                         help="папка с прогонами; по умолчанию runs/")
     parser.add_argument("--no-browser", action="store_true",
                         help="не открывать страницу в браузере")
+    parser.add_argument("--allow-network", action="store_true",
+                        help="разрешить адрес, видимый из сети (--host 0.0.0.0): любой в сети "
+                             "сможет загружать документы за ваш ключ модели и читать отчёты")
     args = parser.parse_args(argv)
+
+    local = args.host in LOOPBACK
+    if not local and not args.allow_network:
+        print(f"Адрес {args.host} виден из сети: кто угодно в ней сможет запускать проверки "
+              "за ваш ключ модели и читать отчёты. Если это нужно, добавьте --allow-network.",
+              file=sys.stderr)
+        return 2
 
     import uvicorn
 
     try:
-        app = create_app(args.runs_dir)
+        app = create_app(args.runs_dir, LOOPBACK if local else None)
     except ValueError as err:
         print(f"Ошибка настройки: {err}", file=sys.stderr)
         return 2

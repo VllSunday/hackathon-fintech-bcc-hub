@@ -9,7 +9,6 @@ from reqaudit.models import (
     Block,
     BlockSource,
     Finding,
-    FindingStatus,
     PartRole,
     Scope,
     Severity,
@@ -51,12 +50,17 @@ _ROLE_RU = {"judge": "суждения", "opponent": "оппонент", "vision
 _CHECK_STAGES = {"s5", "s6", "s7"}
 
 
-def plural(n: int, one: str, few: str, many: str) -> str:
+def plural_form(n: int, one: str, few: str, many: str) -> str:
+    """The Russian form for n: 1 дефект, 2 дефекта, 5 дефектов (21 дефект, 12 дефектов)."""
     if n % 10 == 1 and n % 100 != 11:
-        return f"{n} {one}"
+        return one
     if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
-        return f"{n} {few}"
-    return f"{n} {many}"
+        return few
+    return many
+
+
+def plural(n: int, one: str, few: str, many: str) -> str:
+    return f"{n} {plural_form(n, one, few, many)}"
 
 
 def _cell(value: object) -> str:
@@ -315,7 +319,7 @@ def _summary(state: RunState, confirmed: list[Finding]) -> str:
                      f"{len(state.markers)} / {judged}"])
     answered = [q for q in state.questions if q.answer]
     if answered:
-        resolved = sum(1 for f in state.findings if f.answer_decision == "resolved")
+        resolved = sum(1 for f in state.findings if f.resolved)
         rows += [["Вопросов с ответом автора", f"{len(answered)} из {len(state.questions)}"],
                  ["Находок снято по ответам автора", resolved]]
     out = [_table(["Показатель", "Значение"], rows)]
@@ -344,12 +348,14 @@ def _verdict(state: RunState, confirmed: list[Finding]) -> str:
     major = [f for f in confirmed if f.severity == Severity.MAJOR]
     if critical:
         n = plural(len(critical), "критичный дефект", "критичных дефекта", "критичных дефектов")
+        verb = plural_form(len(critical), "делает", "делают", "делают")
         head = (f"**Нет.** Начинать разработку и тестирование по этому документу нельзя: {n} "
-                "делают поведение системы неопределённым или противоречивым.")
+                f"{verb} поведение системы неопределённым или противоречивым.")
     elif major:
         n = plural(len(major), "существенный дефект", "существенных дефекта",
                    "существенных дефектов")
-        head = (f"**С оговорками.** Критичных дефектов нет, но {n} приведут к разному "
+        verb = plural_form(len(major), "приведёт", "приведут", "приведут")
+        head = (f"**С оговорками.** Критичных дефектов нет, но {n} {verb} к разному "
                 "пониманию требований; их стоит исправить до начала разработки.")
     else:
         head = ("**Да.** Существенных дефектов не найдено; незначительные замечания можно "
@@ -379,9 +385,8 @@ def _rejected(state: RunState) -> str:
 
 
 def render_markdown(p: Passport, state: RunState, plan: list[tuple[str, str]]) -> str:
-    confirmed = [f for f in state.findings if f.status == FindingStatus.CONFIRMED
-                 and f.answer_decision != "resolved"]
-    resolved = [f for f in state.findings if f.answer_decision == "resolved"]
+    confirmed = [f for f in state.findings if f.in_report]
+    resolved = [f for f in state.findings if f.resolved]
     checks_ran = set(state.completed) >= _CHECK_STAGES
     no_checks = _not_done("s5", state)
     blocks = {b.id: b for b in state.document.blocks} if state.document else {}

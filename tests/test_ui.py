@@ -71,6 +71,35 @@ def test_report_numbers_and_verdict_match_the_run_files(tmp_path):
     assert "text" not in report["intake"]  # the document is shown from blocks, once
 
 
+def test_findings_resolved_by_the_author_leave_the_ui_as_they_leave_the_report(tmp_path):
+    """The UI and report.md count findings by one rule (Finding.in_report)."""
+    from reqaudit.passport import Passport
+    from reqaudit.pipeline import STAGE_PLAN
+    from reqaudit.report.render import render_markdown
+    from reqaudit.stages.base import RunState
+
+    run_dir = full_run(tmp_path)
+    state = json.loads((run_dir / "state.json").read_text(encoding="utf-8"))
+    for f in state["findings"]:
+        if f["severity"] == "critical":
+            f.update(answer_decision="resolved", author_answer="Это описано в разделе 3.")
+    (run_dir / "state.json").write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    markdown = render_markdown(
+        Passport.model_validate_json((run_dir / "passport.json").read_text(encoding="utf-8")),
+        RunState.model_validate(state), STAGE_PLAN)
+
+    report = rundata.build_report(run_dir)
+    resolved = {f["id"] for f in report["resolved"]}
+    assert resolved and not resolved & {f["id"] for f in report["findings"]}
+    assert f"| Нарушений найдено | {len(report['findings'])} |" in markdown
+    verdict = report["verdict"]
+    assert f"**{verdict['word']}.** {verdict['text']}" in markdown
+    assert not set(verdict["first"]) & resolved
+    row = next(r for r in rundata.list_runs(tmp_path / "runs") if r["run_id"] == run_dir.name)
+    assert row["findings"] == len(report["findings"]) and row["critical"] == 0
+    assert report["editor"]["after"] >= len(report["findings"])
+
+
 def test_every_quote_is_located_inside_its_block(tmp_path):
     report = rundata.build_report(full_run(tmp_path))
     blocks = {b["id"]: b["text"] for b in report["document"]["blocks"]}
@@ -184,7 +213,7 @@ def test_cli_html_flag_writes_the_file_next_to_the_report(tmp_path):
 
 def test_server_lists_runs_and_serves_the_report(tmp_path):
     run_dir = full_run(tmp_path)
-    client = TestClient(create_app(tmp_path / "runs"))
+    client = TestClient(create_app(tmp_path / "runs"), base_url="http://127.0.0.1")
 
     assert "<!--REPORT_DATA-->" in client.get("/").text
     assert [r["run_id"] for r in client.get("/api/runs").json()["runs"]] == [run_dir.name]
@@ -200,7 +229,7 @@ def test_server_lists_runs_and_serves_the_report(tmp_path):
 def test_server_never_sends_keys_and_rejects_foreign_paths(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-secret-value")
     (tmp_path / "runs").mkdir()
-    client = TestClient(create_app(tmp_path / "runs"))
+    client = TestClient(create_app(tmp_path / "runs"), base_url="http://127.0.0.1")
 
     config = client.get("/api/config")
     missing = client.get("/api/runs/..%2F..%2Fsecrets/report")
@@ -213,9 +242,49 @@ def test_server_never_sends_keys_and_rejects_foreign_paths(tmp_path, monkeypatch
 
 
 def test_server_refuses_an_empty_upload_with_a_reason(tmp_path):
-    client = TestClient(create_app(tmp_path / "runs"))
+    client = TestClient(create_app(tmp_path / "runs"), base_url="http://127.0.0.1")
 
-    response = client.post("/api/runs?name=spec.md&profile=quick", content=b"")
+    response = client.post("/api/runs?name=spec.md&profile=quick", content=b"",
+                           headers={"Content-Type": "application/octet-stream"})
 
     assert response.status_code == 400
     assert "Файл пустой" in response.json()["error"]
+
+
+# --- the server spends the user's key: only its own page may start a run --------------
+
+UPLOAD = {"Content-Type": "application/octet-stream"}
+
+
+def test_server_answers_only_this_machine(tmp_path):
+    (tmp_path / "runs").mkdir()
+    app = create_app(tmp_path / "runs")
+    assert TestClient(app, base_url="http://127.0.0.1:8000").get("/api/runs").status_code == 200
+    assert TestClient(app, base_url="http://localhost:8000").get("/api/runs").status_code == 200
+    rebound = TestClient(app, base_url="http://attacker.example").get("/api/runs")
+    assert rebound.status_code == 421 and "127.0.0.1" in rebound.json()["error"]
+
+
+def test_upload_from_a_foreign_page_is_refused(tmp_path):
+    client = TestClient(create_app(tmp_path / "runs"), base_url="http://127.0.0.1:8000")
+    url = "/api/runs?name=spec.md&profile=quick"
+    as_form = client.post(url, content=b"x", headers={"Content-Type": "text/plain"})
+    foreign = client.post(url, content=b"x",
+                          headers={**UPLOAD, "Origin": "https://evil.example"})
+    assert as_form.status_code == 403 and foreign.status_code == 403
+    assert "только со страницы" in foreign.json()["error"]
+
+
+def test_too_big_upload_is_refused_before_reading(tmp_path, monkeypatch):
+    monkeypatch.setenv("REQAUDIT_MAX_INPUT_MB", "1")
+    client = TestClient(create_app(tmp_path / "runs"), base_url="http://127.0.0.1")
+    response = client.post("/api/runs?name=spec.md", content=b"x" * (2 * 1024 * 1024),
+                           headers=UPLOAD)
+    assert response.status_code == 413
+
+
+def test_network_address_needs_an_explicit_flag(capsys):
+    from reqaudit.ui.server import main
+
+    assert main(["--host", "0.0.0.0", "--no-browser"]) == 2
+    assert "--allow-network" in capsys.readouterr().err

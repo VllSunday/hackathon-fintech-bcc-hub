@@ -103,6 +103,15 @@ def create_app(runs_dir: Path | None = None,
     def index() -> HTMLResponse:
         return HTMLResponse(rundata.page(), headers={"Cache-Control": "no-store"})
 
+    @app.get("/fonts/{name}")
+    def font(name: str) -> Response:
+        # Only the files shipped next to the page; the name pattern keeps it out of paths.
+        path = rundata.font_path(name)
+        if path is None:
+            raise _problem(404, "Такого шрифта нет.")
+        return Response(path.read_bytes(), media_type="font/woff2",
+                        headers={"Cache-Control": "max-age=86400"})
+
     @app.get("/api/config")
     def config() -> dict:
         # Re-read on every call: the user may add a key to .env while the server runs.

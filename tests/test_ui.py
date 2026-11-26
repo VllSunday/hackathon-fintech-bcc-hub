@@ -188,7 +188,22 @@ def test_html_report_is_self_contained(tmp_path):
     # Nothing is loaded from elsewhere: no scripts, styles, fonts or images by address.
     page = html.replace(data.group(0), "")
     assert not re.search(r'(src|href)\s*=\s*"(?!data:|#)', page)
-    assert "@import" not in page and "url(" not in page
+    assert "@import" not in page
+    assert not re.search(r'url\((?!"data:font/woff2;base64,)', page)
+    # The fonts travel inside the file, every one the page declares.
+    declared = re.findall(r'url\("fonts/([a-z0-9-]+\.woff2)"\)', rundata.page())
+    assert declared and page.count('url("data:font/woff2;base64,') == len(declared)
+
+
+def test_server_serves_only_the_shipped_fonts(tmp_path):
+    client = TestClient(create_app(tmp_path / "runs"), base_url="http://127.0.0.1")
+    declared = re.findall(r'url\("fonts/([a-z0-9-]+\.woff2)"\)', rundata.page())
+
+    for name in declared:
+        response = client.get(f"/fonts/{name}")
+        assert response.status_code == 200 and response.headers["content-type"] == "font/woff2"
+    assert client.get("/fonts/..%2Findex.html").status_code == 404
+    assert client.get("/fonts/missing.woff2").status_code == 404
 
 
 def test_html_data_cannot_break_out_of_its_script_tag(tmp_path):

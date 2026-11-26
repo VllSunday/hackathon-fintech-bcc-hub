@@ -3,12 +3,18 @@
 Code only. The profile from s2 says what the document contains; this stage turns that
 into cells. Nothing here knows the organisers' template: a check is added because the
 document has the kind of content it needs, not because a section has a certain name.
+
+The assumption sensor: the cells rely on the structure s2 recognised. When that
+structure covers the document poorly (many blocks unclassified or skipped as "other",
+or almost no requirements in a long text), the plan adds a general cell that reads the
+whole document without relying on it, and the report says so. A familiar document gets
+exactly the plan it got before.
 """
 
 from __future__ import annotations
 
 from reqaudit.criteria import Criterion as C
-from reqaudit.models import Cell, CellKind, CellPlan, PartRole, Unit
+from reqaudit.models import Cell, CellKind, CellPlan, Coverage, PartRole, Unit
 from reqaudit.stages.base import RunContext, Stage
 
 BATCH_SIZE = 8
@@ -24,6 +30,8 @@ SET_CRITERIA = {
     CellKind.API_CONTRACT: [C.SET_CONSISTENT, C.COMPLETE, C.UNAMBIGUOUS, C.VERIFIABLE,
                             C.CONFORMING],
     CellKind.VALUES: [C.SET_CONSISTENT, C.UNAMBIGUOUS],
+    CellKind.GENERAL: [C.UNAMBIGUOUS, C.VERIFIABLE, C.COMPLETE, C.SINGULAR, C.FEASIBLE,
+                       C.SET_CONSISTENT, C.SET_COMPLETE, C.SET_COMPREHENSIBLE],
 }
 SET_TITLES = {
     CellKind.CONSISTENCY: "Непротиворечивость набора",
@@ -32,7 +40,31 @@ SET_TITLES = {
     CellKind.COMPLETENESS: "Полнота и документ целиком",
     CellKind.API_CONTRACT: "Спецификация интерфейса",
     CellKind.VALUES: "Сверка значений",
+    CellKind.GENERAL: "Общая проверка документа",
 }
+
+# Assumption sensor thresholds.
+UNCLASSIFIED_SHARE = 0.10  # blocks s2 neither put into a requirement nor skipped
+OTHER_SHARE = 0.25  # blocks skipped for no known reason
+FEW_UNITS = 3  # so few requirements ...
+LONG_TEXT = 15  # ... in a document with at least this many blocks
+
+
+def assumption_check(coverage: Coverage | None, units: list[Unit]) -> list[str]:
+    """Why the recognised structure may not fit the document; empty when it fits."""
+    if coverage is None or coverage.blocks_checked == 0:
+        return []
+    total = coverage.blocks_checked
+    reasons = []
+    unclassified = len(coverage.unclassified)
+    if unclassified >= 2 and unclassified / total >= UNCLASSIFIED_SHARE:
+        reasons.append(f"не классифицировано {len(coverage.unclassified)} из {total} блоков")
+    other = coverage.skipped_by_reason.get("other", 0)
+    if other >= 2 and other / total >= OTHER_SHARE:
+        reasons.append(f"{other} из {total} блоков пропущены без понятной причины")
+    if len(units) < FEW_UNITS and total >= LONG_TEXT:
+        reasons.append(f"в документе из {total} блоков выделено требований: {len(units)}")
+    return reasons
 
 
 def requirement_batches(units: list[Unit], size: int = BATCH_SIZE) -> list[list[Unit]]:
@@ -47,7 +79,8 @@ def requirement_batches(units: list[Unit], size: int = BATCH_SIZE) -> list[list[
 
 
 def plan_cells(ctx_units: list[Unit], has_child_spec: bool, has_acceptance: bool,
-               has_api: bool, has_facts: bool = False) -> CellPlan:
+               has_api: bool, has_facts: bool = False,
+               general_reasons: list[str] | None = None) -> CellPlan:
     cells: list[Cell] = []
     notes: list[str] = []
 
@@ -72,6 +105,12 @@ def plan_cells(ctx_units: list[Unit], has_child_spec: bool, has_acceptance: bool
         kinds.append(CellKind.API_CONTRACT)
     if has_facts:
         kinds.append(CellKind.VALUES)
+    if general_reasons:
+        kinds.append(CellKind.GENERAL)
+        notes.append("Структура документа распознана не полностью ("
+                     + "; ".join(general_reasons) + "). Добавлена общая проверка: документ "
+                     "читается целиком, без опоры на выделенные требования, включая блоки "
+                     "вне них.")
 
     for kind in kinds:
         cells.append(Cell(id=kind.value, kind=kind, title=SET_TITLES[kind],
@@ -93,8 +132,10 @@ class PlanStage(Stage):
             has_acceptance=profile.has_acceptance_criteria,
             has_api=profile.has_api_spec,
             has_facts=bool(ctx.state.facts and ctx.state.facts.facts),
+            general_reasons=assumption_check(ctx.state.coverage, ctx.state.units),
         )
         ctx.state.cells = plan.cells
+        ctx.state.plan_notes = plan.notes
         ctx.trace.event("plan_summary", stage=self.code,
                         cells=[c.id for c in plan.cells], notes=plan.notes)
         return plan

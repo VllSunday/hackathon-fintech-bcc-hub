@@ -18,6 +18,7 @@ _BLOCK_LINE = re.compile(r"^\[(b\d{4})\] (\w+): (.*)$", re.MULTILINE)
 _TO_CHECK = re.compile(r"^(R-\d{3}) \(.*?blocks ([b\d, ]+)\): «(.*)»$", re.MULTILINE)
 _REF = re.compile(r"^([FD]\d+): .*\n\s+title: (.*)$", re.MULTILINE)
 _CHECK = re.compile(r"^Check: (.*)\.$", re.MULTILINE)
+_OUTSIDE = re.compile(r"<blocks_outside_requirements>\n(.*?)\n</blocks_outside", re.DOTALL)
 
 Mutate = Callable[[dict, int], dict]
 
@@ -89,6 +90,13 @@ def honest_set_review(prompt: str) -> dict:
             findings.append(_finding("set_consistent", [],
                                      [{"block_id": b, "quote": t} for b, t in items],
                                      "Два требования противоречат друг другу", "critical"))
+    if check == "Общая проверка документа":
+        outside = _OUTSIDE.search(prompt)
+        first = outside.group(1).split()[0] if outside else None
+        text = {b: t for b, _, t in _BLOCK_LINE.findall(prompt)}.get(first)
+        if text:
+            findings.append(_finding("verifiable", [], [{"block_id": first, "quote": text}],
+                                     "Требование вне списка нельзя проверить"))
     return {"analysis": "Сравнены повторяющиеся параметры.", "findings": findings}
 
 

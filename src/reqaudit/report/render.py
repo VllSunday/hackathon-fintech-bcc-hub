@@ -217,6 +217,9 @@ def _segmentation(state: RunState) -> str:
     if coverage.dropped_units:
         out += ["", "Отброшены как не подтверждённые текстом документа:", ""]
         out += [f"- {reason}" for reason in coverage.dropped_units]
+    if state.plan_notes:
+        out += ["", "Решения при планировании проверок:", ""]
+        out += [f"- {note}" for note in state.plan_notes]
     return "\n".join(out)
 
 

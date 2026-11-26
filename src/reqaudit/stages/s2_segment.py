@@ -96,13 +96,13 @@ def unit_problems(draft: UnitDraft, by_id: dict[str, Block]) -> list[str]:
     return problems
 
 
-def _needed(window: list[Block]) -> list[str]:
+def needed_blocks(window: list[Block]) -> list[str]:
     return [b.id for b in visible(window) if b.kind not in _STRUCTURAL]
 
 
 def segment_check(window: list[Block]) -> Check:
     by_id = {b.id: b for b in visible(window)}
-    needed = _needed(window)
+    needed = needed_blocks(window)
 
     def check(answer: SegmentAnswer) -> str | None:
         complaints = []
@@ -214,7 +214,7 @@ def assemble(document: DocumentIR, profile: DocumentProfile,
     needed: list[str] = []
     for window, answer in answers:
         by_id = {b.id: b for b in visible(window)}
-        needed.extend(_needed(window))
+        needed.extend(needed_blocks(window))
         for draft in answer.units:
             if isinstance(draft.kind, SkipReason):
                 for block_id in draft.block_ids:

@@ -262,6 +262,7 @@ class CellKind(StrEnum):
     COMPLETENESS = "completeness"
     API_CONTRACT = "api_contract"
     VALUES = "values"
+    GENERAL = "general"
 
 
 class Cell(BaseModel):

@@ -35,6 +35,7 @@ from reqaudit.stages.review_common import (
     profile_view,
     requirement_index,
 )
+from reqaudit.stages.s2_segment import needed_blocks
 from reqaudit.stages.s3_facts import fact_table_view
 
 ROLE = "judge"
@@ -147,6 +148,17 @@ def _instructions(cell: Cell, has_parent_child: bool,
                                 scope_note=scope_note)
 
 
+def _outside_view(state) -> str:
+    """Visible text blocks that no requirement covers; the general cell reads them first."""
+    covered = {b for u in state.units for b in u.block_ids}
+    needed = set(needed_blocks(state.document.blocks))
+    unclassified = set(state.coverage.unclassified) if state.coverage else set()
+    lines = [f"{b.id}" + (" (не классифицирован)" if b.id in unclassified else "")
+             for b in state.document.blocks if b.id in needed and b.id not in covered]
+    listed = "\n".join(lines) or "нет"
+    return f"<blocks_outside_requirements>\n{listed}\n</blocks_outside_requirements>"
+
+
 def _prompt(ctx: RunContext, cell: Cell, markers: list[MarkerHit] | None = None) -> str:
     state = ctx.state
     units = {u.id: u for u in state.units}
@@ -157,6 +169,8 @@ def _prompt(ctx: RunContext, cell: Cell, markers: list[MarkerHit] | None = None)
              requirement_index(state.units)]
     if cell.kind == CellKind.VALUES and state.facts is not None:
         parts.append(fact_table_view(state.facts))
+    if cell.kind == CellKind.GENERAL:
+        parts.append(_outside_view(state))
     if cell.kind == CellKind.REQUIREMENTS:
         listed = "\n".join(
             f"{u.id} ({u.kind.value}, {u.doc_label or 'без номера'}, blocks "

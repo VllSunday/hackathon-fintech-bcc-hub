@@ -18,19 +18,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from reqaudit.errors import InputError
 from reqaudit.llm.client import LLMError
 from reqaudit.models import BlockKind, BlockSource, DocumentIR, ReadIssue, SourceFormat
 from reqaudit.reading import office, vision
 from reqaudit.reading.assemble import Draft, finalize
-from reqaudit.reading.pdf import PdfReading, read_pdf
+from reqaudit.reading.pdf import PdfReading, read_pdf, render_pages
 from reqaudit.reading.text import read_text_document
 from reqaudit.stages.base import RunContext, Stage
 
 _LOSSY = 0.85  # below this word coverage the text layer is taken as lossy
-
-
-class ReaderNotImplemented(Exception):
-    pass
 
 
 def _context_around(drafts: list[Draft], index: int) -> str:
@@ -84,7 +81,8 @@ class ReadStage(Stage):
         elif fmt == SourceFormat.PDF:
             document = self._pdf(ctx, path)
         else:
-            raise ReaderNotImplemented(f"Чтение формата {fmt.value} не поддерживается.")
+            raise InputError("format_unsupported",
+                             f"Чтение формата {fmt.value} не поддерживается.")
 
         ctx.state.document = document
         ctx.trace.event("read_summary", stage=self.code, blocks=len(document.blocks),
@@ -167,13 +165,8 @@ class ReadStage(Stage):
         need = {r.page: r.reason for r in reading.pages if r.needs_vision}
         pages = dict(reading.page_pngs)
         if settings.vision == "all":
-            import pymupdf
-            doc = pymupdf.open(path)
-            if doc.needs_pass:
-                doc.authenticate("")
-            for report in reading.pages:
-                if report.page not in pages and report.chars > 0:
-                    pages[report.page] = doc[report.page - 1].get_pixmap(dpi=150).tobytes("png")
+            pages |= render_pages(path, [r.page for r in reading.pages
+                                         if r.page not in pages and r.chars > 0])
         if len(pages) > settings.max_vision_pages:
             keep = sorted(pages)[:settings.max_vision_pages]
             warnings.append(f"Зрением прочитаны первые {len(keep)} страниц из {len(pages)}.")

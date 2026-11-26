@@ -85,6 +85,13 @@ def answers_path_for(output_path: Path) -> Path:
     return output_path.with_name(output_path.stem + ".answers.md")
 
 
+def _record_failure(state: RunState, trace: Trace, stage: str, kind: str, message: str,
+                    **extra: str) -> None:
+    """A stage that stopped: its reason goes into the state (and the report) and the trace."""
+    state.errors.append(StageError(stage=stage, kind=kind, message=message))
+    trace.event("stage_error", stage=stage, kind=kind, message=message, **extra)
+
+
 def run_pipeline(input_path: Path, output_path: Path, settings: Settings,
                  model_factory: ModelFactory | None = None,
                  answers: dict[str, str] | None = None,
@@ -111,7 +118,7 @@ def run_pipeline(input_path: Path, output_path: Path, settings: Settings,
     exit_code = EXIT_OK
 
     for stage in IMPLEMENTED:
-        if status == "completed" and not stage.applies(ctx):
+        if not stage.applies(ctx):
             state.skipped.append(stage.code)
             trace.event("stage_skipped", stage=stage.code)
             continue
@@ -120,22 +127,16 @@ def run_pipeline(input_path: Path, output_path: Path, settings: Settings,
         try:
             artifact = stage.run(ctx)
         except InputError as err:
-            state.errors.append(StageError(stage=stage.code, kind=err.code, message=err.message))
-            trace.event("stage_error", stage=stage.code, kind=err.code, message=err.message)
+            _record_failure(state, trace, stage.code, err.code, err.message)
             status, exit_code = "input_rejected", EXIT_INPUT_ERROR
             break
         except LLMError as err:
-            state.errors.append(StageError(stage=stage.code, kind=type(err).__name__,
-                                           message=err.message))
-            trace.event("stage_error", stage=stage.code, kind=type(err).__name__,
-                        message=err.message)
+            _record_failure(state, trace, stage.code, type(err).__name__, err.message)
             status, exit_code = "partial", EXIT_PARTIAL
             break
         except Exception as err:  # noqa: BLE001 - the report must be written regardless
-            state.errors.append(StageError(stage=stage.code, kind=type(err).__name__,
-                                           message=str(err)))
-            trace.event("stage_error", stage=stage.code, kind=type(err).__name__,
-                        message=str(err), traceback=traceback.format_exc())
+            _record_failure(state, trace, stage.code, type(err).__name__, str(err),
+                            traceback=traceback.format_exc())
             status, exit_code = "partial", EXIT_PARTIAL
             break
         (run_dir / stage.artifact).write_text(
@@ -152,14 +153,8 @@ def run_pipeline(input_path: Path, output_path: Path, settings: Settings,
         # All stages ran, but some checks inside them did not: the report is incomplete.
         status, exit_code = "checks_incomplete", EXIT_PARTIAL
     passport.status = status
-    passport.llm_calls = llm.requests
-    passport.llm_cache_hits = llm.cache_hits
-    passport.llm_input_tokens = llm.input_tokens
-    passport.llm_cached_tokens = llm.cached_tokens
-    passport.llm_output_tokens = llm.output_tokens
-    passport.llm_cost_usd = round(llm.cost_usd, 4)
-    passport.llm_unpriced_calls = llm.unpriced_calls
-    passport.models_used = list(llm.models_used)
+    for name, value in llm.usage().items():
+        setattr(passport, name, value)
     passport.finished_at = datetime.now().astimezone().isoformat(timespec="seconds")
 
     # s9 is the report itself; it runs on every outcome.

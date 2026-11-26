@@ -1,9 +1,9 @@
 """One place for every model call: cache, trace, budget, throttling, retries and fallback.
 
-Model ids use our own format `provider:model`, where provider is gemini, openai,
-anthropic or ollama. A role maps to an ordered chain of model ids; the first one that
-answers wins. The library underneath is PydanticAI, hidden behind this class so it can
-be replaced without touching the stages.
+Model ids use our own format `provider:model`, where provider is gemini (AI Studio),
+vertex (Gemini on Google Cloud), openai, anthropic or ollama. A role maps to an ordered
+chain of model ids; the first one that answers wins. The library underneath is
+PydanticAI, hidden behind this class so it can be replaced without touching the stages.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from pydantic_ai.models import Model  # noqa: E402
 from pydantic_ai.models.google import GoogleModel  # noqa: E402
 from pydantic_ai.providers.google import GoogleProvider  # noqa: E402
 
-from reqaudit.config import PROVIDER_KEYS, Settings, vertex_key  # noqa: E402
+from reqaudit.config import Settings, provider_key  # noqa: E402
 from reqaudit.llm.cache import DiskCache, cache_key  # noqa: E402
 from reqaudit.llm.checks import Check  # noqa: E402
 from reqaudit.llm.pricing import price_usd  # noqa: E402
@@ -73,15 +73,11 @@ def default_model(model_id: str) -> Model | str:
     """What PydanticAI needs for one of our model ids: a model object or its own id."""
     provider, _, name = model_id.partition(":")
     if provider == "vertex" and name:
-        return GoogleModel(name, provider=_vertex_provider(vertex_key() or _vertex_env_key()))
+        found = provider_key("vertex")
+        if found is None:
+            raise LLMUnavailable("Для vertex:… задайте VERTEX_API_KEY (ключ Google Cloud).")
+        return GoogleModel(name, provider=_vertex_provider(found[1]))
     return to_library_model_id(model_id)
-
-
-def _vertex_env_key() -> str:
-    for env in PROVIDER_KEYS["vertex"]:
-        if value := os.environ.get(env, "").strip():
-            return value
-    raise LLMUnavailable("Для vertex:… задайте VERTEX_API_KEY (ключ Google Cloud).")
 
 
 def _vertex_provider(api_key: str) -> GoogleProvider:
@@ -300,6 +296,13 @@ class LLMClient:
                 f"Исчерпан бюджет запросов к модели на прогон: {self.settings.max_llm_calls}. "
                 "Поднимите REQAUDIT_MAX_LLM_CALLS или повторите прогон: готовые ответы "
                 "возьмутся из кэша.")
+
+    def usage(self) -> dict[str, object]:
+        """Spend of this run under the passport's field names."""
+        return {"llm_calls": self.requests, "llm_cache_hits": self.cache_hits,
+                "llm_input_tokens": self.input_tokens, "llm_cached_tokens": self.cached_tokens,
+                "llm_output_tokens": self.output_tokens, "llm_cost_usd": round(self.cost_usd, 4),
+                "llm_unpriced_calls": self.unpriced_calls, "models_used": list(self.models_used)}
 
     async def _throttle(self, model_id: str) -> None:
         rpm = self.settings.requests_per_minute

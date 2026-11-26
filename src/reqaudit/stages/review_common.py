@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, field_validator
 
@@ -50,8 +50,7 @@ class CandidateDraft(BaseModel):
     @field_validator("question_to", mode="before")
     @classmethod
     def _unknown_addressee_is_none(cls, value: object) -> object:
-        allowed = {"analyst", "product_owner", "architect", "developer", "tester", "security"}
-        return value if value in allowed else None
+        return value if value in get_args(QuestionTo) else None
 
 
 # --- prompt context ---------------------------------------------------------------------

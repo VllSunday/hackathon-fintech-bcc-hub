@@ -34,13 +34,21 @@ AUTO_MODELS = ("openai:gpt-5.5", "gemini:gemini-3.5-flash-lite")
 AUTO_VERTEX_MODELS = ("vertex:gemini-3.1-pro-preview", "vertex:gemini-3.5-flash")
 
 
+def provider_key(provider: str) -> tuple[str, str] | None:
+    """(variable name, key) of the first key set for the provider, or None."""
+    for name in PROVIDER_KEYS.get(provider, ()):
+        if value := os.environ.get(name, "").strip():
+            return name, value
+    return None
+
+
 def vertex_key() -> str | None:
     """The Google key, if it is a Google Cloud (Vertex AI) key rather than an AI Studio one."""
-    for name in PROVIDER_KEYS["vertex"]:
-        value = os.environ.get(name, "").strip()
-        if value:
-            return value if name == "VERTEX_API_KEY" or value.startswith("AQ.") else None
-    return None
+    found = provider_key("vertex")
+    if found is None:
+        return None
+    name, value = found
+    return value if name == "VERTEX_API_KEY" or value.startswith("AQ.") else None
 
 
 @dataclass(frozen=True)

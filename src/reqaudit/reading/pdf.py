@@ -90,6 +90,17 @@ def open_pdf(path: Path) -> pymupdf.Document:
     return doc
 
 
+PAGE_DPI = 150  # resolution of page and picture images sent to vision
+
+
+def render_pages(path: Path, pages: list[int]) -> dict[int, bytes]:
+    """PNG images of the given pages (1-based), for reading them by vision."""
+    if not pages:
+        return {}
+    doc = open_pdf(path)
+    return {n: doc[n - 1].get_pixmap(dpi=PAGE_DPI).tobytes("png") for n in pages}
+
+
 def _clean_line(text: str) -> str:
     # A soft hyphen inside a line is a drawn hyphen; at the line end it marks a word break.
     return text.replace("­", "-").replace(" ", " ")
@@ -148,7 +159,7 @@ def _hidden_reason(span: dict, page_rect: pymupdf.Rect) -> str | None:
     return None
 
 
-def self_kind(text: str, seg: dict, level_of: dict[float, int],
+def _block_kind(text: str, seg: dict, level_of: dict[float, int],
               heading_levels: int) -> tuple[BlockKind, int | None]:
     """Block kind from font size and style of one text segment."""
     sizes, flags = seg["sizes"], seg["flags"]
@@ -215,7 +226,7 @@ def read_pdf(path: Path) -> PdfReading:
                 rect &= page.rect
                 if (min(rect.width, rect.height) >= _MIN_IMAGE_SIDE
                         and rect.width * rect.height >= _MIN_IMAGE_SHARE * area):
-                    png = page.get_pixmap(clip=rect, dpi=150).tobytes("png")
+                    png = page.get_pixmap(clip=rect, dpi=PAGE_DPI).tobytes("png")
                     images.append(PageImage(page=number, order=rect.y0, png=png))
 
     body = body_sizes.most_common(1)[0][0] if body_sizes else 10.0
@@ -267,7 +278,7 @@ def read_pdf(path: Path) -> PdfReading:
                 text = _join_lines(seg["lines"])
                 visible_chars += len(text)
                 page_text.append(text)
-                kind, level = self_kind(text, seg, level_of, len(heading_sizes))
+                kind, level = _block_kind(text, seg, level_of, len(heading_sizes))
                 edge = None
                 if (bbox.y1 < page_rect.height * _EDGE
                         or bbox.y0 > page_rect.height * (1 - _EDGE)):
@@ -296,7 +307,7 @@ def read_pdf(path: Path) -> PdfReading:
 
     for report in pages:
         if report.needs_vision:
-            page_pngs[report.page] = doc[report.page - 1].get_pixmap(dpi=150).tobytes("png")
+            page_pngs[report.page] = doc[report.page - 1].get_pixmap(dpi=PAGE_DPI).tobytes("png")
 
     items.sort(key=lambda i: (i.page, i.y, i.x))
     for item in items:

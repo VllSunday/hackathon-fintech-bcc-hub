@@ -23,7 +23,6 @@ import yaml
 from reqaudit.evidence import match_key
 
 _WORD = re.compile(r"[\wё]+", re.IGNORECASE)
-SEVERITIES = ("critical", "major", "minor")
 
 
 @dataclass
@@ -125,9 +124,15 @@ def _score(gold: GoldDefect, finding: dict, places: dict[str, set[str]] | None =
     return covered * 10 + same_criterion * 3 + tight * 2
 
 
+def _in_report(finding: dict) -> bool:
+    """Finding.in_report on saved JSON: confirmed and not resolved by the author's answer."""
+    return (finding.get("status", "confirmed") == "confirmed"
+            and finding.get("answer_decision") != "resolved")
+
+
 def score_run(gold: list[GoldDefect], run_dir: Path) -> RunScore:
     state = json.loads((run_dir / "state.json").read_text(encoding="utf-8"))
-    findings = [f for f in state.get("findings", []) if f.get("answer_decision") != "resolved"]
+    findings = [f for f in state.get("findings", []) if _in_report(f)]
     blocks = (state.get("document") or {}).get("blocks", [])
     places = {q: _blocks_of(q, blocks) for g in gold for q in g.quotes}
     pairs = sorted(((s, g.id, f["id"]) for g in gold for f in findings

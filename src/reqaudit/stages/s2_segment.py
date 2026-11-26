@@ -287,7 +287,6 @@ def assemble(document: DocumentIR, profile: DocumentProfile,
         if skip.block_id not in in_units:
             by_reason[skip.reason.value] = by_reason.get(skip.reason.value, 0) + 1
 
-    by_block = {b.id: b for b in document.blocks}
     obligations = {}
     for block_id in needed:
         if block_id in in_units:
@@ -295,9 +294,9 @@ def assemble(document: DocumentIR, profile: DocumentProfile,
         skip = skipped.get(block_id)
         if skip is not None and skip.reason not in _WEAK_SKIPS:
             continue
-        if by_block[block_id].kind == BlockKind.CODE:  # samples, not statements
+        if by_id_all[block_id].kind == BlockKind.CODE:  # samples, not statements
             continue
-        if word := obligation_word(by_block[block_id].text):
+        if word := obligation_word(by_id_all[block_id].text):
             obligations[block_id] = word
 
     coverage = Coverage(

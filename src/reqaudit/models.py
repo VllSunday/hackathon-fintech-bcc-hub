@@ -367,7 +367,8 @@ class Finding(BaseModel):
     @property
     def in_report(self) -> bool:
         """Counted as a defect: confirmed by review and not resolved by the author's answer.
-        The Markdown report, the web UI and the eval stand all use this one rule."""
+        The report and the web UI use it through report.views; the eval stand applies the
+        same rule to saved JSON."""
         return self.status == FindingStatus.CONFIRMED and not self.resolved
 
 

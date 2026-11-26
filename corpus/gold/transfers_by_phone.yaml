@@ -23,7 +23,7 @@ defects:
   - id: G-03
     scope: pair
     criterion: set_consistent
-    severity: major
+    severity: critical
     kind: cross_section
     quotes:
       - "Отправитель может добавить к переводу комментарий длиной до 140 символов. Комментарий необязателен."
@@ -49,7 +49,7 @@ defects:
   - id: G-06
     scope: pair
     criterion: set_complete
-    severity: major
+    severity: critical
     kind: cross_section
     quotes:
       - "До подтверждения перевода экран показывает сумму комиссии и остаток дневного лимита."
@@ -91,7 +91,7 @@ defects:
   - id: G-11
     scope: requirement
     criterion: complete
-    severity: major
+    severity: critical
     kind: local
     quotes:
       - "Максимальная комиссия за одну операцию | TBD (уточняется у тарифного комитета)"
@@ -107,7 +107,7 @@ defects:
   - id: G-13
     scope: pair
     criterion: correct
-    severity: major
+    severity: critical
     kind: cross_section
     quotes:
       - "С начала месяца переведено 450 000 ₸ | Перевести 100 000 ₸ | Комиссия 1 000 ₸"
@@ -117,7 +117,7 @@ defects:
   - id: G-14
     scope: pair
     criterion: set_consistent
-    severity: major
+    severity: critical
     kind: cross_section
     quotes:
       - "Отправитель может выполнить не более 20 переводов по номеру телефона в сутки."
@@ -126,7 +126,7 @@ defects:
   - id: G-15
     scope: pair
     criterion: set_consistent
-    severity: major
+    severity: critical
     kind: cross_section
     quotes:
       - "показывает имя получателя и первую букву фамилии, например «Айгерим С.»"
@@ -147,7 +147,7 @@ defects:
     adjudicated: true
     scope: set
     criterion: set_complete
-    severity: major
+    severity: critical
     kind: missing
     quotes:
       - "Перевод по номеру телефона доступен клиенту — физическому лицу с активным текущим счётом в тенге, вошедшему в мобильное приложение."
@@ -165,7 +165,7 @@ defects:
     adjudicated: true
     scope: requirement
     criterion: complete
-    severity: major
+    severity: critical
     kind: missing
     quotes:
       - "Получателем может быть только клиент банка с активным текущим счётом в тенге, у которого этот номер подтверждён в профиле."
@@ -183,7 +183,7 @@ defects:
     adjudicated: true
     scope: requirement
     criterion: complete
-    severity: major
+    severity: critical
     kind: missing
     quotes:
       - "С части суммы сверх бесплатного объёма взимается комиссия по ставке из таблицы «Лимиты и тарифы»"
@@ -202,11 +202,13 @@ defects:
     adjudicated: true
     scope: requirement
     criterion: complete
-    severity: minor
+    severity: major
     kind: missing
     quotes:
       - "Выполненный перевод отображается в истории операций отправителя и получателя со статусом «Выполнен», суммой и комментарием."
     note: Не сказано, как в истории показывается контрагент, при том что Ф-3 ограничивает показ ФИО (подтверждено независимой проверкой).
+# Severity of G-03, G-06, G-11, G-13, G-14, G-15, A-01, A-05, A-07, A-09 revised 2026-11-26: two
+# independent raters (document only, same scale) agreed with each other and against the original level.
 traps:
   - id: T-01
     quotes:

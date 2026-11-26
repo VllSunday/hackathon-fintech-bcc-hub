@@ -137,3 +137,17 @@ def test_thinking_depth_is_set_per_role_and_kept_out_of_other_roles(tmp_path):
     (tmp_path / "other").mkdir()
     client_for(tmp_path / "other", model, thinking={"reviewer": "high"}).many([request("b")])
     assert '"thinking": null' in (tmp_path / "other" / "trace.jsonl").read_text(encoding="utf-8")
+
+
+def test_an_installed_agent_reports_the_commit_it_was_installed_from(monkeypatch):
+    """`uvx --from git+…` leaves no checkout; the commit comes from direct_url.json."""
+    from reqaudit import passport
+
+    class Dist:
+        def read_text(self, name):
+            assert name == "direct_url.json"
+            return '{"url": "https://example.org/repo", "vcs_info": {"vcs": "git", "commit_id": "abc123"}}'
+
+    monkeypatch.setattr(passport, "_git", lambda *args: None)
+    monkeypatch.setattr(passport.metadata, "distribution", lambda name: Dist())
+    assert passport.git_state() == ("abc123", None)

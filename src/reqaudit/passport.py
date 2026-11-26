@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import subprocess
 from datetime import datetime
+from importlib import metadata
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -53,16 +55,31 @@ def _git(*args: str) -> str | None:
     return out.stdout.strip()
 
 
+def installed_commit() -> str | None:
+    """The commit pip or uv installed the agent from (`uvx --from git+…`), per PEP 610."""
+    try:
+        text = metadata.distribution("reqaudit").read_text("direct_url.json")
+    except metadata.PackageNotFoundError:
+        return None
+    try:
+        info = json.loads(text or "{}").get("vcs_info") or {}
+    except json.JSONDecodeError:
+        return None
+    return info.get("commit_id") or None
+
+
 def git_state() -> tuple[str | None, bool | None]:
     """Commit and dirty flag of the agent's own checkout.
 
-    Falls back to REQAUDIT_GIT_COMMIT, which a Docker build can bake in.
+    An agent installed from the repository (`uvx --from git+…`) has no checkout: its commit
+    is read from the installation record. REQAUDIT_GIT_COMMIT, which a Docker build can bake
+    in, is the last resort.
     """
     commit = _git("rev-parse", "HEAD")
     if commit:
         status = _git("status", "--porcelain", "--untracked-files=no")
         return commit, bool(status)
-    return os.environ.get("REQAUDIT_GIT_COMMIT") or None, None
+    return installed_commit() or os.environ.get("REQAUDIT_GIT_COMMIT") or None, None
 
 
 def start(document_name: str, profile: str, models: dict[str, list[str]], run_id: str,

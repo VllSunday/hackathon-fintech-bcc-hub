@@ -48,11 +48,17 @@ from reqaudit.models import (
     Unit,
     UnitKind,
 )
-from reqaudit.reading.render import LEGEND, render_blocks, render_outline, split_windows, visible
+from reqaudit.reading.render import (
+    LEGEND,
+    needed_blocks,
+    render_blocks,
+    render_outline,
+    split_windows,
+    visible,
+)
 from reqaudit.stages.base import RunContext, Stage
 
 ROLE = "analyst"
-_STRUCTURAL = {BlockKind.HEADING, BlockKind.TABLE, BlockKind.HEADER_FOOTER}
 _MAX_COMPLAINTS = 25
 
 
@@ -119,10 +125,6 @@ def obligation_word(text: str) -> str | None:
     """The first explicit obligation word in the text, if any."""
     match = _OBLIGATION.search(text)
     return match.group(0) if match else None
-
-
-def needed_blocks(window: list[Block]) -> list[str]:
-    return [b.id for b in visible(window) if b.kind not in _STRUCTURAL]
 
 
 def segment_check(window: list[Block]) -> Check:

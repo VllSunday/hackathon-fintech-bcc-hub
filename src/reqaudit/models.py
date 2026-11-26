@@ -14,7 +14,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
 
-from reqaudit.criteria import Criterion
+from reqaudit.criteria import CRITERIA, Criterion, Level
 
 # --- s0: intake -------------------------------------------------------------------------
 
@@ -89,6 +89,15 @@ class Block(BaseModel):
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     hidden: bool = Field(default=False, description="Invisible in the rendered document.")
     table_header: list[str] | None = None
+
+    @property
+    def doubtful(self) -> bool:
+        """Read from an image, and two readings of the scan disagree here."""
+        return self.source == BlockSource.VLM and self.confidence <= DOUBT_CONFIDENCE
+
+
+# Confidence of scan text where two independent readings differ (reading/vision.py).
+DOUBT_CONFIDENCE = 0.6
 
 
 class ReadIssue(BaseModel):
@@ -302,6 +311,14 @@ class Severity(StrEnum):
     MAJOR = "major"
     MINOR = "minor"
 
+    @property
+    def rank(self) -> int:
+        """0 for the most severe: sort findings by it."""
+        return _SEVERITY_RANK[self]
+
+
+_SEVERITY_RANK = {Severity.CRITICAL: 0, Severity.MAJOR: 1, Severity.MINOR: 2}
+
 
 class FindingStatus(StrEnum):
     CANDIDATE = "candidate"
@@ -384,3 +401,45 @@ class Question(BaseModel):
     priority: int = Field(ge=1, le=3, description="1 is the most urgent.")
     blocks_development: bool = False
     answer: str | None = Field(default=None, description="The author's answer, if given.")
+
+
+def scope_of(criterion: Criterion, unit_ids: list[str]) -> Scope:
+    """What a finding is about: one requirement, a pair, the set, or the document."""
+    level = CRITERIA[criterion].level
+    if level == Level.REQUIREMENT:
+        return Scope.REQUIREMENT
+    if level == Level.DOCUMENT:
+        return Scope.DOCUMENT
+    return Scope.PAIR if criterion == Criterion.SET_CONSISTENT and len(unit_ids) == 2 \
+        else Scope.SET
+
+
+# --- run state --------------------------------------------------------------------------
+
+
+class StageError(BaseModel):
+    stage: str
+    kind: str
+    message: str
+
+
+class RunState(BaseModel):
+    """Everything the stages have produced so far. Serialised to runs/<id>/state.json."""
+
+    intake: IntakeResult | None = None
+    document: DocumentIR | None = None
+    profile: DocumentProfile | None = None
+    units: list[Unit] = Field(default_factory=list)
+    coverage: Coverage | None = None
+    facts: FactTable | None = None
+    cells: list[Cell] = Field(default_factory=list)
+    plan_notes: list[str] = Field(default_factory=list)
+    candidates: list[Finding] = Field(default_factory=list)
+    markers: list[MarkerRecord] = Field(default_factory=list)
+    findings: list[Finding] = Field(default_factory=list)
+    rejected: list[Finding] = Field(default_factory=list)
+    check_failures: list[CheckFailure] = Field(default_factory=list)
+    questions: list[Question] = Field(default_factory=list)
+    completed: list[str] = Field(default_factory=list)
+    skipped: list[str] = Field(default_factory=list)
+    errors: list[StageError] = Field(default_factory=list)

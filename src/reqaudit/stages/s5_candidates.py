@@ -24,19 +24,18 @@ from reqaudit.models import (
     Finding,
     FindingStatus,
     MarkerRecord,
-    Scope,
+    scope_of,
 )
-from reqaudit.reading.render import LEGEND
+from reqaudit.reading.render import LEGEND, needed_blocks
 from reqaudit.stages.base import RunContext, Stage
 from reqaudit.stages.review_common import (
     CandidateDraft,
     document_view,
     evidence_problem,
+    fact_table_view,
     profile_view,
     requirement_index,
 )
-from reqaudit.stages.s2_segment import needed_blocks
-from reqaudit.stages.s3_facts import fact_table_view
 
 ROLE = "judge"
 _MAX_COMPLAINTS = 25
@@ -204,10 +203,9 @@ def _to_findings(cell: Cell, answer: RequirementsAnswer | SetAnswer) -> tuple[li
         except ValueError:
             dropped += 1
             continue
-        level = criteria.CRITERIA[criterion].level.value
         findings.append(Finding(
             id=f"{cell.id}#{n}",
-            scope=Scope.REQUIREMENT if level == "requirement" else Scope.SET,
+            scope=scope_of(criterion, list(draft.unit_ids)),
             criterion=criterion,
             unit_ids=list(draft.unit_ids),
             title=draft.title.strip(),

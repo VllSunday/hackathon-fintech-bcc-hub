@@ -86,3 +86,12 @@ def split_windows(blocks: list[Block], max_chars: int) -> list[list[Block]]:
     if current:
         windows.append(current)
     return windows
+
+
+# Blocks that never need a decision: headings, whole-table containers, running headers.
+_STRUCTURAL = {BlockKind.HEADING, BlockKind.TABLE, BlockKind.HEADER_FOOTER}
+
+
+def needed_blocks(blocks: list[Block]) -> list[str]:
+    """Visible blocks that must be either part of a requirement or skipped with a reason."""
+    return [b.id for b in visible(blocks) if b.kind not in _STRUCTURAL]

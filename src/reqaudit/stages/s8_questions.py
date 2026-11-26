@@ -19,7 +19,6 @@ from reqaudit.models import CheckFailure, Finding, Question, Severity
 from reqaudit.reading.render import LEGEND
 from reqaudit.stages.base import RunContext, Stage
 from reqaudit.stages.review_common import QuestionTo, document_view
-from reqaudit.stages.s7_gates import SEVERITY_ORDER
 
 ADDRESSEE_RU = {
     "analyst": "аналитик",
@@ -130,7 +129,7 @@ def apply_groups(findings: list[Finding],
                         for x in evidence):
                     evidence.append(e)
         result[keep.id] = keep.model_copy(update={
-            "severity": min((m.severity for m in members), key=SEVERITY_ORDER.get),
+            "severity": min((m.severity for m in members), key=lambda s: s.rank),
             "unit_ids": sorted({u for m in members for u in m.unit_ids}),
             "evidence": evidence,
             "trail": [*keep.trail, *(f"merged:{m.id}" for m in members if m.id != keep.id)],
@@ -142,7 +141,7 @@ def apply_groups(findings: list[Finding],
 
 
 def renumber(findings: list[Finding]) -> tuple[list[Finding], dict[str, str]]:
-    ordered = sorted(findings, key=lambda f: SEVERITY_ORDER[f.severity])
+    ordered = sorted(findings, key=lambda f: f.severity.rank)
     mapping = {f.id: f"D-{n:03d}" for n, f in enumerate(ordered, 1)}
     return [f.model_copy(update={"id": mapping[f.id]}) for f in ordered], mapping
 
@@ -155,7 +154,7 @@ def questions_from(drafts: list[tuple[str, list[str], str | None]],
         linked = [by_id[i] for i in dict.fromkeys(ids) if i in by_id]
         if not linked or not text.strip():
             continue
-        worst = min((f.severity for f in linked), key=SEVERITY_ORDER.get)
+        worst = min((f.severity for f in linked), key=lambda s: s.rank)
         built.append(Question(id="", finding_ids=[f.id for f in linked], text=text.strip(),
                               addressee=ADDRESSEE_RU.get(to or "", "аналитик"),
                               priority=_PRIORITY[worst],

@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
 from reqaudit.criteria import Criterion
 from reqaudit.evidence import MIN_KEY_LENGTH, has_ellipsis, locate, match_key, quote_in
-from reqaudit.models import Block, DocumentIR, DocumentProfile, Evidence, Severity, Unit
+from reqaudit.models import (
+    Block,
+    DocumentIR,
+    DocumentProfile,
+    Evidence,
+    Fact,
+    FactTable,
+    Severity,
+    Unit,
+)
 from reqaudit.reading.render import render_blocks, render_outline
 
 QuestionTo = Literal["analyst", "product_owner", "architect", "developer", "tester", "security"]
@@ -103,3 +113,20 @@ def verify_evidence(draft: EvidenceDraft, blocks: dict[str, Block]) -> Evidence 
     if found:
         return Evidence(block_id=found[0], quote=draft.quote.strip(), verified=True)
     return None
+
+
+def fact_table_view(table: FactTable) -> str:
+    """Facts grouped by entity, then the conflict candidates, for the values reviewer."""
+    by_entity: dict[str, list[Fact]] = defaultdict(list)
+    for f in table.facts:
+        by_entity[f.entity].append(f)
+    lines = []
+    for entity, facts in by_entity.items():
+        lines.append(f"{entity} — {facts[0].entity_label}")
+        for f in facts:
+            cond = f" [условие: {f.condition}]" if f.condition else ""
+            lines.append(f"  {f.id} {f.attribute} = {f.value}{cond} · [{f.block_id}] «{f.quote}»")
+    conflicts = "\n".join(f"- {c.kind}: {c.summary} (facts {', '.join(c.fact_ids)})"
+                          for c in table.conflicts) or "- none"
+    return ("<fact_table>\n" + "\n".join(lines) + "\n</fact_table>\n\n"
+            f"<code_found_discrepancies>\n{conflicts}\n</code_found_discrepancies>")

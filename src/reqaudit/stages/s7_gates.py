@@ -13,14 +13,12 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from reqaudit import criteria
-from reqaudit.criteria import Criterion, Level
+from reqaudit.criteria import Criterion
 from reqaudit.evidence import match_key
-from reqaudit.models import Evidence, Finding, FindingStatus, Scope, Severity
+from reqaudit.models import Evidence, Finding, FindingStatus, Severity, scope_of
 from reqaudit.stages.base import RunContext, Stage
 from reqaudit.stages.review_common import EvidenceDraft, verify_evidence
 
-SEVERITY_ORDER = {Severity.CRITICAL: 0, Severity.MAJOR: 1, Severity.MINOR: 2}
 _ISSUE_FINDINGS = {
     "hidden_text": (Criterion.SUSPICIOUS_CONTENT, Severity.MAJOR,
                     "В документе есть скрытый текст",
@@ -46,16 +44,6 @@ class GateResult(BaseModel):
     stats: dict[str, int]
 
 
-def _scope(criterion: Criterion, unit_ids: list[str]) -> Scope:
-    level = criteria.CRITERIA[criterion].level
-    if level == Level.REQUIREMENT:
-        return Scope.REQUIREMENT
-    if level == Level.DOCUMENT:
-        return Scope.DOCUMENT
-    return Scope.PAIR if criterion == Criterion.SET_CONSISTENT and len(unit_ids) == 2 \
-        else Scope.SET
-
-
 def _same_defect(a: Finding, b: Finding) -> bool:
     blocks_a = {e.block_id for e in a.evidence}
     blocks_b = {e.block_id for e in b.evidence}
@@ -69,7 +57,7 @@ def _same_defect(a: Finding, b: Finding) -> bool:
 
 
 def merge_duplicates(findings: list[Finding]) -> tuple[list[Finding], int]:
-    ordered = sorted(findings, key=lambda f: SEVERITY_ORDER[f.severity])
+    ordered = sorted(findings, key=lambda f: f.severity.rank)
     kept: list[Finding] = []
     merged = 0
     for f in ordered:
@@ -127,12 +115,12 @@ class GatesStage(Stage):
             if not units:
                 units = sorted({u for e in evidence for u in units_of_block.get(e.block_id, [])})
             passed.append(f.model_copy(update={
-                "evidence": evidence, "unit_ids": units, "scope": _scope(f.criterion, units),
+                "evidence": evidence, "unit_ids": units, "scope": scope_of(f.criterion, units),
                 "trail": [*f.trail, "gate:passed"]}))
 
         merged, stats["merged"] = merge_duplicates(passed)
         merged.extend(self._file_defects(ctx))
-        merged.sort(key=lambda f: (SEVERITY_ORDER[f.severity],
+        merged.sort(key=lambda f: (f.severity.rank,
                                    min(order.get(e.block_id, 10**6) for e in f.evidence)))
         final = [f.model_copy(update={"id": f"D-{n:03d}"}) for n, f in enumerate(merged, 1)]
         stats["out"] = len(final)
@@ -159,7 +147,7 @@ class GatesStage(Stage):
                 short = quote if len(quote) <= 50 else quote[:50].rsplit(" ", 1)[0] + "…"
                 title = f"Скрытый текст: «{short}»"
             found.append(Finding(
-                id=f"read#{len(found) + 1}", scope=_scope(criterion, []), criterion=criterion,
+                id=f"read#{len(found) + 1}", scope=scope_of(criterion, []), criterion=criterion,
                 title=title, explanation=f"{explanation} {issue.message}",
                 evidence=[Evidence(block_id=block.id, quote=quote, verified=True)],
                 severity=severity, status=FindingStatus.CONFIRMED, trail=["reader"],

@@ -249,23 +249,6 @@ def tables_of(document) -> dict[str, str]:
     return out
 
 
-def fact_table_view(table: FactTable) -> str:
-    """Facts grouped by entity, then the conflict candidates, for the values reviewer."""
-    by_entity: dict[str, list[Fact]] = defaultdict(list)
-    for f in table.facts:
-        by_entity[f.entity].append(f)
-    lines = []
-    for entity, facts in by_entity.items():
-        lines.append(f"{entity} — {facts[0].entity_label}")
-        for f in facts:
-            cond = f" [условие: {f.condition}]" if f.condition else ""
-            lines.append(f"  {f.id} {f.attribute} = {f.value}{cond} · [{f.block_id}] «{f.quote}»")
-    conflicts = "\n".join(f"- {c.kind}: {c.summary} (facts {', '.join(c.fact_ids)})"
-                          for c in table.conflicts) or "- none"
-    return ("<fact_table>\n" + "\n".join(lines) + "\n</fact_table>\n\n"
-            f"<code_found_discrepancies>\n{conflicts}\n</code_found_discrepancies>")
-
-
 class FactsStage(Stage):
     code = "s3"
     title = "Факты"

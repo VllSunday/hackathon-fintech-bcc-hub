@@ -27,12 +27,11 @@ from pydantic import BaseModel, field_validator
 from reqaudit import prompt_store
 from reqaudit.llm.checks import combine, require_russian
 from reqaudit.llm.client import LLMClient, LLMError
-from reqaudit.models import BlockKind, BlockSource
+from reqaudit.models import DOUBT_CONFIDENCE, BlockKind, BlockSource
 from reqaudit.reading.assemble import Draft
 
 ROLE = "vision"
 VLM_CONFIDENCE = 0.8
-DOUBT_CONFIDENCE = 0.6  # a block where the two readings of a scan differ
 MAX_DISCREPANCIES = 20  # per page; more means the readings diverge as a whole
 # A number with thousand separators («1 000 000») is one token, so a misread digit group
 # shows as «1 000 000» / «100 000», not as scattered pieces.

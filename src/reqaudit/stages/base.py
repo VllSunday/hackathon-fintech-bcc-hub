@@ -1,4 +1,5 @@
-"""Stage interface and the state shared between stages."""
+"""Stage interface and the context a stage runs in. The run state itself is a domain
+type (models.RunState); it is re-exported here for the stages."""
 
 from __future__ import annotations
 
@@ -8,52 +9,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from reqaudit.config import Settings
 from reqaudit.llm import LLMClient
-from reqaudit.models import (
-    Cell,
-    CheckFailure,
-    Coverage,
-    DocumentIR,
-    DocumentProfile,
-    FactTable,
-    Finding,
-    IntakeResult,
-    MarkerRecord,
-    Question,
-    Unit,
-)
+from reqaudit.models import RunState, StageError
 from reqaudit.trace import Trace
 
-
-class StageError(BaseModel):
-    stage: str
-    kind: str
-    message: str
-
-
-class RunState(BaseModel):
-    """Everything the stages have produced so far. Serialised to runs/<id>/state.json."""
-
-    intake: IntakeResult | None = None
-    document: DocumentIR | None = None
-    profile: DocumentProfile | None = None
-    units: list[Unit] = Field(default_factory=list)
-    coverage: Coverage | None = None
-    facts: FactTable | None = None
-    cells: list[Cell] = Field(default_factory=list)
-    plan_notes: list[str] = Field(default_factory=list)
-    candidates: list[Finding] = Field(default_factory=list)
-    markers: list[MarkerRecord] = Field(default_factory=list)
-    findings: list[Finding] = Field(default_factory=list)
-    rejected: list[Finding] = Field(default_factory=list)
-    check_failures: list[CheckFailure] = Field(default_factory=list)
-    questions: list[Question] = Field(default_factory=list)
-    completed: list[str] = Field(default_factory=list)
-    skipped: list[str] = Field(default_factory=list)
-    errors: list[StageError] = Field(default_factory=list)
+__all__ = ["RunContext", "RunState", "Stage", "StageError"]
 
 
 @dataclass

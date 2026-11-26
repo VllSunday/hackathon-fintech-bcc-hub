@@ -15,7 +15,6 @@ from reqaudit.models import (
     UnitKind,
 )
 from reqaudit.passport import Passport
-from reqaudit.reading.vision import DOUBT_CONFIDENCE
 from reqaudit.stages.base import RunState
 
 _KIND_RU = {
@@ -168,7 +167,7 @@ def _place(block_ids: list[str], blocks: dict[str, Block]) -> str:
     anchors = [b.anchor for b in found]
     note = (", распознано по изображению"
             if any(b.source == BlockSource.VLM for b in found) else "")
-    if any(b.source == BlockSource.VLM and b.confidence <= DOUBT_CONFIDENCE for b in found):
+    if any(b.doubtful for b in found):
         note += ", прочтения скана расходятся — сверить с оригиналом"
     pages = sorted({a.page for a in anchors if a.page})
     if pages:

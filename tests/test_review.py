@@ -497,3 +497,28 @@ def test_completeness_checklist_must_cover_every_limit_and_status():
                          note="Задан срок 30 дней.")
     complaint = check(ChecklistAnswer(analysis="Итог проверки.", checklist=[item], findings=[]))
     assert complaint and "Missing 2" in complaint and "b2" in complaint
+
+
+def test_calibration_rates_all_confirmed_findings_together(tmp_path):
+    """One call sees every confirmed finding; a changed level keeps its reason and trail."""
+    model, calls = fake_team(calibrate=lambda severity: "major")
+    _, state, _, trace = run(tmp_path, lambda _id: model)
+    assert calls["calibrate"] == 1 and '"core_flow"' in trace
+    conflict = next(f for f in state["findings"] if CONFLICT in f["title"])
+    assert conflict["severity"] == "major"
+    assert "calibrated:critical→major" in conflict["trail"] and conflict["severity_reason"]
+
+
+def test_calibrated_level_must_follow_from_the_answers():
+    from reqaudit.stages.s6_calibrate import CalibrationAnswer, Rating, _check
+
+    def answer(path, harm, severity):
+        return CalibrationAnswer(core_flow="Основной поток: подача заявки.", ratings=[
+            Rating(ref="C1", path=path, harm=harm, severity=severity,
+                   reason="Решено по шкале.")])
+
+    check = _check(["C1"])
+    assert check(answer("core", False, "critical")) is None
+    assert check(answer("secondary", True, "critical")) is None  # harm on a side path
+    assert "not critical" in check(answer("secondary", False, "critical"))
+    assert "not major" in check(answer("none", False, "major"))

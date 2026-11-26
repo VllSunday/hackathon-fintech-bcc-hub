@@ -393,6 +393,8 @@ class Finding(BaseModel):
     question: str | None = None
     question_to: str | None = None
     cell: str | None = None
+    severity_reason: str | None = Field(default=None, description="In Russian: what set the "
+                                        "severity when the calibration step changed it.")
     review_note: str | None = Field(default=None, description="Why the opponent, the arbiter "
                                     "or a gate kept, changed or rejected the finding.")
     author_answer: str | None = None

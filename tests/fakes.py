@@ -18,6 +18,7 @@ from reqaudit.stages.s2_segment import obligation_word
 
 _BLOCK_LINE = re.compile(r"^\[(b\d{4})\] (\w+): (.*)$", re.MULTILINE)
 _TO_CHECK = re.compile(r"^(R-\d{3}) \(.*?blocks ([b\d, ]+)\): «(.*)»$", re.MULTILINE)
+_RATED = re.compile(r"^(C\d+): criterion=\S+ severity=(\w+)$", re.MULTILINE)
 _REF = re.compile(r"^([FD]\d+): .*\n\s+title: (.*)$", re.MULTILINE)
 _CHECK = re.compile(r"^Check: (.*)\.$", re.MULTILINE)
 _OUTSIDE = re.compile(r"<blocks_outside_requirements>\n(.*?)\n</blocks_outside", re.DOTALL)
@@ -183,7 +184,8 @@ def fake_team(mutate_segment: Mutate | None = None,
               picture: Callable[[str], dict] = honest_picture,
               facts: Callable[[str], dict] = lambda prompt: {"facts": []},
               focus: Callable[[str], list] = lambda first_block: [],
-              profile: dict | None = None):
+              profile: dict | None = None,
+              calibrate: Callable[[str], str] = lambda severity: severity):
     """A model that plays every role. Returns the model and per-role call counters.
 
     `refute(title)` decides which findings the opponent refutes; `keep_disputed` is the
@@ -191,7 +193,7 @@ def fake_team(mutate_segment: Mutate | None = None,
     """
     calls = {"profile": 0, "segment": 0, "review": 0, "opponent": 0, "arbiter": 0,
              "editor": 0, "page": 0, "picture": 0, "facts": 0, "reassess": 0, "markers": 0,
-             "page_check": 0}
+             "page_check": 0, "calibrate": 0}
 
     def respond(messages, info: AgentInfo) -> ModelResponse:
         tool = info.output_tools[0]
@@ -239,6 +241,17 @@ def fake_team(mutate_segment: Mutate | None = None,
                 {"ref": ref, "keep": keep_disputed, "reasoning": "Решено по тексту документа.",
                  "severity": arbiter_severity}
                 for ref, _ in _REF.findall(prompt)]}
+        elif "ratings" in fields:
+            calls["calibrate"] += 1
+            args = {"core_flow": "Основной поток тестового документа.", "ratings": [
+                {"ref": ref, "path": "core", "harm": False,
+                 "severity": "minor" if severity == "minor" else calibrate(severity),
+                 "reason": "Решено по шкале серьёзности."}
+                for ref, severity in _RATED.findall(prompt)]}
+            if any(r["severity"] == "minor" for r in args["ratings"]):
+                for r in args["ratings"]:
+                    if r["severity"] == "minor":
+                        r["path"] = "none"
         elif "duplicates" in fields:
             calls["editor"] += 1
             args = editor(prompt)

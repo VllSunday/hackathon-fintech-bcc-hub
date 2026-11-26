@@ -39,6 +39,7 @@ from reqaudit.stages.review_common import (
     requirement_index,
     screen,
 )
+from reqaudit.stages.s6_calibrate import calibrate
 
 BATCH_SIZE = 8
 
@@ -296,6 +297,7 @@ class ReviewStage(Stage):
 
         kept, rejected = self._arbitrate(ctx, context, disputed, blocks)
         confirmed.extend(kept)
+        confirmed = calibrate(ctx, context, confirmed)
         rejected = [*screened.rejected, *rejected]
         result = ReviewResult(confirmed=confirmed, rejected=rejected, verdicts=verdicts)
         state.findings = confirmed

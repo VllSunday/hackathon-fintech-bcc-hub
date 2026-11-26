@@ -8,6 +8,7 @@ from the report's own functions, so the two views cannot disagree.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import time
@@ -36,6 +37,10 @@ _ARTIFACTS = {stage.code: stage.artifact for stage in IMPLEMENTED}
 STALE_AFTER_S = 15 * 60
 _PAGE = Path(__file__).with_name("index.html")
 _DATA_SLOT = "<!--REPORT_DATA-->"
+# Fonts ship with the page (SIL OFL, licences next to them), so it looks the same everywhere.
+_FONTS = Path(__file__).with_name("fonts")
+_FONT_NAME = re.compile(r"[a-z0-9-]+\.woff2")
+_FONT_URL = re.compile(r'url\("fonts/([a-z0-9-]+\.woff2)"\)')
 
 
 # --- trace and progress -----------------------------------------------------------------
@@ -295,12 +300,27 @@ def page() -> str:
     return _PAGE.read_text(encoding="utf-8")
 
 
+def font_path(name: str) -> Path | None:
+    """A font file shipped with the page, or None for any other name."""
+    if not _FONT_NAME.fullmatch(name):
+        return None
+    path = _FONTS / name
+    return path if path.is_file() else None
+
+
+def _inline_font(match: re.Match[str]) -> str:
+    path = font_path(match.group(1))
+    if path is None:
+        return 'url("")'  # a missing file falls back to the system font, never to the network
+    return f'url("data:font/woff2;base64,{base64.b64encode(path.read_bytes()).decode()}")'
+
+
 def render_html(bundle: dict[str, Any]) -> str:
-    """The report screen as one file: the interface page with the run's data inside."""
+    """The report screen as one file: the interface page with the run's data and fonts inside."""
     # "<" never appears raw, so the data cannot close its own script tag.
     data = json.dumps(bundle, ensure_ascii=False).replace("<", "\\u003c")
     tag = f'<script id="report-data" type="application/json">{data}</script>'
-    return page().replace(_DATA_SLOT, tag, 1)
+    return _FONT_URL.sub(_inline_font, page()).replace(_DATA_SLOT, tag, 1)
 
 
 def write_html(run_dir: Path, target: Path) -> Path:

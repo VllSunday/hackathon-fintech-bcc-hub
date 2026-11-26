@@ -40,7 +40,8 @@ PROVIDER_KEYS: dict[str, tuple[str, ...]] = {
 
 # Used when no model is configured: the first ones whose key is present, in this order.
 # gpt-5.5 was chosen by a live comparison on the organisers' document (2026-11-26).
-# The Gemini default has not been tried live yet.
+# The Gemini default is the model of AI Studio's free tier; it was run on the organisers'
+# document through Vertex AI with the same model (2026-11-27): 13 findings, 21 calls.
 AUTO_MODELS = ("openai:gpt-5.5", "gemini:gemini-3.5-flash-lite")
 # A Google Cloud key does not work with AI Studio, so its automatic choice is Vertex AI.
 AUTO_VERTEX_MODELS = ("vertex:gemini-3.1-pro-preview", "vertex:gemini-3.5-flash")

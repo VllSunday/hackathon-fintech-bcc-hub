@@ -79,3 +79,14 @@ def test_gemini_model_falls_back_to_vertex_with_a_cloud_key(monkeypatch):
     assert settings.chain_for("judge") == ["gemini:gemini-3.5-flash", "vertex:gemini-3.5-flash"]
     assert settings.chain_for("vision") == settings.chain_for("judge")  # vision falls back to judge
     assert any("Vertex" in n for n in settings.notes)
+
+
+
+def test_thinking_depth_and_roles_come_from_the_environment(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("REQAUDIT_THINKING_REVIEWER", "low")
+    monkeypatch.setenv("REQAUDIT_MODEL_REVIEWER", "openai:gpt-5.4-mini")
+    settings = load_settings()
+    assert settings.thinking == {"reviewer": "low"}
+    assert settings.chain_for("reviewer") == ["openai:gpt-5.4-mini"]
+    assert settings.chain_for("arbiter") == settings.chain_for("judge")  # falls back

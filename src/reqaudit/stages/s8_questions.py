@@ -190,7 +190,7 @@ class QuestionsStage(Stage):
             prompt = (document_view(state.document, {b.id for b in state.document.blocks},
                                     ctx.settings.window_chars)
                       + f"\n\n<findings>\n{_listing(findings)}\n</findings>\n")
-            result = ctx.llm.many([dict(step="s8_editor", role="judge",
+            result = ctx.llm.many([dict(step="s8_editor", role="editor",
                                         instructions=instructions, prompt=prompt,
                                         output_type=EditorAnswer, prompt_ids=ids,
                                         check=editor_check(findings))])[0]

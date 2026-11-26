@@ -251,7 +251,9 @@ class CandidatesStage(Stage):
                     if cell.kind == CellKind.REQUIREMENTS else [])
             instructions, ids = _instructions(cell, has_parent_child, with_markers=bool(mine))
             requests.append(dict(
-                step=f"s5[{cell.id}]", role=ROLE, instructions=instructions,
+                step=f"s5[{cell.id}]",
+                role="reviewer" if cell.kind == CellKind.REQUIREMENTS else ROLE,
+                instructions=instructions,
                 prompt=_prompt(ctx, cell, mine), output_type=_answer_type(cell, mine),
                 prompt_ids=ids, check=cell_check(cell, unit_ids, blocks, mine)))
 

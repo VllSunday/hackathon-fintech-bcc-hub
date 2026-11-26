@@ -61,7 +61,7 @@ def test_requests_reach_the_model_unchanged_and_in_order(tmp_path):
 
 def test_one_request_of_a_group_warms_the_cache_before_the_rest(tmp_path):
     model, seen = recording_model()
-    client = client_for(tmp_path, model)
+    client = client_for(tmp_path, model, model_id="openai:gpt-test")
     group = [request(f"req-{n}") for n in range(1, 5)]
     single = request("other", "Other task.")
 
@@ -114,3 +114,26 @@ def test_spend_is_counted(tmp_path):
     client.structured(**request("req-1"))
     assert client.input_tokens > 0 and client.output_tokens > 0
     assert client.unpriced_calls == 1 and client.cost_usd == 0.0
+
+
+
+def test_no_warm_up_where_the_provider_cache_does_not_pay(tmp_path):
+    """On Gemini and Vertex the second wave only waited: all requests go at once."""
+    model, seen = recording_model()
+    client = client_for(tmp_path, model, model_id="vertex:gemini-test")
+    group = [request(f"req-{n}") for n in range(1, 5)]
+    client.many(group)
+    assert len(seen) == 4
+    assert client._warms_up("judge") is False
+    on = client_for(tmp_path / "on", model, model_id="vertex:gemini-test", warm_up="on")
+    assert on._warms_up("judge") is True
+
+
+def test_thinking_depth_is_set_per_role_and_kept_out_of_other_roles(tmp_path):
+    # The model layer translates `thinking` for the provider, so the trace shows it.
+    model, _ = recording_model()
+    client_for(tmp_path, model, thinking={"judge": "low"}).many([request("a")])
+    assert '"thinking": "low"' in (tmp_path / "trace.jsonl").read_text(encoding="utf-8")
+    (tmp_path / "other").mkdir()
+    client_for(tmp_path / "other", model, thinking={"reviewer": "high"}).many([request("b")])
+    assert '"thinking": null' in (tmp_path / "other" / "trace.jsonl").read_text(encoding="utf-8")

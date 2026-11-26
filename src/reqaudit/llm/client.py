@@ -35,7 +35,7 @@ from pydantic_ai.models import Model  # noqa: E402
 from pydantic_ai.models.google import GoogleModel  # noqa: E402
 from pydantic_ai.providers.google import GoogleProvider  # noqa: E402
 
-from reqaudit.config import Settings, provider_key  # noqa: E402
+from reqaudit.config import WARM_UP_PROVIDERS, Settings, provider_key  # noqa: E402
 from reqaudit.llm.cache import DiskCache, cache_key  # noqa: E402
 from reqaudit.llm.checks import Check  # noqa: E402
 from reqaudit.llm.pricing import price_usd  # noqa: E402
@@ -149,7 +149,8 @@ class LLMClient:
 
         groups: dict[str, list[int]] = {}
         for i, r in enumerate(requests):
-            groups.setdefault(_prefix_key(r), []).append(i)
+            key = _prefix_key(r) if self._warms_up(r.get("role", "")) else f"solo:{i}"
+            groups.setdefault(key, []).append(i)
         first_wave, second_wave = [], []
         for key, members in groups.items():
             if len(members) >= _WARM_UP_MIN_GROUP:
@@ -169,6 +170,12 @@ class LLMClient:
         await asyncio.gather(*(one(i, g) for i, g in first_wave))
         await asyncio.gather(*(one(i, g) for i, g in second_wave))
         return results
+
+    def _warms_up(self, role: str) -> bool:
+        if self.settings.warm_up != "auto":
+            return self.settings.warm_up == "on"
+        chain = self.settings.chain_for(role)
+        return bool(chain) and chain[0].partition(":")[0] in WARM_UP_PROVIDERS
 
     async def astructured(
         self,
@@ -199,6 +206,8 @@ class LLMClient:
                 f".env (модель выберется сама) или укажите её в REQAUDIT_MODEL_{role.upper()}.")
 
         settings = {"timeout": self.settings.request_timeout_s, **(model_settings or {})}
+        if role in self.settings.thinking:
+            settings["thinking"] = self.settings.thinking[role]
         schema = output_type.model_json_schema()
         # Images are PNG bytes; their hashes make the cache key depend on the pictures too.
         image_keys = "".join(f"\n<image {hashlib.sha256(i).hexdigest()}>" for i in images)
@@ -216,7 +225,8 @@ class LLMClient:
                     self._note_model(model_id)
                     self.trace.event("llm_call", step=step, role=role, model=model_id,
                                      cache_hit=True, key=keys[model_id][:16],
-                                     prompt_ids=list(prompt_ids))
+                                     prompt_ids=list(prompt_ids),
+                                     thinking=settings.get("thinking"))
                     return cached
 
         failures: list[str] = []
@@ -260,6 +270,7 @@ class LLMClient:
                 self.cost_usd += cost
             self.trace.event("llm_call", step=step, role=role, model=model_id, cache_hit=False,
                              key=keys[model_id][:16], prompt_ids=list(prompt_ids),
+                             thinking=settings.get("thinking"),
                              attempts=attempts, seconds=round(seconds, 2),
                              requests=usage.requests, input_tokens=usage.input_tokens,
                              cached_tokens=cached, output_tokens=usage.output_tokens,

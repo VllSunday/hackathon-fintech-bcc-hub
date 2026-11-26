@@ -310,7 +310,7 @@ class ReviewStage(Stage):
                 items.append(_finding_view(ref, f) + kind + f"\n  opponent: {opponent}"
                              + (f"\n  opponent's quotes:\n{counter}" if counter else ""))
             requests.append(dict(
-                step=f"s6_arbiter[{n}]", role="judge", instructions=instructions,
+                step=f"s6_arbiter[{n}]", role="arbiter", instructions=instructions,
                 prompt=f"{context}\n\n<disputes>\n" + "\n\n".join(items) + "\n</disputes>\n",
                 output_type=ArbiterAnswer, prompt_ids=ids,
                 check=_covers_refs(refs, "decisions", blocks)))

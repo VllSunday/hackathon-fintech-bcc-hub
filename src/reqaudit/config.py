@@ -9,9 +9,21 @@ from pathlib import Path
 from dotenv import find_dotenv, load_dotenv
 
 PROFILES = ("quick", "thorough")
-ROLES = ("analyst", "judge", "opponent", "vision")
-# A role without its own model borrows this role's chain.
-ROLE_FALLBACK = {"analyst": "judge", "opponent": "judge", "vision": "judge"}
+# Kinds of work, each with its own model chain and thinking depth if configured:
+#   analyst   — profile, segmentation, facts (s2, s3): extraction;
+#   reviewer  — checks of individual requirements (s5 requirement cells);
+#   judge     — checks of the set and of the document (other s5 cells), re-check (s8b);
+#   opponent  — tries to refute every finding (s6);
+#   arbiter   — decides disputes between reviewer and opponent (s6);
+#   editor    — merges duplicates and writes the questions (s8);
+#   vision    — reads pages and pictures (s1).
+ROLES = ("analyst", "reviewer", "judge", "opponent", "arbiter", "editor", "vision")
+# A role without its own model borrows the judge's chain.
+ROLE_FALLBACK = {role: "judge" for role in ROLES if role != "judge"}
+THINKING_LEVELS = ("minimal", "low", "medium", "high")
+# Providers whose prompt cache rewards sending one request of a group first; on the
+# others the second wave only waits (Vertex cached 16k of 339k input tokens in one run).
+WARM_UP_PROVIDERS = ("openai", "anthropic")
 
 # Model request budget per run when REQAUDIT_MAX_LLM_CALLS is not set.
 _DEFAULT_BUDGET = {"quick": 60, "thorough": 400}
@@ -89,6 +101,11 @@ class Settings:
     scan_reads: int = 2
     # Decisions taken while reading the configuration, shown in the console and the passport.
     notes: list[str] = field(default_factory=list)
+    # Thinking depth per role (REQAUDIT_THINKING_<ROLE>); a role not listed uses the
+    # model's own default. Changes what the model is asked, so it is part of the cache key.
+    thinking: dict[str, str] = field(default_factory=dict)
+    # Prompt-cache warm-up: "auto" only for WARM_UP_PROVIDERS, "on" always, "off" never.
+    warm_up: str = "auto"
 
     def chain_for(self, role: str) -> list[str]:
         return self.models.get(role) or self.models.get(ROLE_FALLBACK.get(role, ""), [])
@@ -192,5 +209,9 @@ def load_settings(
         pdf_reader=_choice("REQAUDIT_PDF_READER", ("auto", "pymupdf", "docling"), "auto"),
         markers=_choice("REQAUDIT_MARKERS", ("on", "off"), "on") == "on",
         scan_reads=int(_choice("REQAUDIT_SCAN_READS", ("1", "2"), "2")),
+        thinking={role: level for role in ROLES
+                  if (level := _choice(f"REQAUDIT_THINKING_{role.upper()}",
+                                       ("default", *THINKING_LEVELS), "default")) != "default"},
+        warm_up=_choice("REQAUDIT_WARM_UP", ("auto", "on", "off"), "auto"),
         notes=notes,
     )

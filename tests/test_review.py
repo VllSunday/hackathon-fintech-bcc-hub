@@ -522,3 +522,19 @@ def test_calibrated_level_must_follow_from_the_answers():
     assert check(answer("secondary", True, "critical")) is None  # harm on a side path
     assert "not critical" in check(answer("secondary", False, "critical"))
     assert "not major" in check(answer("none", False, "major"))
+
+
+def test_a_merged_finding_stays_visible_in_the_kept_one():
+    """The editor may merge two different defects by mistake; the report still shows both."""
+    from reqaudit.report.render import _finding
+    from reqaudit.stages.s8_questions import DuplicateGroup, apply_groups
+
+    a = _f("D-001", ["b1"], criterion="complete", severity=Severity.CRITICAL)
+    b = _f("D-002", ["b2"], criterion="unambiguous").model_copy(
+        update={"title": "Термин не определён", "explanation": "Слово можно понять двояко."})
+    kept, redirect = apply_groups([a, b], [DuplicateGroup(finding_ids=["D-001", "D-002"],
+                                                          keep="D-001", reason="Один дефект.")])
+    assert len(kept) == 1 and redirect["D-002"] == "D-001"
+    assert [m.title for m in kept[0].merged] == ["Термин не определён"]
+    text = _finding(kept[0], {})
+    assert "Сведено в эту находку" in text and "Слово можно понять двояко." in text

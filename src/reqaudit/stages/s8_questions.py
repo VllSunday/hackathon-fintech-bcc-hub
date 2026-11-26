@@ -15,7 +15,7 @@ from reqaudit import prompt_store
 from reqaudit.evidence import match_key
 from reqaudit.llm.checks import Check, combine, require_russian
 from reqaudit.llm.client import LLMError
-from reqaudit.models import CheckFailure, Finding, Question, Severity
+from reqaudit.models import CheckFailure, Finding, MergedFinding, Question, Severity
 from reqaudit.reading.render import LEGEND
 from reqaudit.stages.base import RunContext, Stage
 from reqaudit.stages.review_common import QuestionTo, document_view
@@ -128,7 +128,14 @@ def apply_groups(findings: list[Finding],
                         (e.block_id, match_key(e.quote)) != (x.block_id, match_key(x.quote))
                         for x in evidence):
                     evidence.append(e)
+        merged = [*keep.merged]
+        for m in members:
+            if m.id == keep.id:
+                continue
+            merged += [MergedFinding(title=m.title, criterion=m.criterion, severity=m.severity,
+                                     explanation=m.explanation), *m.merged]
         result[keep.id] = keep.model_copy(update={
+            "merged": merged,
             "severity": min((m.severity for m in members), key=lambda s: s.rank),
             "unit_ids": sorted({u for m in members for u in m.unit_ids}),
             "evidence": evidence,

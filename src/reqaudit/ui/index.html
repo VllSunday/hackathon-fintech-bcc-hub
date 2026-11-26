@@ -1221,6 +1221,11 @@ function showReport(R) {
             h('button', { class: 'linkish', type: 'button', onclick: (e) => { e.stopPropagation(); showInDoc(f, n); } }, 'показать в документе'))))));
     }
     if (f.suggestion) body.append(h('div', null, h('h4', null, 'Вариант исправленной формулировки'), h('p', { class: 'fix-text' }, f.suggestion)));
+    if (f.merged && f.merged.length) {
+      body.append(h('div', null, h('h4', null, 'Сведено в эту находку'),
+        h('ul', null, f.merged.map((m) => h('li', null, h('strong', null, m.title), ' — ',
+          criterion(m.criterion).label, ', ', (SEV[m.severity] || {}).word || m.severity, '. ', m.explanation)))));
+    }
     if (f.question) {
       body.append(h('div', null, h('h4', null, 'Вопрос автору' + (f.question_to && ROLE_RU[f.question_to] ? ` (${ROLE_RU[f.question_to]})` : '')),
         h('p', null, f.question)));

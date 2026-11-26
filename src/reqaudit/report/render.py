@@ -174,6 +174,11 @@ def _finding(f: Finding, blocks: dict[str, Block]) -> str:
         lines += [f"> «{display_quote(e.quote)}» — {place([e.block_id], blocks)}", ""]
     if f.suggestion:
         lines += [f"**Как исправить.** {f.suggestion}", ""]
+    if f.merged:
+        lines += ["**Сведено в эту находку** (редактор счёл это тем же дефектом):", ""]
+        lines += [f"- {m.title} — {criterion_ref(m.criterion)}, {SEVERITY_RU[m.severity]}. "
+                  f"{m.explanation}" for m in f.merged]
+        lines += [""]
     if f.question:
         lines += [f"**Вопрос автору.** {f.question}", ""]
     if f.author_answer:

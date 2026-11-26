@@ -376,6 +376,15 @@ class Evidence(BaseModel):
 AnswerDecision = Literal["confirmed", "resolved", "changed"]
 
 
+class MergedFinding(BaseModel):
+    """A finding the editor merged into another: kept so the merge hides nothing."""
+
+    title: str
+    criterion: Criterion
+    severity: Severity
+    explanation: str
+
+
 class Finding(BaseModel):
     id: str = Field(description="Report id, e.g. 'D-001'.")
     scope: Scope
@@ -395,6 +404,9 @@ class Finding(BaseModel):
     cell: str | None = None
     severity_reason: str | None = Field(default=None, description="In Russian: what set the "
                                         "severity when the calibration step changed it.")
+    merged: list[MergedFinding] = Field(
+        default_factory=list, description="Findings the editor judged to be this same defect; "
+        "shown with it, so a wrong merge does not hide a defect.")
     review_note: str | None = Field(default=None, description="Why the opponent, the arbiter "
                                     "or a gate kept, changed or rejected the finding.")
     author_answer: str | None = None

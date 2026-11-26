@@ -3,7 +3,8 @@
 Rated one at a time, every defect looks important, and a model shown a reviewer's level tends
 to confirm it. So the calibrator works blind and does not choose a level at all. It answers
 factual questions about each finding: which path it affects, what goes wrong if the team
-guesses, what kind of defect it is, how often the situation occurs, and whether money, data
+guesses, what kind of defect it is, whether it lies on the successful path or a branch of
+refusal or failure, and whether money, data
 or a mandatory check can be lost. Code turns the answers into the level by one table
 (`level`). Several independent ratings, each with the findings in another order, are taken
 and the median level wins: one sample of a model's judgement is not a measurement.
@@ -32,7 +33,7 @@ REMARK_CRITERIA = frozenset({Criterion.COMPLETE, Criterion.SET_COMPLETE})
 _PATHS = ("core", "secondary")
 _CONSEQUENCES = ("outcome", "detail", "none")
 _KINDS = ("conflict", "ambiguity", "gap", "other")
-_FREQUENCIES = ("regular", "edge")
+_BRANCHES = ("success", "failure")
 
 
 class Rating(BaseModel):
@@ -40,7 +41,7 @@ class Rating(BaseModel):
     path: Literal["core", "secondary"]
     consequence: Literal["outcome", "detail", "none"]
     kind: Literal["conflict", "ambiguity", "gap", "other"]
-    frequency: Literal["regular", "edge"]
+    branch: Literal["success", "failure"]
     harm: bool
     reason: str
 
@@ -59,10 +60,10 @@ class Rating(BaseModel):
     def _kind(cls, value: object) -> object:
         return value if value in _KINDS else "other"
 
-    @field_validator("frequency", mode="before")
+    @field_validator("branch", mode="before")
     @classmethod
-    def _frequency(cls, value: object) -> object:
-        return value if value in _FREQUENCIES else "regular"
+    def _branch(cls, value: object) -> object:
+        return value if value in _BRANCHES else "success"
 
 
 class CalibrationAnswer(BaseModel):
@@ -77,7 +78,7 @@ def level(r: Rating) -> Severity:
     if r.consequence == "none":
         return Severity.MINOR
     if (r.path == "core" and r.consequence == "outcome"
-            and (r.kind in ("conflict", "ambiguity") or r.frequency == "regular")):
+            and (r.kind in ("conflict", "ambiguity") or r.branch == "success")):
         return Severity.CRITICAL
     return Severity.MAJOR
 

@@ -509,7 +509,7 @@ def test_calibration_is_blind_and_the_level_comes_from_the_answers(tmp_path):
         seen.append(title)
         if CONFLICT in title:  # a conflict in a secondary detail: major, whatever it was
             return {"path": "secondary", "consequence": "detail", "kind": "conflict",
-                    "frequency": "regular", "harm": False}
+                    "branch": "success", "harm": False}
         return None
 
     model, calls = fake_team(calibrate=rate)
@@ -525,12 +525,12 @@ def test_the_severity_table():
 
     def r(**kw):
         base = {"ref": "C1", "path": "core", "consequence": "outcome", "kind": "gap",
-                "frequency": "regular", "harm": False, "reason": "Последствие."}
+                "branch": "success", "harm": False, "reason": "Последствие."}
         return Rating(**{**base, **kw})
 
     assert level(r()) == Severity.CRITICAL  # a rule the main function needs is missing
-    assert level(r(frequency="edge")) == Severity.MAJOR  # a rare case of a gap
-    assert level(r(frequency="edge", kind="conflict")) == Severity.CRITICAL  # must choose
+    assert level(r(branch="failure")) == Severity.MAJOR  # a gap on a branch of refusal or failure
+    assert level(r(branch="failure", kind="conflict")) == Severity.CRITICAL  # must choose
     assert level(r(path="secondary")) == Severity.MAJOR
     assert level(r(consequence="detail")) == Severity.MAJOR
     assert level(r(consequence="none")) == Severity.MINOR
@@ -549,7 +549,7 @@ def test_the_calibrator_does_not_see_the_reviewers_level():
 def test_only_a_gap_that_changes_nothing_becomes_a_remark():
     from reqaudit.stages.s6_calibrate import Rating, is_remark
 
-    none = Rating(ref="C1", path="core", consequence="none", kind="gap", frequency="regular",
+    none = Rating(ref="C1", path="core", consequence="none", kind="gap", branch="success",
                   harm=False, reason="Текст сообщения.")
     assert is_remark(_f("D-1", ["b1"], criterion="complete"), none)
     assert not is_remark(_f("D-2", ["b1"], criterion="singular"), none)  # a quality defect

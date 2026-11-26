@@ -21,11 +21,11 @@ _TO_CHECK = re.compile(r"^(R-\d{3}) \(.*?blocks ([b\d, ]+)\): «(.*)»$", re.MUL
 # Answers for which the severity table (s6_calibrate.level) gives each level.
 _AS_RATED = {
     "critical": {"path": "core", "consequence": "outcome", "kind": "conflict",
-                 "frequency": "regular", "harm": False},
+                 "branch": "success", "harm": False},
     "major": {"path": "secondary", "consequence": "detail", "kind": "gap",
-              "frequency": "regular", "harm": False},
+              "branch": "success", "harm": False},
     "minor": {"path": "secondary", "consequence": "none", "kind": "other",
-              "frequency": "regular", "harm": False},
+              "branch": "success", "harm": False},
 }
 _RATED = re.compile(r"^(C\d+): criterion=\S+\n\s+title: (.*)$", re.MULTILINE)
 _REF = re.compile(r"^([FD]\d+): .*\n\s+title: (.*)$", re.MULTILINE)

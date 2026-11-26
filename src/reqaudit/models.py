@@ -11,6 +11,7 @@ Free-text fields that end up in the report (`summary`, `title`, `explanation`,
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -333,6 +334,10 @@ class Evidence(BaseModel):
     verified: bool = Field(default=False, description="Set only by the evidence gate (s7).")
 
 
+# What the agent decided about a finding after the author answered its question (s8b).
+AnswerDecision = Literal["confirmed", "resolved", "changed"]
+
+
 class Finding(BaseModel):
     id: str = Field(description="Report id, e.g. 'D-001'.")
     scope: Scope
@@ -353,8 +358,8 @@ class Finding(BaseModel):
     review_note: str | None = Field(default=None, description="Why the opponent, the arbiter "
                                     "or a gate kept, changed or rejected the finding.")
     author_answer: str | None = None
-    answer_decision: str | None = Field(default=None, description="confirmed, resolved or "
-                                        "changed, after the author's answer (s8b).")
+    answer_decision: AnswerDecision | None = Field(
+        default=None, description="Decision after the author's answer (s8b).")
     answer_note: str | None = None
     document_fix: str | None = Field(default=None, description="Wording to put into the "
                                      "document, following the author's answer.")

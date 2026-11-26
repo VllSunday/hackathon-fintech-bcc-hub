@@ -9,7 +9,7 @@ finding was wrong after all, or its severity changes.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import get_args
 
 from pydantic import BaseModel, field_validator
 
@@ -17,7 +17,7 @@ from reqaudit import prompt_store
 from reqaudit.answers import fingerprint
 from reqaudit.llm.checks import Check, combine, require_russian
 from reqaudit.llm.client import LLMError
-from reqaudit.models import CheckFailure, Finding, Question, Severity
+from reqaudit.models import AnswerDecision, CheckFailure, Finding, Question, Severity
 from reqaudit.reading.render import LEGEND
 from reqaudit.stages.base import RunContext, Stage
 from reqaudit.stages.review_common import document_view
@@ -27,7 +27,7 @@ BATCH_SIZE = 8
 
 class Reassessment(BaseModel):
     finding_id: str
-    decision: Literal["confirmed", "resolved", "changed"]
+    decision: AnswerDecision
     reasoning: str
     document_fix: str | None = None
     severity: Severity | None = None
@@ -36,7 +36,7 @@ class Reassessment(BaseModel):
     @classmethod
     def _unclear_is_confirmed(cls, value: object) -> object:
         # When in doubt the defect stays: an unclear decision must not hide it.
-        return value if value in ("confirmed", "resolved", "changed") else "confirmed"
+        return value if value in get_args(AnswerDecision) else "confirmed"
 
     @field_validator("severity", mode="before")
     @classmethod

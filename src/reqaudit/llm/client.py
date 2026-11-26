@@ -252,8 +252,15 @@ class LLMClient:
         if images:
             content = [prompt, *(BinaryContent(data=i, media_type="image/png") for i in images)]
 
-        if self.settings.cache_read:
-            for model_id in chain:
+        failures: list[str] = []
+        for model_id in chain:
+            if model_id in self._unavailable:
+                failures.append(f"{model_id}: {self._unavailable[model_id]} ранее в этом прогоне")
+                continue
+            # The cache is read for the model about to be asked, not for the whole chain: a
+            # fallback's answer saved when the primary was busy must not stand in for the
+            # primary on every later run.
+            if self.settings.cache_read:
                 cached = self._from_cache(keys[model_id], output_type)
                 if cached is not None:
                     self.cache_hits += 1
@@ -263,12 +270,6 @@ class LLMClient:
                                      prompt_ids=list(prompt_ids),
                                      thinking=settings.get("thinking"))
                     return cached
-
-        failures: list[str] = []
-        for model_id in chain:
-            if model_id in self._unavailable:
-                failures.append(f"{model_id}: {self._unavailable[model_id]} ранее в этом прогоне")
-                continue
             call_settings = dict(settings)
             if provider_cache_key and model_id.startswith("openai:"):
                 # Routing hint only: sends requests with one prefix to where it is cached.

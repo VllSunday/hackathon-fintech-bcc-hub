@@ -222,3 +222,21 @@ def test_rate_limits_are_waited_out_before_falling_back(tmp_path):
                                 rate_limit_patience_s=30.0)
     assert ask(client) == Summary(**RU)
     assert client.models_used == ["fake:b"] and sum(sleeps.delays[:-1]) < 30
+
+
+def test_a_cached_fallback_answer_does_not_replace_the_primary(tmp_path):
+    """Once the primary was busy and the fallback answered, later runs ask the primary again
+    instead of reusing the weaker model's saved answer."""
+    busy = ModelRateLimitError("fake:a", "slow down", retry_after=0.0)
+    down, _ = answering(busy)
+    backup, _ = answering(RU)
+    client, _ = client_for(tmp_path, {"fake:a": down, "fake:b": backup},
+                           chain=("fake:a", "fake:b"), rate_limit_patience_s=0.0)
+    ask(client)
+    assert client.models_used == ["fake:b"]
+
+    primary, primary_calls = answering(RU)
+    client, _ = client_for(tmp_path, {"fake:a": primary, "fake:b": backup},
+                           chain=("fake:a", "fake:b"))
+    ask(client)
+    assert primary_calls["calls"] == 1 and client.models_used == ["fake:a"]

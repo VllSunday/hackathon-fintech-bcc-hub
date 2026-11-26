@@ -145,14 +145,6 @@ h2 { font-size: 18px; }
 .drop.over .paper { transform: rotate(0) translateY(-12px) scale(1.12); }
 .drop.has-file .paper { animation: pop .45s var(--spring); transform: rotate(0); }
 .form-row { display: flex; gap: 14px; align-items: center; justify-content: center; flex-wrap: wrap; }
-.profiles { display: inline-flex; padding: 4px; border: 1px solid var(--line); border-radius: 999px; margin: 0;
-  background: var(--surface); }
-.profile { position: relative; cursor: pointer; }
-.profile input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
-.profile b { display: block; padding: 9px 20px; border-radius: 999px; font-family: var(--mono); font-size: 14px;
-  font-weight: 600; color: var(--muted); transition: background-color .2s, color .2s; }
-.profile input:checked + b { background: var(--accent-soft); color: var(--text); }
-.profile input:focus-visible + b { outline: 2px solid var(--accent); outline-offset: 2px; }
 .models { text-align: center; color: var(--muted); font-family: var(--mono); font-size: 14px; }
 .runs { display: grid; gap: 8px; }
 .run { display: grid; grid-template-columns: minmax(0, 1fr) auto auto repeat(4, 64px); gap: 6px 18px; align-items: center;
@@ -719,7 +711,7 @@ function screenUpload() {
   const submit = h('button', { class: 'btn primary big', type: 'button', disabled: true }, 'Проверить');
   const message = h('div');
   const modelLine = h('div', { class: 'models' });
-  const profiles = h('div', { class: 'profiles', role: 'radiogroup', 'aria-label': 'Профиль' });
+  let profile = 'quick';
   const runsBox = h('div', { class: 'runs' });
 
   function choose(f) {
@@ -744,7 +736,6 @@ function screenUpload() {
     if (!file || busy) return;
     busy = true; submit.disabled = true; submit.textContent = 'Запускаю…';
     clear(message);
-    const profile = (profiles.querySelector('input:checked') || {}).value || 'quick';
     try {
       const started = await api(`/api/runs?name=${encodeURIComponent(file.name)}&profile=${encodeURIComponent(profile)}`,
         { method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream' } });
@@ -756,14 +747,11 @@ function screenUpload() {
   });
 
   clear(app).append(h('div', { class: 'wrap upload' },
-    drop, h('div', { class: 'form-row' }, profiles, submit), modelLine, message, runsBox));
+    drop, h('div', { class: 'form-row' }, submit), modelLine, message, runsBox));
 
   api('/api/config').then((config) => {
-    for (const name of config.profiles) {
-      profiles.append(h('label', { class: 'profile' },
-        h('input', { type: 'radio', name: 'profile', value: name, checked: name === config.default_profile }),
-        h('b', null, name)));
-    }
+    // One button, one run: the profile is the server's default (REQAUDIT_PROFILE in .env).
+    if (config.default_profile) profile = config.default_profile;
     if (config.model_ready) {
       modelLine.textContent = config.models.join(', ');
     } else {
@@ -783,7 +771,7 @@ function screenUpload() {
         runsBox.append(h('a', { class: 'run', href: target, style: `--i:${i}` },
           h('div', { class: 'run-doc' }, h('b', null, run.document || 'без имени'),
             run.title ? h('span', { class: 'muted' }, run.title) : null),
-          h('div', { class: 'run-date muted' }, fmtDate(run.started_at), run.profile ? ` · ${run.profile}` : ''),
+          h('div', { class: 'run-date muted' }, fmtDate(run.started_at)),
           h('span', { class: `pill ${run.status || ''}` }, RUN_STATUS[run.status] || run.status || '—'),
           stat(run.units, 'требований'), stat(run.findings, 'нарушений'),
           stat(run.critical, 'критичных', 'crit'), stat(run.questions, 'вопросов')));

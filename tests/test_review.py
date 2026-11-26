@@ -101,6 +101,28 @@ def test_opponent_refutation_goes_to_arbiter_and_appendix(tmp_path):
     assert "оппонент и арбитр" in report
 
 
+def test_opponent_replaces_a_fix_that_would_not_remove_the_defect(tmp_path):
+    better = "Указать: push отправляется не позднее 60 секунд после события."
+
+    def fix(title):
+        return ({"fix_works": False, "better_fix": better} if "Непроверяемая" in title
+                else {"fix_works": True})
+
+    model, _ = fake_team(fix=fix)
+    _, state, report, trace = run(tmp_path, lambda _id: model)
+    rewritten = [f for f in state["findings"] if "opponent:fix_rewritten" in f["trail"]]
+    assert rewritten and all(f["suggestion"] == better for f in rewritten)
+    assert f"**Как исправить.** {better}" in report
+    untouched = [f for f in state["findings"] if "Непроверяемая" not in f["title"]]
+    assert all(f["suggestion"] != better for f in untouched)
+
+
+def test_failed_fix_needs_a_better_one(tmp_path):
+    model, _ = fake_team(fix=lambda title: {"fix_works": False})
+    _, _, _, trace = run(tmp_path, lambda _id: model)
+    assert "fix_works is false, so give better_fix" in trace
+
+
 def test_arbiter_can_keep_a_disputed_finding(tmp_path):
     model, _ = fake_team(refute=lambda title: "противоречат" in title, keep_disputed=True)
     _, state, report, _ = run(tmp_path, lambda _id: model)

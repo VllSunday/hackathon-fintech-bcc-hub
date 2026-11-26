@@ -162,6 +162,7 @@ def fake_team(mutate_segment: Mutate | None = None,
               review: Callable[[str], dict] = honest_review,
               set_review: Callable[[str], dict] = honest_set_review,
               refute: Callable[[str], bool] = lambda title: False,
+              fix: Callable[[str], dict] = lambda title: {"fix_works": True},
               keep_disputed: bool = False,
               editor: Callable[[str], dict] = honest_editor,
               page: Callable[[str], dict] = honest_page,
@@ -207,7 +208,8 @@ def fake_team(mutate_segment: Mutate | None = None,
             calls["opponent"] += 1
             args = {"verdicts": [
                 {"ref": ref, "verdict": "refuted" if refute(title) else "upheld",
-                 "reasoning": "Проверено по тексту документа.", "counter_evidence": []}
+                 "reasoning": "Проверено по тексту документа.", "counter_evidence": [],
+                 **fix(title)}
                 for ref, title in _REF.findall(prompt)]}
         elif "decisions" in fields:
             calls["arbiter"] += 1

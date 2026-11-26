@@ -67,6 +67,7 @@ class FactDraft(BaseModel):
     condition: str | None = None
     block_id: str
     quote: str
+    dimension: str | None = None  # for unit facts: what the unit measures
 
     @field_validator("entity", mode="before")
     @classmethod
@@ -150,8 +151,17 @@ def _lineage(entity: str, facts: list[Fact]) -> set[str]:
     return found
 
 
-_DIMENSION = {"kzt": "деньги", "tiyn": "деньги", "rub": "деньги", "usd": "деньги",
-              "second": "время", "minute": "время", "hour": "время"}
+# Units code recognises itself; any other unit is placed by the dimension the model named.
+_DIMENSION = {"kzt": "money", "tiyn": "money", "rub": "money", "usd": "money",
+              "second": "time", "minute": "time", "hour": "time"}
+_DIMENSION_RU = {"money": "деньги", "time": "время", "data_size": "объём данных",
+                 "percent": "доли и проценты", "length": "длина", "mass": "масса"}
+# Counting units («штук», «попыток») and unknown ones never form a mixed-units candidate.
+_NOT_COMPARED = {None, "", "count", "other"}
+
+
+def _dimension(f: Fact) -> str | None:
+    return _DIMENSION.get(f.normalized) or (f.dimension or "").strip().lower() or None
 
 
 def _label_key(label: str) -> str:
@@ -197,8 +207,8 @@ def find_conflicts(facts: list[Fact], table_of: dict[str, str] | None = None
     # relying on how the model linked the quantities.
     by_dimension: dict[str, list[Fact]] = defaultdict(list)
     for f in facts:
-        if f.attribute == "unit" and f.normalized in _DIMENSION:
-            by_dimension[_DIMENSION[f.normalized]].append(f)
+        if f.attribute == "unit" and (dimension := _dimension(f)) not in _NOT_COMPARED:
+            by_dimension[dimension].append(f)
     for dimension, group in sorted(by_dimension.items()):
         units = sorted({f.normalized for f in group})
         if len(units) > 1:
@@ -206,7 +216,8 @@ def find_conflicts(facts: list[Fact], table_of: dict[str, str] | None = None
             conflicts.append(FactConflict(
                 kind="mixed_units", entity=group[0].entity, attribute="unit",
                 fact_ids=[f.id for f in group],
-                summary=f"В документе разные единицы измерения ({dimension}: "
+                summary=f"В документе разные единицы измерения "
+                        f"({_DIMENSION_RU.get(dimension, dimension)}: "
                         f"{', '.join(units)}): {shown}"))
 
     units = _units(facts)
@@ -297,7 +308,8 @@ class FactsStage(Stage):
                               normalized=(d.value.strip() if d.attribute in _RELATIONS
                                           else normalize(d.value)),
                               condition=(d.condition or "").strip() or None,
-                              block_id=evidence.block_id, quote=evidence.quote))
+                              block_id=evidence.block_id, quote=evidence.quote,
+                              dimension=d.dimension if d.attribute == "unit" else None))
 
         table = FactTable(facts=facts, conflicts=find_conflicts(facts, tables_of(document)),
                           dropped=dropped)

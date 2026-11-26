@@ -245,6 +245,8 @@ class Fact(BaseModel):
     condition: str | None = None
     block_id: str
     quote: str
+    dimension: str | None = Field(default=None, description="For unit facts: what the unit "
+                                  "measures (money, time, data_size...), as the model named it.")
 
 
 class FactConflict(BaseModel):

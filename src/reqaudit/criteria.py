@@ -136,8 +136,8 @@ CRITERIA: dict[Criterion, CriterionInfo] = {
             versus="If both readings are clear but no pass/fail test can be written, it is "
                    "verifiable; if a needed element is absent rather than unclear, it is "
                    "complete.",
-            example="«Уведомление отправляется быстро» → «Push отправляется не позднее 60 "
-                    "секунд после авторизации покупки».",
+            example="«Заявка рассматривается оперативно» → «Решение по заявке принимается не "
+                    "позднее 2 рабочих дней с момента её регистрации».",
             severity="Critical when the two readings lead to different observable behaviour "
                      "of a core function; major otherwise.",
             tz_type="unverifiable"),
@@ -155,8 +155,9 @@ CRITERIA: dict[Criterion, CriterionInfo] = {
             versus="A missing behaviour of the whole system (no error handling anywhere, no "
                    "read operation in the API) is set_complete; this criterion is about one "
                    "requirement.",
-            example="«Клиент задаёт порог» → «Клиент задаёт порог от 1 000 до 10 000 000 ₸; по "
-                    "умолчанию порог не задан и уведомления не отправляются».",
+            example="«Пользователь загружает документ» → «Сотрудник загружает скан паспорта в "
+                    "формате PDF или JPG размером до 10 МБ; при большем размере система "
+                    "показывает ошибку и не сохраняет файл».",
             severity="Critical when the missing element must be guessed to build or test a "
                      "core behaviour; major when it affects secondary behaviour.",
             tz_type="incomplete"),
@@ -234,8 +235,9 @@ CRITERIA: dict[Criterion, CriterionInfo] = {
                   "referred to but never specified, empty template sections.",
             not_defect="Scenarios the document explicitly puts out of scope.",
             versus="A gap inside one requirement is complete.",
-            example="«Требования ссылаются на чтение порога, но в API есть только saveLimit» → "
-                    "добавить операцию чтения с форматом ответа.",
+            example="«Требования говорят об отмене заявки клиентом, но в API нет операции "
+                    "отмены» → добавить операцию отмены, её коды ответа и условия, при которых "
+                    "отмена запрещена.",
             severity="Critical when a core flow cannot be built or tested without the missing "
                      "part; major for secondary flows.",
             tz_type="incomplete"),
@@ -253,8 +255,8 @@ CRITERIA: dict[Criterion, CriterionInfo] = {
                        "exception.",
             versus="If one statement derives from the other, it is correct; if a design "
                    "conflicts with a convention, conforming.",
-            example="«Не более одного push в месяц» и «после смены порога следующее достижение "
-                    "вызывает push» → указать, сбрасывает ли смена порога месячный лимит.",
+            example="«Срок хранения выписок — 3 года» в одном разделе и «выписки удаляются "
+                    "через 12 месяцев» в другом → указать один срок и где он действует.",
             severity="A confirmed contradiction forces the team to choose which requirement to "
                      "break, so it is critical when it concerns behaviour; major only when it "
                      "is confined to wording that does not change what the system does.",
@@ -272,7 +274,7 @@ CRITERIA: dict[Criterion, CriterionInfo] = {
             "abbreviations are defined.",
             check=("Are terms, abbreviations and roles defined before or where they are "
                    "used?", "Is it clear which part refines which?"),
-            not_defect="Common industry terms (API, push, HTTP) need no definition.",
+            not_defect="Common industry terms (API, HTTP, SMS) need no definition.",
             versus="A term used in two senses is unambiguous.",
             severity="Usually minor or major."),
         CriterionInfo(

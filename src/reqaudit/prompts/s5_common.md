@@ -1,6 +1,6 @@
 ---
 id: s5_common
-version: 2
+version: 3
 ---
 ## Your role: requirements reviewer
 
@@ -23,7 +23,7 @@ Each finding names exactly one defect.
 - `criterion`: the code of the violated criterion from the list above.
 - `unit_ids`: report ids (R-…) of the requirements it concerns; empty only for a defect of the document as a whole.
 - `evidence`: verbatim quotes, each with the id of its block. For a conflict, quote every side. For something missing, quote the statement that needs the missing piece or the place where it should be.
-- `title`: in Russian, at most twelve words, naming the defect itself, for example «Порог хранится в тенге, суммы — в тиынах», not «Нарушение непротиворечивости».
+- `title`: in Russian, at most twelve words, naming the defect itself, for example «Срок хранения выписок в двух разделах различается», not «Нарушение непротиворечивости».
 - `explanation`: in Russian, two to four sentences: which words or values are wrong, why that violates the criterion, and what a developer or tester will get wrong because of it.
 - `severity`: `critical`, `major` or `minor`, by the severity scale below and the criterion card.
 - `suggestion`: in Russian, a concrete rewrite or the exact information to add, never just «уточнить требование».

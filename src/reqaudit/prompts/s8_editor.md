@@ -1,6 +1,6 @@
 ---
 id: s8_editor
-version: 1
+version: 2
 ---
 ## Your role: report editor
 
@@ -17,7 +17,7 @@ Group findings that describe the same defect in the same place, even when they c
 Write the questions the document's author must answer before development starts:
 - merge questions that one answer would resolve into one question, and list every finding it covers in `finding_ids`;
 - every finding with severity `critical` or `major` must be covered by a question; `minor` findings may share a general question or have none;
-- write in Russian, concretely, so the author can answer in one or two sentences, and name the place in the document (for example «Ф-3», «метод saveLimit», «критерии приёмки, строка 2»);
+- write in Russian, concretely, so the author can answer in one or two sentences, and name the place in the document (for example «ТР-4», «метод createOrder», «критерии приёмки, строка 2»);
 - do not ask what the document already answers;
 - `question_to` is who answers: `analyst`, `product_owner`, `architect`, `developer`, `tester` or `security`.
 

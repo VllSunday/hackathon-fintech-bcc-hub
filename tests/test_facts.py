@@ -189,3 +189,16 @@ def test_values_cell_gets_the_fact_table_and_code_conflicts(tmp_path):
     assert "<fact_table>" in prompt and "unit_mismatch" in prompt
     assert re.search(r"F-\d{3} type = string", prompt)
     assert "сверил их кодом" in report and "единицы различаются" in report
+
+
+def test_units_code_does_not_know_are_compared_by_the_models_dimension():
+    """«МБ» and «ГБ» are not in code's dictionary; the model's dimension places them."""
+    upload = fact("F-001", "scan_upload", "unit", "МБ").model_copy(
+        update={"dimension": "data_size"})
+    archive = fact("F-002", "archive_size", "unit", "ГБ").model_copy(
+        update={"dimension": "data_size"})
+    attempts = fact("F-003", "retry", "unit", "попыток").model_copy(update={"dimension": "count"})
+    tries = fact("F-004", "otp", "unit", "раз").model_copy(update={"dimension": "count"})
+    kinds = [(c.kind, set(c.fact_ids)) for c in find_conflicts([upload, archive, attempts, tries])]
+    assert ("mixed_units", {"F-001", "F-002"}) in kinds
+    assert all("F-003" not in ids for _, ids in kinds)  # counting units are never mixed

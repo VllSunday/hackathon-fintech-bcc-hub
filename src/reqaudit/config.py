@@ -63,6 +63,9 @@ class Settings:
     # Marker words (s5): code lists words that often signal a defect, the reviewer decides
     # on each in context. Cells without markers send the same request as with this off.
     markers: bool = True
+    # Readings of a page without a text layer: 2 reads it twice by different strategies and
+    # marks where the readings differ; 1 reads it once.
+    scan_reads: int = 2
     # Decisions taken while reading the configuration, shown in the console and the passport.
     notes: list[str] = field(default_factory=list)
 
@@ -148,5 +151,6 @@ def load_settings(
                        "all" if chosen == "thorough" else "auto"),
         pdf_reader=_choice("REQAUDIT_PDF_READER", ("auto", "pymupdf", "docling"), "auto"),
         markers=_choice("REQAUDIT_MARKERS", ("on", "off"), "on") == "on",
+        scan_reads=int(_choice("REQAUDIT_SCAN_READS", ("1", "2"), "2")),
         notes=notes,
     )

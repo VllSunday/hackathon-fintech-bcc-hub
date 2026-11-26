@@ -149,6 +149,17 @@ def honest_page(prompt: str) -> dict:
     ]}
 
 
+def honest_page_lines(**replace: str) -> dict:
+    """The second, line-by-line reading of the same page; `replace` misreads some words."""
+    lines = []
+    for block in honest_page("")["blocks"]:
+        line = block["text"]
+        for old, new in replace.items():
+            line = line.replace(old, new)
+        lines.append(line)
+    return {"lines": lines}
+
+
 def honest_picture(prompt: str) -> dict:
     return {"kind": "diagram",
             "description": "Схема взаимодействия процессинга, сервиса расходов и сервиса push.",
@@ -166,6 +177,7 @@ def fake_team(mutate_segment: Mutate | None = None,
               keep_disputed: bool = False,
               editor: Callable[[str], dict] = honest_editor,
               page: Callable[[str], dict] = honest_page,
+              page_check: Callable[[str], dict] = lambda prompt: honest_page_lines(),
               picture: Callable[[str], dict] = honest_picture,
               facts: Callable[[str], dict] = lambda prompt: {"facts": []}):
     """A model that plays every role. Returns the model and per-role call counters.
@@ -174,7 +186,8 @@ def fake_team(mutate_segment: Mutate | None = None,
     arbiter's answer for them.
     """
     calls = {"profile": 0, "segment": 0, "review": 0, "opponent": 0, "arbiter": 0,
-             "editor": 0, "page": 0, "picture": 0, "facts": 0, "reassess": 0, "markers": 0}
+             "editor": 0, "page": 0, "picture": 0, "facts": 0, "reassess": 0, "markers": 0,
+             "page_check": 0}
 
     def respond(messages, info: AgentInfo) -> ModelResponse:
         tool = info.output_tools[0]
@@ -228,6 +241,9 @@ def fake_team(mutate_segment: Mutate | None = None,
         elif fields == {"blocks"}:
             calls["page"] += 1
             args = page(prompt)
+        elif fields == {"lines"}:
+            calls["page_check"] += 1
+            args = page_check(prompt)
         elif "statements" in fields:
             calls["picture"] += 1
             args = picture(prompt)

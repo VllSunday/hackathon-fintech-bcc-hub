@@ -168,3 +168,25 @@ def test_model_id_mapping():
     assert to_library_model_id("openai:some-model") == "openai:some-model"
     with pytest.raises(LLMUnavailable):
         to_library_model_id("no-provider")
+
+
+def test_a_request_lost_to_rate_limits_gets_a_second_chance(tmp_path):
+    """Five rate-limit answers exhaust the attempts; after the other requests it is asked
+    once more instead of the check being lost."""
+    busy = ModelRateLimitError("fake:a", "slow down", retry_after=0.0)
+    model, state = answering(busy, busy, busy, busy, busy, RU)
+    client, _ = client_for(tmp_path, {"fake:a": model}, max_attempts=5)
+    [result] = client.many([dict(step="s5[x]", role="judge", instructions="Answer.",
+                                 prompt="Сколько требований?", output_type=Summary)])
+    assert result == Summary(**RU) and state["calls"] == 6
+    assert '"llm_second_chance"' in (tmp_path / "trace.jsonl").read_text(encoding="utf-8")
+
+
+def test_a_lasting_failure_is_not_retried_as_busy(tmp_path):
+    from reqaudit.llm.client import LLMBusy, LLMUnavailable
+
+    model, _ = answering(ModelQuotaExceededError("fake:a", "daily quota"))
+    client, _ = client_for(tmp_path, {"fake:a": model})
+    [result] = client.many([dict(step="s5[x]", role="judge", instructions="Answer.",
+                                 prompt="Сколько?", output_type=Summary)])
+    assert isinstance(result, LLMUnavailable) and not isinstance(result, LLMBusy)

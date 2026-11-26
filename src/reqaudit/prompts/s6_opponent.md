@@ -1,6 +1,6 @@
 ---
 id: s6_opponent
-version: 5
+version: 6
 ---
 ## Your role: opponent
 
@@ -16,7 +16,7 @@ For each finding, return one verdict with its `ref`:
 
 Tests to apply:
 - Conflicts (`set_consistent`): uphold only if you can describe a concrete situation in which both statements apply and cannot both be satisfied. Write that situation in `reasoning`.
-- Gaps (`complete`, `set_complete`): refute if the missing information is stated elsewhere in the document; quote it.
+- Gaps (`complete`, `set_complete`): refute only by quoting text that answers the gap's own question: what exactly happens in the situation it names (to the data, the money, the status, the user, the other systems). A general statement does not answer it: a catch-all error code, «handled by the architecture», «a design detail», «out of scope» when the document itself does not put it out of scope. If the quote answers only part of the question, uphold the gap or `adjust` it to the part that remains.
 - A conflict quoted from one side only (the finding carries a note): if the document states the other side, quote it in `other_side` and judge the conflict; if it does not, the defect is a gap, so `adjust` it to `complete` or `set_complete`. Refute it only when nothing is missing either.
 - Vagueness (`unambiguous`, `verifiable`): uphold only if you can name two reasonable readings or say why no pass/fail test can be written.
 - Criterion: the cards under `<criteria>` say where each criterion ends; use `adjust` with the right `criterion` when the defect is real but filed under the wrong one.

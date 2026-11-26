@@ -141,6 +141,45 @@ defects:
       - "Перевод на номер, подтверждённый в профиле самого отправителя, недоступен"
       - "Проверить разовый лимит, дневной лимит и количество переводов за сутки."
     note: Запрет перевода на собственный номер из Ф-14 есть только в приложении; логика метода B.2 его не проверяет и кода ошибки для него нет, поэтому прямой вызов API выполнит перевод самому себе.
+# --- added on adjudication: real defects the agent found that the generator did not list.
+# Checked by hand against the document text on 2026-11-26; marked so they can be told apart.
+  - id: A-01
+    adjudicated: true
+    scope: set
+    criterion: set_complete
+    severity: major
+    kind: missing
+    quotes:
+      - "Перевод по номеру телефона доступен клиенту — физическому лицу с активным текущим счётом в тенге, вошедшему в мобильное приложение."
+    note: У клиента может быть несколько текущих счетов в тенге; не сказано, с какого списывать, и в API нет параметра счёта.
+  - id: A-02
+    adjudicated: true
+    scope: set
+    criterion: set_complete
+    severity: major
+    kind: missing
+    quotes:
+      - "формирует квитанцию в PDF, доступную для скачивания"
+    note: Ф-16 обещает скачивание PDF-квитанции, но в спецификации API нет операции её получения.
+  - id: A-03
+    adjudicated: true
+    scope: set
+    criterion: set_complete
+    severity: major
+    kind: missing
+    quotes:
+      - "Запрос обработан; если получатель не найден"
+    note: У метода поиска получателя не описаны ответы с ошибками (неверный формат номера, отсутствие сессии).
+  - id: A-04
+    adjudicated: true
+    scope: requirement
+    criterion: complete
+    severity: major
+    kind: missing
+    quotes:
+      - "Проверить сессию отправителя и ключ идемпотентности."
+    note: Не описано, что возвращается при отсутствии заголовка Idempotency-Key или при ключе не в формате UUID.
+
 traps:
   - id: T-01
     quotes:

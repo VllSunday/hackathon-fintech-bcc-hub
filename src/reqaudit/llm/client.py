@@ -69,6 +69,11 @@ class LLMUnavailable(LLMError):
     pass
 
 
+class LLMBusy(LLMUnavailable):
+    """Every model failed only for transient reasons (rate limits, overload, timeouts):
+    asking again a little later can succeed."""
+
+
 def default_model(model_id: str) -> Model | str:
     """What PydanticAI needs for one of our model ids: a model object or its own id."""
     provider, _, name = model_id.partition(":")
@@ -170,6 +175,13 @@ class LLMClient:
 
         await asyncio.gather(*(one(i, g) for i, g in first_wave))
         await asyncio.gather(*(one(i, g) for i, g in second_wave))
+        # A second chance for requests lost to the provider's limits: one at a time, after
+        # the rest, when the burst that caused them is over.
+        for i, result in enumerate(results):
+            if isinstance(result, LLMBusy):
+                self.trace.event("llm_second_chance", step=requests[i].get("step"))
+                await self._sleep(_SECOND_CHANCE_PAUSE_S)
+                await one(i, None)
         return results
 
     def plan_calls(self, expected: int, why: str) -> None:
@@ -290,8 +302,9 @@ class LLMClient:
                              cost_usd=round(cost, 4) if cost is not None else None)
             return output
 
-        raise LLMUnavailable(f"Ни одна модель для роли «{role}» не ответила. "
-                             + "; ".join(failures))
+        error = LLMBusy if failures and all(_TRANSIENT_MARK in f for f in failures) \
+            else LLMUnavailable
+        raise error(f"Ни одна модель для роли «{role}» не ответила. " + "; ".join(failures))
 
     # --- internals ----------------------------------------------------------------------
 
@@ -375,7 +388,8 @@ class LLMClient:
                 except _RETRYABLE as err:
                     self.requests += 1
                     if attempt >= self.settings.max_attempts:
-                        raise _ModelGaveUp(f"{type(err).__name__} после {attempt} попыток") from err
+                        raise _ModelGaveUp(f"{type(err).__name__} после {attempt} попыток "
+                                           f"{_TRANSIENT_MARK}") from err
                     await self._backoff(err, attempt, step, model_id)
                     continue
                 except _FALL_THROUGH as err:
@@ -427,6 +441,8 @@ class LLMClient:
             self.trace.event("llm_invalid_output", step=step, model=model_id, feedback=feedback)
 
 
+_TRANSIENT_MARK = "(временный сбой)"
+_SECOND_CHANCE_PAUSE_S = 20.0
 _RETRY_ROOM = 2.5  # calls per planned call: a retry or two, a fallback model
 _SPARE_CALLS = 10
 _MINUTE_QUOTA = re.compile(r"PerMinute", re.IGNORECASE)

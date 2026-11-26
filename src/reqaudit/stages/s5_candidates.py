@@ -80,6 +80,7 @@ class SetAnswer(BaseModel):
 
 
 class ChecklistItem(BaseModel):
+    unit_id: str | None = None  # the requirement the item traces, when it is one
     item: str  # what is checked, in Russian: an operation, a rule, a system and its failure
     block_id: str  # where the document states the thing the item is about
     status: Literal["ok", "gap", "conflict", "n/a"]
@@ -116,7 +117,8 @@ def _answer_type(cell: Cell, markers: list[MarkerHit]) -> type[BaseModel]:
 
 
 def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
-               markers: list[MarkerHit] | None = None) -> Check:
+               markers: list[MarkerHit] | None = None,
+               trace_units: list[str] | None = None) -> Check:
     # A cell names the criteria it is about, but a defect found on the way is filed under the
     # criterion that fits it, whichever that is: duplicates across cells are merged before
     # the opponent, and sending the answer back for a «foreign» criterion only cost a call.
@@ -140,6 +142,14 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
                             "`violated` if the requirement meets the criterion")
         if isinstance(answer, ChecklistAnswer):
             complaints += _checklist_complaints(answer, blocks)
+            if trace_units:
+                listed = {i.unit_id for i in answer.checklist}
+                missing = [u for u in trace_units if u not in listed]
+                if missing:
+                    complaints.append(
+                        "`checklist` must trace every requirement of the main part, one item "
+                        f"each with its `unit_id` (status n/a when the interface has nothing to "
+                        f"do with it); missing {missing}")
         if isinstance(answer, RequirementsWithMarkersAnswer):
             decided = {m.marker_id: m for m in answer.markers}
             undecided = [m.id for m in markers if m.id not in decided]
@@ -179,6 +189,15 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
 
     return combine(check, require_russian(*_RUSSIAN_FIELDS, "markers.reason",
                                           "checklist.note"))
+
+
+def _main_units(state, cell: Cell) -> list[str]:
+    """For the parent/child check: every requirement of the parts that are not the child."""
+    if cell.kind != CellKind.PARENT_CHILD or state.profile is None:
+        return []
+    children = {p.name for p in state.profile.parts if p.role.value == "child_spec"}
+    return [u.id for u in state.units if u.part not in children
+            and u.kind.value not in ("acceptance_criterion", "api_contract")]
 
 
 def _checklist_complaints(answer: ChecklistAnswer, blocks: dict) -> list[str]:
@@ -318,7 +337,8 @@ class CandidatesStage(Stage):
                     instructions=instructions,
                     prompt=prompt if n == 1 else prompt + _ANOTHER_PASS,
                     output_type=_answer_type(cell, mine),
-                    prompt_ids=ids, check=cell_check(cell, unit_ids, blocks, mine)))
+                    prompt_ids=ids, check=cell_check(cell, unit_ids, blocks, mine,
+                                                     _main_units(state, cell))))
                 owners.append((cell, n))
 
         candidates: list[Finding] = []

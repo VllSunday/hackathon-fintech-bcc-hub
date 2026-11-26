@@ -408,3 +408,15 @@ def test_a_violation_named_in_reviewed_needs_its_finding(tmp_path):
     model, _ = fake_team(review=names_but_skips)
     _, _, _, trace = run(tmp_path, lambda _id: model)
     assert "names `singular` as violated, but no finding under `singular`" in trace
+
+
+def test_traceability_matrix_must_cover_every_main_requirement():
+    from reqaudit.stages.s5_candidates import ChecklistAnswer, ChecklistItem, cell_check
+
+    cell = Cell(id="parent_child", kind=CellKind.PARENT_CHILD, title="t", criteria=[])
+    check = cell_check(cell, {"R-001", "R-002"}, {}, trace_units=["R-001", "R-002"])
+    answer = ChecklistAnswer(analysis="ok", findings=[], checklist=[
+        ChecklistItem(unit_id="R-001", item="Операция", block_id="b0001", status="ok",
+                      note="Есть в API.")])
+    complaint = check(answer) or ""
+    assert "must trace every requirement of the main part" in complaint and "R-002" in complaint

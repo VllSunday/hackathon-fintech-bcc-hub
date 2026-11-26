@@ -170,15 +170,6 @@ defects:
     quotes:
       - "Запрос обработан; если получатель не найден"
     note: У метода поиска получателя не описаны ответы с ошибками (неверный формат номера, отсутствие сессии).
-  - id: A-04
-    adjudicated: true
-    scope: requirement
-    criterion: complete
-    severity: major
-    kind: missing
-    quotes:
-      - "Проверить сессию отправителя и ключ идемпотентности."
-    note: Не описано, что возвращается при отсутствии заголовка Idempotency-Key или при ключе не в формате UUID.
 
 traps:
   - id: T-01

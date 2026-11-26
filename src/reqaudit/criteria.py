@@ -111,11 +111,16 @@ CRITERIA: dict[Criterion, CriterionInfo] = {
             _C.APPROPRIATE, _L.REQUIREMENT, "уместность уровня детализации", ((ISO, "5.2.5"),),
             "Its detail matches the level of the document: it states what is needed and does "
             "not prescribe a design unless the design is itself a constraint.",
-            check=("Does it fix a design choice (screen layout, technology, storage, algorithm) "
-                   "where the need could be stated instead?", "Is that choice a real constraint "
-                   "stated by the document (regulation, existing system)?"),
-            signs="Business rules placed in an API section, implementation details in a "
-                  "business requirement, UI pixel details in a functional spec.",
+            check=("Would the need still be met if the team chose another product, storage, "
+                   "protocol, algorithm, key or table layout? If yes, the named choice is a "
+                   "design decision, not a requirement.", "Does the document give a reason "
+                   "that makes the choice a constraint (regulation, an existing system it must "
+                   "use)?"),
+            signs="A named product or technology (a database, cache, queue, framework), an "
+                  "internal data layout (keys, tables, TTL) or an algorithm inside a business "
+                  "or functional requirement; business rules placed in an API section; UI "
+                  "pixel details in a functional spec. Being concrete does not make a design "
+                  "choice appropriate.",
             not_defect="A design the document names as a constraint (an existing API, a "
                        "mandated protocol) is appropriate.",
             versus="A design that contradicts another requirement is set_consistent.",

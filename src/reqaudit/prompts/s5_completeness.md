@@ -1,6 +1,6 @@
 ---
 id: s5_completeness
-version: 2
+version: 3
 ---
 ### This check: completeness and the document as a whole
 
@@ -16,4 +16,4 @@ Work in two passes. First fill `checklist`, built from this document's own conte
 - every input a user or another system provides: one item for invalid, missing or repeated values;
 - every limit, period and status: one item for its boundaries and transitions;
 - every quality area from the list above that this document's scope needs.
-Give the block that names the thing, and the status: `ok` (where the document covers it), `gap`, `conflict` or `n/a`. Then report every `gap` and `conflict` as a finding that quotes that block and names exactly what is missing. Report a domain gap only when this document's own scope needs it. In `analysis` (in Russian), sum up.
+Give the block that names the thing, and the status: `ok` (where the document covers it), `gap`, `conflict` or `n/a`. Then report every `gap` and `conflict` as a finding that quotes that block and names exactly what is missing. Report a domain gap only when this document's own scope needs it. Mark `n/a` an item whose answer is a design or operations decision rather than a requirement: the gap is what the system does or guarantees in that situation, not how it is built or staffed. In `analysis` (in Russian), sum up.

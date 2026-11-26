@@ -17,6 +17,7 @@ on a trap that matches no gold defect is a false alarm the report counts separat
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import re
 import sys
@@ -71,6 +72,17 @@ class RunScore:
     gold: list[GoldDefect] = field(repr=False, default_factory=list)
     traps_hit: dict[str, str] = field(default_factory=dict)  # trap id -> finding id
     traps_total: int = 0
+    by_meaning: dict[str, str] = field(default_factory=dict)  # gold id -> finding id, 2nd pass
+
+    @property
+    def recall_by_meaning(self) -> float:
+        found = len(self.matched) + len(self.by_meaning)
+        return found / len(self.gold) if self.gold else 0.0
+
+    @property
+    def precision_by_meaning(self) -> float:
+        found = len(self.matched) + len(self.by_meaning)
+        return found / self.findings if self.findings else 0.0
 
     @property
     def recall(self) -> float:
@@ -290,16 +302,73 @@ def _traps_hit(traps: list[Trap], findings: list[dict], blocks: list[dict]) -> d
     return hit
 
 
+_JUDGE_INSTRUCTIONS = """You compare two lists about one requirements document: reference
+defects found by an expert, and findings a review tool reported. For each reference defect,
+name the one finding that reports the same defect, or none. The same defect means the same
+problem in the same requirements, even when the finding quotes other places of the
+document or words it differently. A finding about a different problem in the same place
+is not the same defect. Each finding may be used for at most one reference defect. Be
+strict: when unsure, answer none."""
+
+
+def match_by_meaning(score: RunScore, run_dir: Path, gold: list[GoldDefect],
+                     model_id: str) -> dict[str, str]:
+    """Second pass, by meaning, for gold defects the place-based pass left unmatched: one
+    model call per run. One to one, and only among findings the first pass did not use."""
+
+    from pydantic import BaseModel, create_model  # noqa: PLC0415 - only this pass needs it
+
+    from reqaudit.config import load_settings  # noqa: PLC0415
+    from reqaudit.llm.client import LLMClient  # noqa: PLC0415
+    from reqaudit.trace import Trace  # noqa: PLC0415
+
+    state = json.loads((run_dir / "state.json").read_text(encoding="utf-8"))
+    used = set(score.matched.values())
+    findings = [f for f in state.get("findings", []) if _in_report(f) and f["id"] not in used]
+    left = [g for g in gold if g.id not in score.matched]
+    if not findings or not left:
+        return {}
+    ids = tuple(f["id"] for f in findings)
+
+    class Pair(BaseModel):
+        gold_id: str
+        finding_id: str | None
+        reason: str
+
+    Answer = create_model("Answer", pairs=(list[Pair], ...))  # noqa: N806
+    prompt = ("<reference>\n" + "\n".join(f"{g.id}: {g.note}" for g in left)
+              + "\n</reference>\n<findings>\n"
+              + "\n".join(f"{f['id']}: {f['title']}. {f.get('explanation', '')}"
+                          for f in findings) + "\n</findings>\n")
+    settings = load_settings()
+    settings = dataclasses.replace(settings, models={"judge": [model_id]})
+    client = LLMClient(settings, Trace(run_dir / "eval_trace.jsonl"))
+    answer = client.structured(step="eval_match", role="judge",
+                               instructions=_JUDGE_INSTRUCTIONS, prompt=prompt,
+                               output_type=Answer)
+    matched: dict[str, str] = {}
+    taken: set[str] = set()
+    for pair in answer.pairs:
+        fid = pair.finding_id
+        if pair.gold_id in {g.id for g in left} and fid in ids and fid not in taken:
+            matched[pair.gold_id] = fid
+            taken.add(fid)
+    return matched
+
+
 def report(gold: list[GoldDefect], scores: list[RunScore]) -> str:
     out = [f"# Оценка по эталону: {len(gold)} дефектов, прогонов: {len(scores)}", ""]
     out += ["| Прогон | Находок | Полнота | Критичные | Точность | Критерий совпал | "
-            "Серьёзность совпала | Ложные на ловушках |", "|---|---|---|---|---|---|---|---|"]
+            "Серьёзность совпала | Ложные на ловушках | По смыслу: полнота / точность |",
+            "|---|---|---|---|---|---|---|---|---|"]
     for s in scores:
         hit, total = s.recall_of("critical")
         traps = f"{len(s.traps_hit)}/{s.traps_total}" if s.traps_total else "—"
+        meaning = (f"{s.recall_by_meaning:.0%} / {s.precision_by_meaning:.0%}"
+                   if s.by_meaning else "—")
         out.append(f"| {s.run} | {s.findings} | {s.recall:.0%} ({len(s.matched)}/{len(gold)}) "
                    f"| {hit}/{total} | {s.precision:.0%} | {s.criterion_agrees}/{len(s.matched)} "
-                   f"| {s.severity_agrees}/{len(s.matched)} | {traps} |")
+                   f"| {s.severity_agrees}/{len(s.matched)} | {traps} | {meaning} |")
     out += ["", "## По дефектам эталона", "",
             "| Эталон | Серьёзность | Найден в прогонах | Находки агента | Серьёзность у агента "
             "| Что это |", "|---|---|---|---|---|---|"]
@@ -307,7 +376,8 @@ def report(gold: list[GoldDefect], scores: list[RunScore]) -> str:
         found = sum(1 for s in scores if g.id in s.matched)
         given = Counter(s.severities[g.id] for s in scores if g.id in s.severities)
         shown = ", ".join(f"{k} ×{v}" for k, v in given.most_common()) or "—"
-        ids = ", ".join(s.matched.get(g.id, "—") for s in scores)
+        ids = ", ".join(s.matched.get(g.id) or (f"{s.by_meaning[g.id]}*" if g.id in s.by_meaning
+                                                  else "—") for s in scores)
         out.append(f"| {g.id} | {g.severity} | {found}/{len(scores)} | {ids} | {shown} | "
                    f"{g.note[:90]} |")
     if len(scores) > 1:
@@ -365,6 +435,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--import", dest="imports", type=Path, nargs="+", metavar="ANSWER",
                         help="разрезать ответ генератора на документ и эталон в corpus/")
     parser.add_argument("--corpus", type=Path, default=CORPUS, help="папка корпуса")
+    parser.add_argument("--by-meaning", metavar="MODEL",
+                        help="второй проход: сопоставить оставшиеся по смыслу моделью MODEL "
+                             "(один вызов на прогон); в таблице такие помечены *")
     args = parser.parse_args(argv)
 
     if args.imports:
@@ -395,6 +468,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("нужны эталон и хотя бы одна папка прогона, либо --check/--import")
     gold_file = load_gold_file(args.gold)
     scores = [score_run(gold_file.defects, r, gold_file.traps) for r in args.runs]
+    if args.by_meaning:
+        for s, r in zip(scores, args.runs, strict=True):
+            s.by_meaning = match_by_meaning(s, r, gold_file.defects, args.by_meaning)
     print(report(gold_file.defects, scores))
     if args.json:
         args.json.write_text(json.dumps([score_dict(s) for s in scores], ensure_ascii=False,
@@ -407,4 +483,5 @@ def score_dict(s: RunScore) -> dict:
             "precision": round(s.precision, 4), "matched": s.matched,
             "critical_recall": s.recall_of("critical"),
             "criterion_agrees": s.criterion_agrees, "severity_agrees": s.severity_agrees,
-            "traps_hit": s.traps_hit, "traps_total": s.traps_total}
+            "traps_hit": s.traps_hit, "traps_total": s.traps_total,
+            "by_meaning": s.by_meaning}

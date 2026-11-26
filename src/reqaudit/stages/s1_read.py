@@ -186,6 +186,7 @@ class ReadStage(Stage):
         # Pages with no usable text layer are read a second time, by another strategy.
         second = ({n: png for n, png in pages.items() if n in need}
                   if settings.scan_reads >= 2 else {})
+        ctx.llm.plan_calls(len(pages) + len(second) + len(pictures), "чтение зрением")
         transcripts, descriptions, rereads = vision.run_vision(ctx.llm, pages, pictures,
                                                                second)
         drafts = _insert_pictures(drafts, pictures, descriptions, issues)

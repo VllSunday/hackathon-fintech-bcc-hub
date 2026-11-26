@@ -361,3 +361,21 @@ def test_opponent_cannot_turn_a_gap_into_a_one_sided_conflict(tmp_path):
     assert kept and all(f["criterion"] == "verifiable" for f in kept)
     assert all("opponent:criterion_kept" in f["trail"] for f in kept)
     assert "you move it to set_consistent, but it quotes one statement" in trace
+
+
+
+def test_a_defect_found_on_the_way_is_filed_under_its_own_criterion(tmp_path):
+    """The consistency cell reports a verifiability defect: accepted, no retry."""
+    def with_foreign(prompt):
+        answer = honest_set_review(prompt)
+        if "Непротиворечивость набора" in prompt and answer["findings"]:
+            extra = dict(answer["findings"][0], criterion="verifiable",
+                         title="Срок без единицы измерения", evidence=answer["findings"][0][
+                             "evidence"][:1])
+            answer["findings"].append(extra)
+        return answer
+
+    model, _ = fake_team(set_review=with_foreign)
+    _, state, _, trace = run(tmp_path, lambda _id: model)
+    assert "is not part of this check" not in trace and "not a known code" not in trace
+    assert any(f["title"] == "Срок без единицы измерения" for f in state["findings"])

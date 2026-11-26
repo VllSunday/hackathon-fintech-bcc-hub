@@ -164,6 +164,14 @@ class PlanStage(Stage):
     def run(self, ctx: RunContext) -> CellPlan:
         profile = ctx.state.profile
         assert profile is not None, "s4 needs s2"
+        if not profile.is_specification:
+            plan = CellPlan(cells=[], notes=[
+                "Документ не является спецификацией требований: "
+                f"{profile.not_specification_reason or 'требований к системе в нём нет'}. "
+                "Проверка по критериям ISO 29148 не выполнялась."])
+            ctx.state.cells, ctx.state.plan_notes = plan.cells, plan.notes
+            ctx.trace.event("plan_summary", stage=self.code, cells=[], notes=plan.notes)
+            return plan
         plan = plan_cells(
             ctx.state.units,
             has_child_spec=any(p.role == PartRole.CHILD_SPEC for p in profile.parts),
@@ -176,6 +184,8 @@ class PlanStage(Stage):
         )
         ctx.state.cells = plan.cells
         ctx.state.plan_notes = plan.notes
+        # Reviewers one call per cell; the opponent, the arbiter and the editor about as many.
+        ctx.llm.plan_calls(2 * len(plan.cells) + 5, "план проверок")
         ctx.trace.event("plan_summary", stage=self.code,
                         cells=[c.id for c in plan.cells], notes=plan.notes)
         return plan

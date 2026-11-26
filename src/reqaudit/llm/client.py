@@ -112,6 +112,7 @@ class LLMClient:
         # Models that ran out of quota or rejected the key; skipped for the rest of the run.
         self._unavailable: dict[str, str] = {}
         self.requests = 0
+        self.call_cap = settings.max_llm_calls
         self.cache_hits = 0
         self.models_used: list[str] = []
         # Spend of this run: tokens as providers report them, and the catalogue price.
@@ -170,6 +171,18 @@ class LLMClient:
         await asyncio.gather(*(one(i, g) for i, g in first_wave))
         await asyncio.gather(*(one(i, g) for i, g in second_wave))
         return results
+
+    def plan_calls(self, expected: int, why: str) -> None:
+        """A stage announces how many calls it is about to make. The cap guards against a
+        runaway loop, not against a large document, so unless the user fixed it, it grows
+        to cover the plan with room for retries."""
+        if self.settings.max_llm_calls_fixed:
+            return
+        needed = self.requests + int(expected * _RETRY_ROOM) + _SPARE_CALLS
+        if needed > self.call_cap:
+            self.trace.event("budget_raised", reason=why, expected=expected,
+                             before=self.call_cap, after=needed)
+            self.call_cap = needed
 
     def _warms_up(self, role: str) -> bool:
         if self.settings.warm_up != "auto":
@@ -302,9 +315,9 @@ class LLMClient:
                 f"Достигнут потолок стоимости прогона ${limit:.2f} (потрачено "
                 f"${self.cost_usd:.2f}). Поднимите REQAUDIT_MAX_COST_USD или повторите прогон: "
                 "готовые ответы возьмутся из кэша.")
-        if self.requests >= self.settings.max_llm_calls:
+        if self.requests >= self.call_cap:
             raise BudgetExceeded(
-                f"Исчерпан бюджет запросов к модели на прогон: {self.settings.max_llm_calls}. "
+                f"Исчерпан бюджет запросов к модели на прогон: {self.call_cap}. "
                 "Поднимите REQAUDIT_MAX_LLM_CALLS или повторите прогон: готовые ответы "
                 "возьмутся из кэша.")
 
@@ -414,6 +427,8 @@ class LLMClient:
             self.trace.event("llm_invalid_output", step=step, model=model_id, feedback=feedback)
 
 
+_RETRY_ROOM = 2.5  # calls per planned call: a retry or two, a fallback model
+_SPARE_CALLS = 10
 _MINUTE_QUOTA = re.compile(r"PerMinute", re.IGNORECASE)
 _RETRY_DELAY = re.compile(r"retryDelay['\"]?\s*:\s*['\"]?(\d+(?:\.\d+)?)s")
 _MAX_QUOTA_WAIT_S = 120.0

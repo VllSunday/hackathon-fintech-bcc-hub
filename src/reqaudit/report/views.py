@@ -147,6 +147,12 @@ class Verdict:
 
 
 def verdict(state: RunState, confirmed: list[Finding]) -> Verdict:
+    if state.profile is not None and not state.profile.is_specification:
+        reason = state.profile.not_specification_reason or "требований к системе в нём нет"
+        return Verdict(level="none", word="Не применимо", incomplete=False,
+                       text=f"Это не спецификация требований: {reason}. Начинать по нему "
+                            "разработку нельзя, потому что разрабатывать нечего: требования "
+                            "к системе нужно сформулировать отдельно.")
     critical = [f for f in confirmed if f.severity == Severity.CRITICAL]
     major = [f for f in confirmed if f.severity == Severity.MAJOR]
     if critical:

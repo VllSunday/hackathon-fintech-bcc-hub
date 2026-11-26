@@ -74,6 +74,9 @@ class Settings:
     cache_dir: Path = Path(".cache/llm")
     cache_read: bool = True
     max_llm_calls: int = 60
+    # True when REQAUDIT_MAX_LLM_CALLS is set: the cap is then the user's and stays fixed;
+    # otherwise it is a starting value the run raises as it learns the document's size.
+    max_llm_calls_fixed: bool = False
     # Optional ceiling on the run's catalogue cost in USD; None means no ceiling.
     max_cost_usd: float | None = None
     requests_per_minute: float | None = None
@@ -201,6 +204,7 @@ def load_settings(
         cache_dir=Path(_env("REQAUDIT_CACHE_DIR") or ".cache/llm"),
         cache_read=cache_read,
         max_llm_calls=int(_env("REQAUDIT_MAX_LLM_CALLS") or _DEFAULT_BUDGET[chosen]),
+        max_llm_calls_fixed=_env("REQAUDIT_MAX_LLM_CALLS") is not None,
         requests_per_minute=float(rpm) if rpm else None,
         max_cost_usd=float(cost) if (cost := _env("REQAUDIT_MAX_COST_USD")) else None,
         concurrency=max(1, int(_env("REQAUDIT_CONCURRENCY") or 6)),

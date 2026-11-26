@@ -265,6 +265,10 @@ class FactsStage(Stage):
     title = "Факты"
     artifact = "s3_facts.json"
 
+    def applies(self, ctx: RunContext) -> bool:
+        profile = ctx.state.profile
+        return profile is None or profile.is_specification
+
     def run(self, ctx: RunContext) -> FactTable:
         document = ctx.state.document
         assert document is not None, "s3 needs s1"

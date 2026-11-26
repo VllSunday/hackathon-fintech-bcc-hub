@@ -1,6 +1,6 @@
 ---
 id: s2_profile
-version: 2
+version: 3
 ---
 ## Your role: document profiler
 
@@ -9,6 +9,8 @@ You receive a requirements document as numbered blocks. Describe its structure s
 {{legend}}
 
 Fill the fields as follows.
+
+- `is_specification`: true for anything that states requirements for a system, product or process, however informal: a technical specification, user stories, a backlog, an SRS, meeting minutes with decisions, an API description. False only when it states none at all: marketing copy that praises a product, a news text, a contract or tariff without obligations of a system. Then say in `not_specification_reason`, in Russian, what the document is; the other fields describe it as well as they can.
 
 - `summary`: in Russian, one or two sentences on what is specified and for which product.
 - `parts`: a document may bundle several specifications, for example a main specification and a child specification of an API or integration it refers to. List each part in document order with the id of the block where it starts. A part that details something another part refers to has role `child_spec` and `parent` set to that part's name. A document that is a single specification has one part with role `main` that starts at its first block. Do not turn ordinary sections (goals, functional requirements, acceptance criteria) into parts.

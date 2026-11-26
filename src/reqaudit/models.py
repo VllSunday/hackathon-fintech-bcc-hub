@@ -162,6 +162,14 @@ class FocusCheck(BaseModel):
 class DocumentProfile(BaseModel):
     """What the document is and what it contains. Decides which checks apply (s4)."""
 
+    is_specification: bool = Field(
+        default=True, description="False only when the document states no requirements for a "
+        "system, product or process at all: marketing copy, a contract without system "
+        "obligations, meeting small talk.")
+    not_specification_reason: str = Field(
+        default="", description="In Russian, when is_specification is false: what the "
+        "document is instead.")
+
     summary: str = Field(description="One or two sentences in Russian: what the document "
                          "specifies, for which product.")
     parts: list[DocumentPart] = Field(min_length=1, description="Parts in document order.")

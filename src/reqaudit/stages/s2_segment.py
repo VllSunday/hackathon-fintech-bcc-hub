@@ -117,6 +117,9 @@ _OBLIGATION = re.compile(
     r"(?<![\wё])(долж(?:ен|на|но|ны)|обязан\w*|обязательн\w*|обязуется|необходимо|"
     r"(?<!не )требуется|следует|не допускается|запрещается|shall|must|is required to)"
     r"(?![\wё])", re.IGNORECASE)
+# The profiler may call a document «not a specification»; this many blocks with an explicit
+# obligation overrule it, because a wrong «not a specification» would skip every check.
+MIN_OBLIGATIONS_TO_OVERRULE = 3
 # Skip reasons that do not explain away an explicit obligation.
 _WEAK_SKIPS = {SkipReason.CONTEXT, SkipReason.OTHER}
 
@@ -338,8 +341,24 @@ class SegmentStage(Stage):
             prompt=_profile_prompt(document, window_chars), output_type=DocumentProfile,
             prompt_ids=ids, check=profile_check(document))
 
+        obligations = [b.id for b in visible(document.blocks) if obligation_word(b.text)]
+        if not profile.is_specification:
+            # The profile contradicts itself when it also sees acceptance criteria, an API
+            # or requirements on data, quality or screens; explicit obligations in the text
+            # contradict it too. Either way the document is checked: wrongly skipping a
+            # specification costs far more than reviewing a text that has no requirements.
+            own_signs = [name for name in ("has_acceptance_criteria", "has_api_spec",
+                                           "has_data_requirements", "has_non_functional",
+                                           "has_ui_spec") if getattr(profile, name)]
+            if len(obligations) < MIN_OBLIGATIONS_TO_OVERRULE and not own_signs:
+                return self._not_a_specification(ctx, document, profile)
+            ctx.trace.event("specification_overruled", stage=self.code,
+                            obligations=len(obligations), profile_signs=own_signs)
+            profile = profile.model_copy(update={"is_specification": True})
+
         instructions, ids = prompt_store.compose("s2_segment", legend=LEGEND)
         windows = split_windows(document.blocks, window_chars)
+        ctx.llm.plan_calls(len(windows) + 2, "нарезка по окнам")
         answers = []
         for k, window in enumerate(windows, 1):
             answer = ctx.llm.structured(
@@ -356,3 +375,14 @@ class SegmentStage(Stage):
                         windows=len(windows), unclassified=len(result.coverage.unclassified),
                         dropped=len(result.coverage.dropped_units))
         return result
+
+    def _not_a_specification(self, ctx: RunContext, document: DocumentIR,
+                             profile: DocumentProfile) -> Segmentation:
+        """No requirements to segment: every block is accounted for as context."""
+        needed = needed_blocks(document.blocks)
+        coverage = Coverage(blocks_checked=len(needed), in_units=0, skipped=len(needed),
+                            skipped_by_reason={"context": len(needed)} if needed else {})
+        ctx.state.profile, ctx.state.units, ctx.state.coverage = profile, [], coverage
+        ctx.trace.event("segmentation_summary", stage=self.code, units=0, windows=0,
+                        unclassified=0, dropped=0, not_specification=True)
+        return Segmentation(profile=profile, units=[], skipped=[], coverage=coverage)

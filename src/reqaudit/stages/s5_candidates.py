@@ -38,7 +38,6 @@ from reqaudit.stages.review_common import (
 )
 
 ROLE = "judge"
-_GAP_CRITERIA = {Criterion.COMPLETE, Criterion.SET_COMPLETE}
 _MAX_COMPLAINTS = 25
 _RUSSIAN_FIELDS = ("findings.title", "findings.explanation", "findings.suggestion",
                    "findings.question", "reviewed.note", "analysis")
@@ -90,9 +89,10 @@ def _answer_type(cell: Cell, markers: list[MarkerHit]) -> type[BaseModel]:
 
 def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
                markers: list[MarkerHit] | None = None) -> Check:
-    # A gap found while looking for something else may be filed in any check, so that a
-    # «conflict» whose second side does not exist is not lost but recorded as what it is.
-    allowed = set(cell.criteria) | _GAP_CRITERIA
+    # A cell names the criteria it is about, but a defect found on the way is filed under the
+    # criterion that fits it, whichever that is: duplicates across cells are merged before
+    # the opponent, and sending the answer back for a «foreign» criterion only cost a call.
+    known = {c.value for c in Criterion}
     markers = markers or []
 
     def check(answer: RequirementsAnswer | RequirementsWithMarkersAnswer | SetAnswer
@@ -114,9 +114,9 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
                                   "names that requirement; report it or change the decision")
         for n, f in enumerate(answer.findings):
             where = f"findings[{n}] ({f.title[:40]!r})"
-            if f.criterion not in allowed:
-                complaints.append(f"{where}: criterion {f.criterion!r} is not part of this check; "
-                                  f"use one of {sorted(c.value for c in allowed)}")
+            if str(f.criterion) not in known:
+                complaints.append(f"{where}: criterion {f.criterion!r} is not a known code; "
+                                  f"use one of {sorted(known)}")
             unknown = [u for u in f.unit_ids if u not in unit_ids]
             if unknown:
                 complaints.append(f"{where}: unknown requirement ids {unknown}")

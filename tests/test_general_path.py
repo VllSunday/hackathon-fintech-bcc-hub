@@ -156,3 +156,64 @@ def test_profiler_focus_checks_become_cells_within_the_frame(tmp_path):
     assert "unknown criteria" in trace  # the profiler was asked to fix them first
     assert '"s5_focus@' in trace
     assert "«Жизненный цикл статусов»" in report
+
+
+
+# --- not a specification; the call budget follows the plan --------------------------------
+
+MARKETING = """# Карта «Путешествие»
+
+Карту можно оформить в приложении за пару минут и забрать в любом отделении.
+
+До 7 % возвращаем бонусами за билеты и отели. Бонусы тратятся на новые поездки.
+
+- Бесплатные проходы в бизнес-залы на тарифе «Премиум».
+- Страховка для поездок за рубеж в один клик.
+"""
+NOT_SPEC = {"is_specification": False, "not_specification_reason": "рекламный текст о карте",
+            "has_acceptance_criteria": False, "has_api_spec": False,
+            "has_data_requirements": False, "has_non_functional": False, "has_ui_spec": False}
+# The profile itself sees acceptance criteria: «not a specification» contradicts it.
+NOT_SPEC_BUT_SEES = {**NOT_SPEC, "has_acceptance_criteria": True}
+
+
+def run_doc(tmp_path: Path, document: Path, **team):
+    model, calls = fake_team(**team)
+    settings = replace(Settings(), runs_dir=tmp_path / "runs", cache_dir=tmp_path / "cache",
+                       models={"judge": ["fake:team"]})
+    result = run_pipeline(document, tmp_path / "report.md", settings,
+                          model_factory=lambda _id: model)
+    state = json.loads((result.run_dir / "state.json").read_text(encoding="utf-8"))
+    trace = (result.run_dir / "trace.jsonl").read_text(encoding="utf-8")
+    return result, state, (tmp_path / "report.md").read_text(encoding="utf-8"), trace, calls
+
+
+def test_marketing_text_is_reported_as_not_a_specification(tmp_path):
+    document = tmp_path / "ad.md"
+    document.write_text(MARKETING, encoding="utf-8")
+    result, state, report, _, calls = run_doc(tmp_path, document, profile=NOT_SPEC)
+    assert result.exit_code == 0
+    assert calls["segment"] == 0 and calls["review"] == 0 and calls["facts"] == 0
+    assert state["units"] == [] and state["cells"] == [] and state["findings"] == []
+    assert "**Не применимо.** Это не спецификация требований: рекламный текст о карте" in report
+
+
+def test_explicit_obligations_overrule_not_a_specification(tmp_path):
+    _, state, _, trace, calls = run_doc(tmp_path, ORGANIZERS_DOC, profile=NOT_SPEC_BUT_SEES)
+    assert '"specification_overruled"' in trace
+    assert calls["segment"] >= 1 and state["units"] and state["cells"]
+
+
+def test_call_budget_grows_with_the_plan_unless_the_user_fixed_it(tmp_path):
+    model, _ = fake_team()
+    small = replace(Settings(), runs_dir=tmp_path / "a", cache_dir=tmp_path / "cache",
+                    models={"judge": ["fake:team"]}, max_llm_calls=4)
+    grown = run_pipeline(ORGANIZERS_DOC, tmp_path / "a.md", small, model_factory=lambda _id: model)
+    assert grown.exit_code == 0
+    assert '"budget_raised"' in (grown.run_dir / "trace.jsonl").read_text(encoding="utf-8")
+
+    fixed = replace(small, runs_dir=tmp_path / "b", cache_dir=tmp_path / "cache-b",
+                    max_llm_calls_fixed=True)
+    capped = run_pipeline(ORGANIZERS_DOC, tmp_path / "b.md", fixed,
+                          model_factory=lambda _id: model)
+    assert capped.exit_code != 0  # the user's cap is respected

@@ -254,7 +254,9 @@ def fake_team(mutate_segment: Mutate | None = None,
                  **fix(title), **(adjust(title) or {})}
                 for ref, title in _REF.findall(prompt)]}
             for v, (_, title) in zip(args["verdicts"], _REF.findall(prompt), strict=True):
-                if v.get("verdict") == "adjust" and v.get("severity") and                         not (levels.get(title) == "critical" and v["severity"] != "critical"):
+                # Lowering a critical finding goes to the arbiter, not straight through.
+                lowers = levels.get(title) == "critical" and v.get("severity") != "critical"
+                if v.get("verdict") == "adjust" and v.get("severity") and not lowers:
                     levels[title] = v["severity"]
         elif "decisions" in fields:
             calls["arbiter"] += 1

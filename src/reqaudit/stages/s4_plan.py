@@ -185,7 +185,8 @@ class PlanStage(Stage):
         ctx.state.cells = plan.cells
         ctx.state.plan_notes = plan.notes
         # Reviewers one call per cell; the opponent, the arbiter and the editor about as many.
-        ctx.llm.plan_calls(2 * len(plan.cells) + 5, "план проверок")
+        passes = max(1, ctx.settings.review_passes)
+        ctx.llm.plan_calls((passes + 1) * len(plan.cells) + 5, "план проверок")
         ctx.trace.event("plan_summary", stage=self.code,
                         cells=[c.id for c in plan.cells], notes=plan.notes)
         return plan

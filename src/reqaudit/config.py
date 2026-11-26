@@ -109,6 +109,8 @@ class Settings:
     thinking: dict[str, str] = field(default_factory=dict)
     # Prompt-cache warm-up: "auto" only for WARM_UP_PROVIDERS, "on" always, "off" never.
     warm_up: str = "auto"
+    # Independent reviewer passes per cell in s5, findings united (REQAUDIT_REVIEW_PASSES).
+    review_passes: int = 2
 
     def chain_for(self, role: str) -> list[str]:
         return self.models.get(role) or self.models.get(ROLE_FALLBACK.get(role, ""), [])
@@ -217,5 +219,6 @@ def load_settings(
                   if (level := _choice(f"REQAUDIT_THINKING_{role.upper()}",
                                        ("default", *THINKING_LEVELS), "default")) != "default"},
         warm_up=_choice("REQAUDIT_WARM_UP", ("auto", "on", "off"), "auto"),
+        review_passes=int(_choice("REQAUDIT_REVIEW_PASSES", ("1", "2", "3"), "2")),
         notes=notes,
     )

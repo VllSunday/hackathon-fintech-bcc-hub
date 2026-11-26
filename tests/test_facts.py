@@ -184,7 +184,8 @@ def test_values_cell_gets_the_fact_table_and_code_conflicts(tmp_path):
     kinds = sorted(c["kind"] for c in table["conflicts"])
     assert kinds == ["different_values", "mixed_units", "unit_mismatch"]
 
-    assert len(seen_prompts) == 1
+    assert len(seen_prompts) == 2  # two independent reviewer passes over the cell
+    assert sum("Another reviewer has checked this scope" in p for p in seen_prompts) == 1
     prompt = seen_prompts[0]
     assert "<fact_table>" in prompt and "unit_mismatch" in prompt
     assert re.search(r"F-\d{3} type = string", prompt)

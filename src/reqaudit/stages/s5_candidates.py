@@ -40,6 +40,9 @@ from reqaudit.stages.review_common import (
 )
 
 ROLE = "judge"
+_ANOTHER_PASS = ("\nAnother reviewer has checked this scope already. Work independently and "
+                 "in the opposite order: start from the last requirement, or from the end of "
+                 "the document, and move backwards.\n")
 _MAX_COMPLAINTS = 25
 _RUSSIAN_FIELDS = ("findings.title", "findings.explanation", "findings.suggestion",
                    "findings.question", "reviewed.note", "analysis")
@@ -253,7 +256,8 @@ def _prompt(ctx: RunContext, cell: Cell, markers: list[MarkerHit] | None = None)
     return "\n\n".join(parts) + "\n"
 
 
-def _to_findings(cell: Cell, answer: RequirementsAnswer | SetAnswer) -> tuple[list[Finding], int]:
+def _to_findings(cell: Cell, answer: RequirementsAnswer | SetAnswer,
+                 review_pass: int = 1) -> tuple[list[Finding], int]:
     """Candidates from one cell, and how many were dropped for an unknown criterion."""
     findings = []
     dropped = 0
@@ -265,7 +269,7 @@ def _to_findings(cell: Cell, answer: RequirementsAnswer | SetAnswer) -> tuple[li
             dropped += 1
             continue
         findings.append(Finding(
-            id=f"{cell.id}#{n}",
+            id=f"{cell.id}#{n}" if review_pass == 1 else f"{cell.id}/{review_pass}#{n}",
             scope=scope_of(criterion, list(draft.unit_ids)),
             criterion=criterion,
             unit_ids=list(draft.unit_ids),
@@ -296,33 +300,48 @@ class CandidatesStage(Stage):
         has_parent_child = any(c.kind == CellKind.PARENT_CHILD for c in state.cells)
 
         hits = find_markers(state.units) if ctx.settings.markers else []
-        requests = []
+        # Every cell is reviewed by independent passes and their findings are united: one
+        # pass of a model finds a different subset of the defects each time, and the union
+        # is both fuller and steadier. Duplicates are merged and false ones refuted in s6.
+        passes = max(1, ctx.settings.review_passes)
+        requests, owners = [], []
         for cell in state.cells:
             # Cells without marker hits keep exactly the request they had before markers.
             mine = ([h for h in hits if h.unit_id in set(cell.unit_ids)]
                     if cell.kind == CellKind.REQUIREMENTS else [])
             instructions, ids = _instructions(cell, has_parent_child, with_markers=bool(mine))
-            requests.append(dict(
-                step=f"s5[{cell.id}]",
-                role="reviewer" if cell.kind == CellKind.REQUIREMENTS else ROLE,
-                instructions=instructions,
-                prompt=_prompt(ctx, cell, mine), output_type=_answer_type(cell, mine),
-                prompt_ids=ids, check=cell_check(cell, unit_ids, blocks, mine)))
+            prompt = _prompt(ctx, cell, mine)
+            for n in range(1, passes + 1):
+                requests.append(dict(
+                    step=f"s5[{cell.id}]" if n == 1 else f"s5[{cell.id}/{n}]",
+                    role="reviewer" if cell.kind == CellKind.REQUIREMENTS else ROLE,
+                    instructions=instructions,
+                    prompt=prompt if n == 1 else prompt + _ANOTHER_PASS,
+                    output_type=_answer_type(cell, mine),
+                    prompt_ids=ids, check=cell_check(cell, unit_ids, blocks, mine)))
+                owners.append((cell, n))
 
         candidates: list[Finding] = []
         failures: list[CheckFailure] = []
         unknown = 0
         verdicts: dict[str, MarkerVerdict] = {}
-        for cell, result in zip(state.cells, ctx.llm.many(requests), strict=True):
+        answered: set[str] = set()
+        errors: dict[str, LLMError] = {}
+        for (cell, n), result in zip(owners, ctx.llm.many(requests), strict=True):
             if isinstance(result, LLMError):
-                failures.append(CheckFailure(stage=self.code, cell=cell.title,
-                                             message=result.message))
-            else:
-                found, dropped = _to_findings(cell, result)
-                candidates.extend(found)
-                unknown += dropped
-                for verdict in getattr(result, "markers", []):
+                errors.setdefault(cell.id, result)
+                continue
+            answered.add(cell.id)
+            found, dropped = _to_findings(cell, result, n)
+            candidates.extend(found)
+            unknown += dropped
+            for verdict in getattr(result, "markers", []):
+                if verdict.marker_id not in verdicts or verdict.defect:
                     verdicts[verdict.marker_id] = verdict
+        for cell in state.cells:  # a cell is unchecked only when every pass failed
+            if cell.id not in answered and cell.id in errors:
+                failures.append(CheckFailure(stage=self.code, cell=cell.title,
+                                             message=errors[cell.id].message))
 
         state.candidates = candidates
         state.check_failures.extend(failures)

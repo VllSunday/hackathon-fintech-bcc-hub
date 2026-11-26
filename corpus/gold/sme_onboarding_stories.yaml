@@ -5,7 +5,7 @@ defects:
   - id: G-01
     scope: pair
     criterion: set_consistent
-    severity: critical
+    severity: major
     kind: cross_section
     quotes:
       - "Когда заявитель не ответил в течение 5 рабочих дней"
@@ -66,7 +66,7 @@ defects:
   - id: G-08
     scope: requirement
     criterion: set_comprehensible
-    severity: major
+    severity: critical
     kind: local
     quotes:
       - "Когда по данным внешнего справочника заявитель является ПДЛ или его родственником"
@@ -90,7 +90,7 @@ defects:
   - id: G-11
     scope: pair
     criterion: complete
-    severity: major
+    severity: critical
     kind: cross_section
     quotes:
       - "Когда этот ОКЭД входит в перечень из Приложения А"
@@ -162,7 +162,7 @@ defects:
     adjudicated: true
     scope: pair
     criterion: set_consistent
-    severity: major
+    severity: critical
     kind: missing
     quotes:
     - а если ответ так и не получен — заявка переходит в статус «На проверке» с отметкой «Сверка с ГБД ФЛ не выполнена»
@@ -193,7 +193,7 @@ defects:
     adjudicated: true
     scope: requirement
     criterion: complete
-    severity: major
+    severity: critical
     kind: missing
     quotes:
     - 'Сценарий: Заявитель — ПДЛ'
@@ -223,7 +223,7 @@ defects:
     adjudicated: true
     scope: requirement
     criterion: complete
-    severity: critical
+    severity: major
     kind: missing
     quotes:
     - Когда прошло не более 15 минут после успешной верификации
@@ -283,7 +283,7 @@ defects:
     adjudicated: true
     scope: requirement
     criterion: complete
-    severity: minor
+    severity: major
     kind: missing
     quotes:
     - Дано руководитель направления выбрал период не длиннее 92 календарных дней
@@ -302,7 +302,7 @@ defects:
     adjudicated: true
     scope: requirement
     criterion: complete
-    severity: major
+    severity: critical
     kind: missing
     quotes:
     - Когда проверка по перечням ПОД/ФТ по ИИН и ФИО не нашла совпадений
@@ -328,6 +328,8 @@ defects:
       немного больше времени»
     note: Неясно время показа сообщения о задержке открытия счёта (подтверждено независимой проверкой).
 
+# Severity of G-01, G-08, G-11, A-01, A-04, A-07, A-14, A-16 revised 2026-11-26: two independent
+# raters (document only, same scale) agreed with each other and against the original level.
 traps:
   - id: T-01
     quotes:

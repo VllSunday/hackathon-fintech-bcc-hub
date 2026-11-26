@@ -197,6 +197,10 @@ def _same_defect(a: Finding, b: Finding) -> bool:
         return False
     if blocks_a == blocks_b and a.criterion == b.criterion:
         return True
+    # The same two or more places quoted by both: one defect, whatever criterion each used.
+    # With one place, different criteria can be different defects of one requirement.
+    if blocks_a == blocks_b and len(blocks_a) >= 2:
+        return True
     smaller = min(len(blocks_a), len(blocks_b))
     return a.criterion == b.criterion and overlap / smaller >= 0.5 and len(blocks_a) > 1
 

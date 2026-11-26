@@ -437,3 +437,12 @@ def test_a_gap_with_something_still_missing_cannot_be_refuted_whole(tmp_path):
     model, _ = fake_team(review=as_gap, adjust=refute_but_admit)
     _, _, _, trace = run(tmp_path, lambda _id: model)
     assert "you refute the gap but write that" in trace
+
+
+def test_same_places_quoted_under_two_criteria_are_one_defect():
+    a = _f("D1", ["b1", "b2"], criterion="set_consistent", severity=Severity.CRITICAL)
+    b = _f("D2", ["b1", "b2"], criterion="correct")
+    single_a = _f("D3", ["b9"], criterion="unambiguous")
+    single_b = _f("D4", ["b9"], criterion="singular")
+    merged, n = merge_duplicates([a, b, single_a, single_b])
+    assert n == 1 and len(merged) == 3  # the pair merged; one place, two criteria kept apart

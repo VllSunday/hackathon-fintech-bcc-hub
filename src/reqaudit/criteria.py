@@ -122,7 +122,10 @@ CRITERIA: dict[Criterion, CriterionInfo] = {
                   "pixel details in a functional spec. Being concrete does not make a design "
                   "choice appropriate.",
             not_defect="A design the document names as a constraint (an existing API, a "
-                       "mandated protocol) is appropriate.",
+                       "mandated protocol) is appropriate. A field the document's own template "
+                       "asks for in every section of its kind (an owner, a controller, a system "
+                       "name in each API description) is the document's convention, not a "
+                       "design decision inside a requirement.",
             versus="A design that contradicts another requirement is set_consistent.",
             severity="Usually minor or major; critical only if the prescribed design makes "
                      "the needed behaviour impossible."),

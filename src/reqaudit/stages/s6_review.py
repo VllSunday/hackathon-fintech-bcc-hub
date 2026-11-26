@@ -23,17 +23,21 @@ from pydantic import BaseModel, Field, field_validator
 
 from reqaudit import criteria, prompt_store
 from reqaudit.criteria import Criterion
+from reqaudit.evidence import match_key
 from reqaudit.llm.checks import Check, combine, require_russian
 from reqaudit.llm.client import LLMError
-from reqaudit.models import CheckFailure, Finding, FindingStatus, Severity
+from reqaudit.models import CheckFailure, Evidence, Finding, FindingStatus, Severity
 from reqaudit.reading.render import LEGEND
 from reqaudit.stages.base import RunContext, Stage
 from reqaudit.stages.review_common import (
     EvidenceDraft,
     document_view,
     evidence_problem,
+    merge_duplicates,
+    one_sided,
     profile_view,
     requirement_index,
+    screen,
 )
 
 BATCH_SIZE = 8
@@ -44,6 +48,9 @@ class Verdict(BaseModel):
     verdict: Literal["upheld", "adjust", "refuted"]
     reasoning: str
     counter_evidence: list[EvidenceDraft] = []
+    other_side: list[EvidenceDraft] = Field(
+        default_factory=list, description="For a conflict quoted from one side only: the "
+        "statement that forms the other side, if the document has it.")
     severity: Severity | None = None
     criterion: Criterion | None = None
     severity_reason: str = Field(default="", description="In Russian: which point of the "
@@ -99,9 +106,13 @@ class ReviewResult(BaseModel):
 def _finding_view(ref: str, f: Finding, with_fix: bool = False) -> str:
     quotes = "\n".join(f"  - [{e.block_id}] «{e.quote}»" for e in f.evidence)
     fix = f"\n  suggestion: {f.suggestion or '—'}" if with_fix else ""
+    note = ("\n  note: this conflict quotes only one side. Quote the other side in "
+            "`other_side` if the document states it; if it does not, the defect is a gap: "
+            "`adjust` it to `complete` or `set_complete`." if with_fix and one_sided(f) else "")
     return (f"{ref}: criterion={f.criterion.value} severity={f.severity.value} "
             f"requirements={','.join(f.unit_ids) or '—'}\n"
-            f"  title: {f.title}\n  explanation: {f.explanation}{fix}\n  evidence:\n{quotes}")
+            f"  title: {f.title}\n  explanation: {f.explanation}{fix}{note}\n"
+            f"  evidence:\n{quotes}")
 
 
 def _context(ctx: RunContext) -> str:
@@ -112,11 +123,28 @@ def _context(ctx: RunContext) -> str:
 
 
 def _batches(findings: list[Finding]) -> list[list[Finding]]:
+    """Batches of up to BATCH_SIZE, findings of one cell kept next to each other.
+
+    Packed across cells: each batch carries the whole document as context, so a half-empty
+    batch per cell pays for the document again without judging more findings.
+    """
     by_cell: dict[str, list[Finding]] = {}
     for f in findings:
         by_cell.setdefault(f.cell or "", []).append(f)
-    return [group[i:i + BATCH_SIZE] for group in by_cell.values()
-            for i in range(0, len(group), BATCH_SIZE)]
+    ordered = [f for group in by_cell.values() for f in group]
+    return [ordered[i:i + BATCH_SIZE] for i in range(0, len(ordered), BATCH_SIZE)]
+
+
+def _sides(f: Finding) -> int:
+    return len({(e.block_id, match_key(e.quote)) for e in f.evidence})
+
+
+def _criterion_after(f: Finding, v: Verdict) -> Criterion:
+    """The opponent's criterion, unless it would turn a one-quote finding into a «conflict»
+    the gate must drop: a relabelling must not invalidate a defect the opponent upheld."""
+    if v.criterion == Criterion.SET_CONSISTENT and _sides(f) < 2:
+        return f.criterion
+    return v.criterion or f.criterion
 
 
 def _covers_refs(refs: list[str], field: str, blocks: dict,
@@ -132,6 +160,9 @@ def _covers_refs(refs: list[str], field: str, blocks: dict,
             for e in getattr(item, "counter_evidence", []):
                 if problem := evidence_problem(e, blocks):
                     complaints.append(f"{item.ref}: counter_evidence {problem}")
+            for e in getattr(item, "other_side", []):
+                if problem := evidence_problem(e, blocks):
+                    complaints.append(f"{item.ref}: other_side {problem}")
             complaints += _severity_complaints(item, findings.get(item.ref))
             if (getattr(item, "fix_works", True) is False and item.verdict != "refuted"
                     and not item.better_fix.strip()):
@@ -155,6 +186,11 @@ def _severity_complaints(item: Verdict | Decision, f: Finding | None) -> list[st
                    f"{item.severity.value}; say in severity_reason which point of the severity "
                    "scale makes it right")
     criterion = item.criterion or f.criterion
+    if (item.criterion == Criterion.SET_CONSISTENT and f.criterion != Criterion.SET_CONSISTENT
+            and not item.other_side and _sides(f) < 2):
+        out.append(f"{item.ref}: you move it to set_consistent, but it quotes one statement; a "
+                   "conflict needs both: quote the other one in other_side, or keep the "
+                   "reviewer's criterion")
     if criterion == Criterion.SET_CONSISTENT and item.severity == Severity.MINOR:
         out.append(f"{item.ref}: you confirm a contradiction but rate it minor; by the scale a "
                    "contradiction is critical when it concerns behaviour and major when it is "
@@ -177,7 +213,14 @@ class ReviewStage(Stage):
         state = ctx.state
         blocks = {b.id: b for b in state.document.blocks if not b.hidden}
         context = _context(ctx)
-        batches = _batches(state.candidates)
+        # Code's checks first: the opponent is not paid for unfound quotes and duplicates.
+        screened = screen(state.candidates, blocks, state.units, drop_one_sided=False)
+        candidates, merged = merge_duplicates(screened.passed)
+        ctx.trace.event("prescreen_summary", stage=self.code, candidates=len(state.candidates),
+                        no_evidence=screened.stats["no_evidence"], merged=merged,
+                        to_opponent=len(candidates),
+                        one_sided=sum(1 for f in candidates if one_sided(f)))
+        batches = _batches(candidates)
 
         instructions, ids = prompt_store.compose("s6_opponent", "severity", legend=LEGEND)
         requests = []
@@ -213,6 +256,11 @@ class ReviewStage(Stage):
                 if v and not v.fix_works and v.better_fix.strip() and v.verdict != "refuted":
                     f = f.model_copy(update={"suggestion": v.better_fix.strip(),
                                              "trail": [*f.trail, "opponent:fix_rewritten"]})
+                if v and v.other_side and v.verdict != "refuted":
+                    f = f.model_copy(update={
+                        "evidence": [*f.evidence, *(Evidence(block_id=e.block_id, quote=e.quote)
+                                                    for e in v.other_side)],
+                        "trail": [*f.trail, "opponent:other_side"]})
                 if v and v.verdict == "upheld":
                     confirmed.append(f.model_copy(update={
                         "status": FindingStatus.CONFIRMED, "trail": [*f.trail, "opponent:upheld"],
@@ -220,16 +268,21 @@ class ReviewStage(Stage):
                 elif v and v.verdict == "adjust" and _lowers_critical(f, v):
                     disputed.append(Dispute(f, v, severity_only=True))
                 elif v and v.verdict == "adjust":
+                    criterion = _criterion_after(f, v)
+                    kept_own = v.criterion is not None and criterion != v.criterion
                     confirmed.append(f.model_copy(update={
                         "status": FindingStatus.CONFIRMED,
                         "severity": v.severity or f.severity,
-                        "criterion": v.criterion or f.criterion,
-                        "trail": [*f.trail, "opponent:adjusted"], "review_note": v.reasoning}))
+                        "criterion": criterion,
+                        "trail": [*f.trail, "opponent:adjusted"]
+                        + (["opponent:criterion_kept"] if kept_own else []),
+                        "review_note": v.reasoning}))
                 else:
                     disputed.append(Dispute(f, v))
 
         kept, rejected = self._arbitrate(ctx, context, disputed, blocks)
         confirmed.extend(kept)
+        rejected = [*screened.rejected, *rejected]
         result = ReviewResult(confirmed=confirmed, rejected=rejected, verdicts=verdicts)
         state.findings = confirmed
         state.rejected = rejected
@@ -313,6 +366,6 @@ def _settle_severity(f: Finding, v: Verdict, d: Decision | None) -> Finding:
            "Арбитр не вынес решения, серьёзность оставлена по рецензенту.")
     return f.model_copy(update={
         "status": FindingStatus.CONFIRMED, "severity": severity,
-        "criterion": v.criterion or f.criterion,
+        "criterion": _criterion_after(f, v),
         "trail": [*f.trail, "opponent:severity_disputed", "arbiter:severity"],
         "review_note": f"Оппонент: {v.reasoning} {why}"})

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Literal, get_args
 
 from pydantic import BaseModel, field_validator
@@ -16,8 +17,11 @@ from reqaudit.models import (
     Evidence,
     Fact,
     FactTable,
+    Finding,
+    FindingStatus,
     Severity,
     Unit,
+    scope_of,
 )
 from reqaudit.reading.render import render_blocks, render_outline
 
@@ -129,3 +133,88 @@ def fact_table_view(table: FactTable) -> str:
                           for c in table.conflicts) or "- none"
     return ("<fact_table>\n" + "\n".join(lines) + "\n</fact_table>\n\n"
             f"<code_found_discrepancies>\n{conflicts}\n</code_found_discrepancies>")
+
+
+# --- evidence gates, shared by s6 (before the opponent) and s7 (final) ---------------------
+
+
+@dataclass
+class Screened:
+    passed: list[Finding]
+    rejected: list[Finding]
+    stats: dict[str, int]
+
+
+def one_sided(f: Finding) -> bool:
+    """A conflict that quotes only one statement."""
+    distinct = {(e.block_id, match_key(e.quote)) for e in f.evidence}
+    return f.criterion == Criterion.SET_CONSISTENT and len(distinct) < 2
+
+
+def screen(findings: list[Finding], blocks: dict[str, Block], units: list[Unit],
+           drop_one_sided: bool = True) -> Screened:
+    """Code's evidence checks: quotes must be in the document, a conflict needs two sides,
+    requirement ids must exist (missing ones are taken from the quoted blocks)."""
+    unit_ids = {u.id for u in units}
+    units_of_block: dict[str, list[str]] = {}
+    for u in units:
+        for b in u.block_ids:
+            units_of_block.setdefault(b, []).append(u.id)
+    passed: list[Finding] = []
+    rejected: list[Finding] = []
+    stats = {"no_evidence": 0, "one_sided_conflict": 0}
+    for f in findings:
+        evidence = [v for e in f.evidence
+                    if (v := verify_evidence(EvidenceDraft(block_id=e.block_id, quote=e.quote),
+                                             blocks))]
+        if not evidence:
+            stats["no_evidence"] += 1
+            rejected.append(f.model_copy(update={
+                "status": FindingStatus.REJECTED, "trail": [*f.trail, "gate:no_evidence"],
+                "review_note": "Ни одна цитата не найдена в документе."}))
+            continue
+        checked = f.model_copy(update={"evidence": evidence})
+        if drop_one_sided and one_sided(checked):
+            stats["one_sided_conflict"] += 1
+            rejected.append(f.model_copy(update={
+                "status": FindingStatus.REJECTED, "trail": [*f.trail, "gate:one_sided"],
+                "review_note": "Противоречие подтверждено цитатой только одной стороны; ни "
+                               "рецензент, ни оппонент не привели вторую."}))
+            continue
+        ids = [u for u in f.unit_ids if u in unit_ids]
+        if not ids:
+            ids = sorted({u for e in evidence for u in units_of_block.get(e.block_id, [])})
+        passed.append(checked.model_copy(update={"unit_ids": ids,
+                                                 "scope": scope_of(f.criterion, ids)}))
+    return Screened(passed, rejected, stats)
+
+
+def _same_defect(a: Finding, b: Finding) -> bool:
+    blocks_a = {e.block_id for e in a.evidence}
+    blocks_b = {e.block_id for e in b.evidence}
+    overlap = len(blocks_a & blocks_b)
+    if not overlap:
+        return False
+    if blocks_a == blocks_b and a.criterion == b.criterion:
+        return True
+    smaller = min(len(blocks_a), len(blocks_b))
+    return a.criterion == b.criterion and overlap / smaller >= 0.5 and len(blocks_a) > 1
+
+
+def merge_duplicates(findings: list[Finding]) -> tuple[list[Finding], int]:
+    ordered = sorted(findings, key=lambda f: f.severity.rank)
+    kept: list[Finding] = []
+    merged = 0
+    for f in ordered:
+        twin = next((k for k in kept if _same_defect(k, f)), None)
+        if twin is None:
+            kept.append(f)
+            continue
+        merged += 1
+        index = kept.index(twin)
+        kept[index] = twin.model_copy(update={
+            "unit_ids": sorted(set(twin.unit_ids) | set(f.unit_ids)),
+            "trail": [*twin.trail, f"merged:{f.id}"],
+            "question": twin.question or f.question,
+        })
+    return kept, merged

@@ -155,14 +155,19 @@ def diagnose(run_dir: Path) -> Diagnosis:
 
     # --- the path of findings ------------------------------------------------------------------
     stats = {e["event"]: e for e in events
-             if e["event"] in ("candidates_summary", "review_summary", "gates_summary",
-                               "editor_summary")}
+             if e["event"] in ("candidates_summary", "prescreen_summary", "review_summary",
+                               "gates_summary", "editor_summary")}
     cand = artifacts.get("s5_candidates", {}).get("candidates", [])
     per_cell = Counter(c.get("cell") for c in cand)
     out += ["", "### Путь находок", ""]
     if cand:
         out.append(f"Кандидатов от рецензентов: {len(cand)} ("
                    + ", ".join(f"{k} {v}" for k, v in per_cell.most_common()) + ").")
+    if "prescreen_summary" in stats:
+        p = stats["prescreen_summary"]
+        out.append(f"До оппонента: без цитаты {p.get('no_evidence')}, дублей сведено "
+                   f"{p.get('merged')}, к оппоненту {p.get('to_opponent')}, из них противоречий "
+                   f"с одной стороной {p.get('one_sided')}.")
     if "review_summary" in stats:
         r = stats["review_summary"]
         out.append(f"Оппонент и арбитр: подтверждено {r.get('confirmed')}, отклонено "
@@ -172,7 +177,8 @@ def diagnose(run_dir: Path) -> Diagnosis:
         out.append(f"Гейты: на входе {g.get('in')}, без цитаты {g.get('no_evidence')}, "
                    f"противоречие с одной стороной {g.get('one_sided_conflict')}, дублей "
                    f"{g.get('merged')}, прошло {g.get('out')}.")
-        if g.get("merged", 0) and cand and g["merged"] / len(cand) >= 0.15:
+        if "prescreen_summary" not in stats and g.get("merged", 0) and cand \
+                and g["merged"] / len(cand) >= 0.15:
             warn.append(f"Гейт свёл {g['merged']} дублей из {len(cand)} кандидатов: разные "
                         "ячейки находят одно и то же, а оппонент проверяет каждый дубль "
                         "отдельно. Дубли дешевле сводить до оппонента.")
@@ -189,7 +195,16 @@ def diagnose(run_dir: Path) -> Diagnosis:
     if lowered:
         out.append("Серьёзность изменена после рецензента: " + "; ".join(
             f"{a} → {b} «{t[:50]}»" for a, b, t in lowered) + ".")
+    relabelled = [f for f in state.findings if "opponent:criterion_kept" in f.trail]
+    if relabelled:
+        out.append("Оппонент пытался сделать противоречием находку с одной цитатой; критерий "
+                   "рецензента сохранён: " + ", ".join(f.id for f in relabelled) + ".")
     for f in state.rejected:
+        if "gate:one_sided" in f.trail and "opponent:adjusted" in f.trail:
+            warn.append(f"«{f.title}»: оппонент сменил критерий на противоречие без второй "
+                        "стороны, и гейт её отбросил. В новой версии такая смена не "
+                        "применяется — если видите это, прогон сделан старой версией.")
+            continue
         if "gate:one_sided" in f.trail:
             warn.append(f"«{f.title}» отброшена гейтом как противоречие с одной стороной. "
                         + ("По заголовку это пропуск, а не противоречие: критерий выбран "

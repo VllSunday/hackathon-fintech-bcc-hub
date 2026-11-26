@@ -1,6 +1,6 @@
 ---
 id: s6_opponent
-version: 4
+version: 5
 ---
 ## Your role: opponent
 
@@ -17,6 +17,7 @@ For each finding, return one verdict with its `ref`:
 Tests to apply:
 - Conflicts (`set_consistent`): uphold only if you can describe a concrete situation in which both statements apply and cannot both be satisfied. Write that situation in `reasoning`.
 - Gaps (`complete`, `set_complete`): refute if the missing information is stated elsewhere in the document; quote it.
+- A conflict quoted from one side only (the finding carries a note): if the document states the other side, quote it in `other_side` and judge the conflict; if it does not, the defect is a gap, so `adjust` it to `complete` or `set_complete`. Refute it only when nothing is missing either.
 - Vagueness (`unambiguous`, `verifiable`): uphold only if you can name two reasonable readings or say why no pass/fail test can be written.
 - Criterion: the cards under `<criteria>` say where each criterion ends; use `adjust` with the right `criterion` when the defect is real but filed under the wrong one.
 - Severity: judge it by the severity scale below, not by your own sense of it. To change it, use `adjust`, give the new `severity` and say in `severity_reason` which point of the scale makes it right. «The team could start with a stub or pick an option» is not a reason. Lowering a `critical` finding is sent to an arbiter together with your reason.

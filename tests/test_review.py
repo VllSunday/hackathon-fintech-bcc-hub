@@ -3,7 +3,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
-from fakes import _TO_CHECK, _finding, fake_team, honest_review
+from fakes import _TO_CHECK, _finding, fake_team, honest_review, honest_set_review
 from pydantic_ai.exceptions import ModelQuotaExceededError
 from pydantic_ai.models.function import FunctionModel
 
@@ -278,3 +278,86 @@ def test_cell_ids_are_unique():
     ids = [c.id for c in plan.cells]
     assert len(ids) == len(set(ids))
     assert all(isinstance(c, Cell) for c in plan.cells)
+
+
+
+# --- code's checks before the opponent; a one-sided conflict is not lost -----------------
+
+COMPLETENESS = "Полнота и документ целиком"
+
+
+def conflict_also_in_completeness(prompt):
+    """The completeness cell reports the same conflict as the consistency cell."""
+    answer = honest_set_review(prompt)
+    if COMPLETENESS in prompt and not answer["findings"]:
+        answer = honest_set_review(prompt.replace(COMPLETENESS, "Непротиворечивость набора"))
+    return answer
+
+
+def test_duplicates_are_merged_before_the_opponent_pays_for_them(tmp_path):
+    seen = []
+    model, _ = fake_team(set_review=conflict_also_in_completeness,
+                         refute=lambda title: seen.append(title) or False)
+    _, state, _, trace = run(tmp_path, lambda _id: model)
+    assert sum(CONFLICT in t for t in seen) == 1  # the opponent judged it once
+    assert '"prescreen_summary"' in trace and '"merged": 1' in trace
+    assert sum(CONFLICT in f["title"] for f in state["findings"]) == 1
+
+
+def one_sided_conflict(keep: list):
+    def review(prompt):
+        answer = honest_set_review(prompt)
+        for f in answer["findings"]:
+            if f["criterion"] == "set_consistent":
+                keep.append(f["evidence"][1])
+                f["evidence"] = f["evidence"][:1]
+        return answer
+    return review
+
+
+def test_opponent_refiles_a_one_sided_conflict_as_a_gap(tmp_path):
+    def refile(title):
+        return ({"verdict": "adjust", "criterion": "set_complete"} if CONFLICT in title
+                else None)
+
+    model, _ = fake_team(set_review=one_sided_conflict([]), adjust=refile)
+    _, state, _, trace = run(tmp_path, lambda _id: model)
+    assert "file it under `complete`" in trace  # the reviewer was told how to fix it
+    gap = next(f for f in state["findings"] if CONFLICT in f["title"])
+    assert gap["criterion"] == "set_complete"
+    assert not any("gate:one_sided" in f["trail"] for f in state["rejected"])
+
+
+def test_opponent_can_quote_the_missing_side_of_a_conflict(tmp_path):
+    second: list = []
+
+    def supply(title):
+        return {"other_side": second[:1]} if CONFLICT in title and second else None
+
+    model, _ = fake_team(set_review=one_sided_conflict(second), adjust=supply)
+    _, state, _, _ = run(tmp_path, lambda _id: model)
+    conflict = next(f for f in state["findings"] if CONFLICT in f["title"])
+    assert conflict["criterion"] == "set_consistent" and len(conflict["evidence"]) == 2
+    assert "opponent:other_side" in conflict["trail"]
+
+
+def test_one_sided_conflict_nobody_fixed_is_dropped_by_the_final_gate(tmp_path):
+    model, _ = fake_team(set_review=one_sided_conflict([]))
+    _, state, _, _ = run(tmp_path, lambda _id: model)
+    assert any("gate:one_sided" in f["trail"] for f in state["rejected"])
+
+
+
+def test_opponent_cannot_turn_a_gap_into_a_one_sided_conflict(tmp_path):
+    """The reviewer filed a gap correctly; the opponent relabels it as a conflict without the
+    other side. The relabelling is not applied, so the gate does not lose the defect."""
+    def relabel(title):
+        return ({"verdict": "adjust", "criterion": "set_consistent"} if "Непроверяемая" in title
+                else None)
+
+    model, _ = fake_team(adjust=relabel)
+    _, state, _, trace = run(tmp_path, lambda _id: model)
+    kept = [f for f in state["findings"] if "Непроверяемая" in f["title"]]
+    assert kept and all(f["criterion"] == "verifiable" for f in kept)
+    assert all("opponent:criterion_kept" in f["trail"] for f in kept)
+    assert "you move it to set_consistent, but it quotes one statement" in trace

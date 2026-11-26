@@ -6,6 +6,11 @@ Gates are computed, never asserted by a model:
 - a conflict must quote at least two different statements;
 - requirement ids must exist; missing ones are taken from the blocks the quotes come from;
 - duplicates found by different cells are merged;
+
+The same checks already ran before the opponent (s6), so the opponent was not paid to
+judge unfound quotes and duplicates; here they run once more on what the review kept.
+A conflict with one side left is dropped only here, after the reviewer and the opponent
+had the chance to quote the other side or to file it as a gap.
 - defects of the file itself found while reading (hidden text, broken markup) are added.
 """
 
@@ -14,10 +19,11 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from reqaudit.criteria import Criterion
-from reqaudit.evidence import match_key
 from reqaudit.models import Evidence, Finding, FindingStatus, Severity, scope_of
 from reqaudit.stages.base import RunContext, Stage
-from reqaudit.stages.review_common import EvidenceDraft, verify_evidence
+from reqaudit.stages.review_common import merge_duplicates, screen
+
+__all__ = ["GateResult", "GatesStage", "merge_duplicates"]
 
 _ISSUE_FINDINGS = {
     "hidden_text": (Criterion.SUSPICIOUS_CONTENT, Severity.MAJOR,
@@ -44,37 +50,6 @@ class GateResult(BaseModel):
     stats: dict[str, int]
 
 
-def _same_defect(a: Finding, b: Finding) -> bool:
-    blocks_a = {e.block_id for e in a.evidence}
-    blocks_b = {e.block_id for e in b.evidence}
-    overlap = len(blocks_a & blocks_b)
-    if not overlap:
-        return False
-    if blocks_a == blocks_b and a.criterion == b.criterion:
-        return True
-    smaller = min(len(blocks_a), len(blocks_b))
-    return a.criterion == b.criterion and overlap / smaller >= 0.5 and len(blocks_a) > 1
-
-
-def merge_duplicates(findings: list[Finding]) -> tuple[list[Finding], int]:
-    ordered = sorted(findings, key=lambda f: f.severity.rank)
-    kept: list[Finding] = []
-    merged = 0
-    for f in ordered:
-        twin = next((k for k in kept if _same_defect(k, f)), None)
-        if twin is None:
-            kept.append(f)
-            continue
-        merged += 1
-        index = kept.index(twin)
-        kept[index] = twin.model_copy(update={
-            "unit_ids": sorted(set(twin.unit_ids) | set(f.unit_ids)),
-            "trail": [*twin.trail, f"merged:{f.id}"],
-            "question": twin.question or f.question,
-        })
-    return kept, merged
-
-
 class GatesStage(Stage):
     code = "s7"
     title = "Гейты доказательств"
@@ -85,38 +60,11 @@ class GatesStage(Stage):
         document = state.document
         blocks = {b.id: b for b in document.blocks if not b.hidden}
         order = {b.id: n for n, b in enumerate(document.blocks)}
-        unit_ids = {u.id for u in state.units}
-        units_of_block: dict[str, list[str]] = {}
-        for u in state.units:
-            for b in u.block_ids:
-                units_of_block.setdefault(b, []).append(u.id)
 
-        passed: list[Finding] = []
-        rejected: list[Finding] = []
-        stats = {"in": len(state.findings), "no_evidence": 0, "one_sided_conflict": 0}
-        for f in state.findings:
-            evidence = [v for e in f.evidence
-                        if (v := verify_evidence(EvidenceDraft(block_id=e.block_id,
-                                                               quote=e.quote), blocks))]
-            if not evidence:
-                stats["no_evidence"] += 1
-                rejected.append(f.model_copy(update={
-                    "status": FindingStatus.REJECTED, "trail": [*f.trail, "gate:no_evidence"],
-                    "review_note": "Ни одна цитата не найдена в документе."}))
-                continue
-            distinct = {(e.block_id, match_key(e.quote)) for e in evidence}
-            if f.criterion == Criterion.SET_CONSISTENT and len(distinct) < 2:
-                stats["one_sided_conflict"] += 1
-                rejected.append(f.model_copy(update={
-                    "status": FindingStatus.REJECTED, "trail": [*f.trail, "gate:one_sided"],
-                    "review_note": "Противоречие подтверждено цитатой только одной стороны."}))
-                continue
-            units = [u for u in f.unit_ids if u in unit_ids]
-            if not units:
-                units = sorted({u for e in evidence for u in units_of_block.get(e.block_id, [])})
-            passed.append(f.model_copy(update={
-                "evidence": evidence, "unit_ids": units, "scope": scope_of(f.criterion, units),
-                "trail": [*f.trail, "gate:passed"]}))
+        screened = screen(state.findings, blocks, state.units)
+        passed = [f.model_copy(update={"trail": [*f.trail, "gate:passed"]})
+                  for f in screened.passed]
+        rejected, stats = screened.rejected, {"in": len(state.findings), **screened.stats}
 
         merged, stats["merged"] = merge_duplicates(passed)
         merged.extend(self._file_defects(ctx))

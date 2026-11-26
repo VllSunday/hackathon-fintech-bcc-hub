@@ -38,6 +38,7 @@ from reqaudit.stages.review_common import (
 )
 
 ROLE = "judge"
+_GAP_CRITERIA = {Criterion.COMPLETE, Criterion.SET_COMPLETE}
 _MAX_COMPLAINTS = 25
 _RUSSIAN_FIELDS = ("findings.title", "findings.explanation", "findings.suggestion",
                    "findings.question", "reviewed.note", "analysis")
@@ -89,7 +90,9 @@ def _answer_type(cell: Cell, markers: list[MarkerHit]) -> type[BaseModel]:
 
 def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
                markers: list[MarkerHit] | None = None) -> Check:
-    allowed = set(cell.criteria)
+    # A gap found while looking for something else may be filed in any check, so that a
+    # «conflict» whose second side does not exist is not lost but recorded as what it is.
+    allowed = set(cell.criteria) | _GAP_CRITERIA
     markers = markers or []
 
     def check(answer: RequirementsAnswer | RequirementsWithMarkersAnswer | SetAnswer
@@ -123,7 +126,11 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
                 if problem := evidence_problem(e, blocks):
                     complaints.append(f"{where}: {problem}")
             if f.criterion == Criterion.SET_CONSISTENT and len(f.evidence) < 2:
-                complaints.append(f"{where}: a conflict needs a quote from each side")
+                complaints.append(
+                    f"{where}: a conflict needs a quote from each side. If the document does "
+                    "state the other side, quote it too. If it does not, this is a gap, not a "
+                    "conflict: file it under `complete` (one requirement lacks something) or "
+                    "`set_complete` (the set lacks a rule, case or operation)")
         if not complaints:
             return None
         shown = complaints[:_MAX_COMPLAINTS]

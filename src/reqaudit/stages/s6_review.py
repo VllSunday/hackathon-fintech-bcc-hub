@@ -53,6 +53,9 @@ class Verdict(BaseModel):
         "statement that forms the other side, if the document has it.")
     severity: Severity | None = None
     criterion: Criterion | None = None
+    still_missing: str = Field(default="", description="For a gap (complete, set_complete): "
+                               "in Russian, what the document still does not answer about the "
+                               "situation the gap names; empty only if it answers all of it.")
     severity_reason: str = Field(default="", description="In Russian: which point of the "
                                  "severity scale makes the new severity right; required when "
                                  "severity differs from the reviewer's.")
@@ -171,14 +174,25 @@ def _covers_refs(refs: list[str], field: str, blocks: dict,
         return ("Fix these problems and return the full answer again:\n"
                 + "\n".join(f"- {c}" for c in complaints)) if complaints else None
 
-    russian = [f"{field}.reasoning"] + (["verdicts.better_fix"] if field == "verdicts" else [])
+    russian = [f"{field}.reasoning"] + (["verdicts.better_fix", "verdicts.still_missing"]
+                                        if field == "verdicts" else [])
     return combine(check, require_russian(*russian))
+
+
+_GAPS = (Criterion.COMPLETE, Criterion.SET_COMPLETE)
 
 
 def _severity_complaints(item: Verdict | Decision, f: Finding | None) -> list[str]:
     """A severity change must name its reason on the scale; a contradiction the opponent
-    itself confirmed is never minor. Soft: the model may keep its answer on the last try."""
-    if f is None or not isinstance(item, Verdict) or item.verdict == "refuted":
+    itself confirmed is never minor; a gap with something still missing is narrowed, not
+    refuted. Soft: the model may keep its answer on the last try."""
+    if f is None or not isinstance(item, Verdict):
+        return []
+    if item.verdict == "refuted":
+        if f.criterion in _GAPS and item.still_missing.strip():
+            return [f"{item.ref}: you refute the gap but write that «{item.still_missing[:80]}» "
+                    "is still not answered; then the gap stands: `adjust` it to what is still "
+                    "missing instead of refuting it"]
         return []
     out = []
     if item.severity and item.severity != f.severity and not item.severity_reason.strip():
@@ -304,6 +318,8 @@ class ReviewStage(Stage):
                 counter = "\n".join(f"  - [{e.block_id}] «{e.quote}»"
                                     for e in (v.counter_evidence if v else []))
                 opponent = v.reasoning if v else "Оппонент не дал заключения."
+                if v and v.still_missing.strip():
+                    opponent += f" Всё ещё не описано: {v.still_missing.strip()}"
                 kind = ("\n  dispute: severity only. The opponent confirms the defect but "
                         f"lowers severity {f.severity.value} → {v.severity.value}: "
                         f"{v.severity_reason or v.reasoning}" if severity_only and v else "")

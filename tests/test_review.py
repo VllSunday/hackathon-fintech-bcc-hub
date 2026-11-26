@@ -420,3 +420,20 @@ def test_traceability_matrix_must_cover_every_main_requirement():
                       note="Есть в API.")])
     complaint = check(answer) or ""
     assert "must trace every requirement of the main part" in complaint and "R-002" in complaint
+
+
+
+def test_a_gap_with_something_still_missing_cannot_be_refuted_whole(tmp_path):
+    def refute_but_admit(title):
+        return ({"verdict": "refuted", "still_missing": "что делать при таймауте"}
+                if "Непроверяемая" in title else None)
+
+    def as_gap(prompt):
+        answer = honest_review(prompt)
+        for f in answer["findings"]:
+            f["criterion"] = "complete"
+        return answer
+
+    model, _ = fake_team(review=as_gap, adjust=refute_but_admit)
+    _, _, _, trace = run(tmp_path, lambda _id: model)
+    assert "you refute the gap but write that" in trace

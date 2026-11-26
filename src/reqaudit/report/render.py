@@ -2,64 +2,30 @@
 
 from __future__ import annotations
 
-import re
-
 from reqaudit import criteria
 from reqaudit.models import (
     Block,
-    BlockSource,
     Finding,
-    PartRole,
+    RunState,
     Scope,
     Severity,
-    UnitKind,
 )
 from reqaudit.passport import Passport
-from reqaudit.stages.base import RunState
-
-_KIND_RU = {
-    UnitKind.FUNCTIONAL: "функциональное",
-    UnitKind.NON_FUNCTIONAL: "нефункциональное",
-    UnitKind.DATA: "данные",
-    UnitKind.INTEGRATION: "интеграция",
-    UnitKind.UI: "интерфейс",
-    UnitKind.ACCEPTANCE_CRITERION: "критерий приёмки",
-    UnitKind.API_CONTRACT: "контракт API",
-    UnitKind.CONSTRAINT: "ограничение",
-    UnitKind.OTHER: "прочее",
-}
-_PART_ROLE_RU = {PartRole.MAIN: "основная спецификация",
-                 PartRole.CHILD_SPEC: "дочерняя спецификация",
-                 PartRole.APPENDIX: "приложение", PartRole.OTHER: "прочее"}
-_SKIP_RU = {"goal": "цели", "context": "пояснения", "metadata": "служебные сведения",
-            "template": "незаполненный шаблон", "example": "примеры",
-            "approval": "согласование", "empty": "пустые", "other": "прочее"}
-
-_STATUS_RU = {
-    "completed": "завершён",
-    "partial": "завершён частично: один из этапов упал, отчёт собран из того, что успели",
-    "checks_incomplete": "завершён, но часть проверок не выполнена; список — в разделе «Сводка»",
-    "input_rejected": "документ не принят",
-    "running": "не завершён",
-}
-_SEVERITY_RU = {Severity.CRITICAL: "критичный", Severity.MAJOR: "существенный",
-                Severity.MINOR: "незначительный"}
-_ROLE_RU = {"judge": "суждения", "opponent": "оппонент", "vision": "зрительное чтение"}
-
-_CHECK_STAGES = {"s5", "s6", "s7"}
-
-
-def plural_form(n: int, one: str, few: str, many: str) -> str:
-    """The Russian form for n: 1 дефект, 2 дефекта, 5 дефектов (21 дефект, 12 дефектов)."""
-    if n % 10 == 1 and n % 100 != 11:
-        return one
-    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
-        return few
-    return many
-
-
-def plural(n: int, one: str, few: str, many: str) -> str:
-    return f"{n} {plural_form(n, one, few, many)}"
+from reqaudit.report.views import (
+    DECISION_RU,
+    KIND_RU,
+    PART_ROLE_RU,
+    SEVERITY_RU,
+    SKIP_RU,
+    STATUS_RU,
+    display_quote,
+    has_checks,
+    place,
+    plural,
+    rejected_by_gate,
+    reported,
+    verdict,
+)
 
 
 def _cell(value: object) -> str:
@@ -117,7 +83,7 @@ def _passport(p: Passport) -> str:
         ["Профиль", p.profile],
         ["Отпечаток промптов", f"`{p.prompts_fingerprint}`"],
         ["Идентификатор прогона", f"`{p.run_id}`, артефакты в `{p.run_dir}/`"],
-        ["Статус", _STATUS_RU.get(p.status, p.status)],
+        ["Статус", STATUS_RU.get(p.status, p.status)],
     ]
     return _table(["Поле", "Значение"], rows)
 
@@ -147,51 +113,13 @@ def _reading(state: RunState) -> str:
     return "\n\n".join(parts)
 
 
-_EMPHASIS = re.compile(r"\*\*|__|`")
-_LIST_MARKER = re.compile(r"^\s*(?:[-*+•]|\d{1,3}[.)])\s+")
-
-
-def display_quote(quote: str) -> str:
-    """Quote for reading: markdown markup removed, words untouched."""
-    text = _EMPHASIS.sub("", quote).strip()
-    text = _LIST_MARKER.sub("", text)
-    if text.startswith("|"):
-        text = text.strip("| ").replace(" | ", " · ")
-    return text
-
-
-def _place(block_ids: list[str], blocks: dict[str, Block]) -> str:
-    found = [blocks[i] for i in block_ids if i in blocks]
-    if not found:
-        return "—"
-    anchors = [b.anchor for b in found]
-    note = (", распознано по изображению"
-            if any(b.source == BlockSource.VLM for b in found) else "")
-    if any(b.doubtful for b in found):
-        note += ", прочтения скана расходятся — сверить с оригиналом"
-    pages = sorted({a.page for a in anchors if a.page})
-    if pages:
-        return "стр. " + ", ".join(map(str, pages)) + note
-    paragraphs = sorted({a.paragraph for a in anchors if a.paragraph})
-    if paragraphs:
-        span = (str(paragraphs[0]) if len(paragraphs) == 1
-                else f"{paragraphs[0]}–{paragraphs[-1]}")
-        return f"фрагмент {span}{note}"
-    lines = [a for a in anchors if a.line_start]
-    if not lines:
-        return "—" + note
-    start = min(a.line_start for a in lines)
-    end = max(a.line_end or a.line_start for a in lines)
-    return (f"строка {start}" if start == end else f"строки {start}–{end}") + note
-
-
 def _segmentation(state: RunState) -> str:
     profile, coverage = state.profile, state.coverage
     if profile is None or coverage is None or state.document is None:
         return _not_done("s2", state)
     blocks = {b.id: b for b in state.document.blocks}
     parts_text = "; ".join(
-        f"«{p.name}» — {_PART_ROLE_RU[p.role]}" + (f", детализирует «{p.parent}»"
+        f"«{p.name}» — {PART_ROLE_RU[p.role]}" + (f", детализирует «{p.parent}»"
                                                     if p.parent else "")
         for p in profile.parts)
     out = [f"{profile.summary}", "",
@@ -202,21 +130,21 @@ def _segmentation(state: RunState) -> str:
         out.append(_table(
             ["ID в отчёте", "ID в документе", "Тип", "Место", "Краткая формулировка",
              "Цитата из документа"],
-            [[u.id, u.doc_label or "нет, присвоен агентом", _KIND_RU[u.kind],
-              _place(u.block_ids, blocks), u.summary, f"«{display_quote(u.quote)}»"]
+            [[u.id, u.doc_label or "нет, присвоен агентом", KIND_RU[u.kind],
+              place(u.block_ids, blocks), u.summary, f"«{display_quote(u.quote)}»"]
              for u in state.units],
         ))
     else:
         out.append("**В документе не найдено ни одного требования.** Проверять нечего; "
                    "если требования в документе есть, их не удалось распознать.")
 
-    reasons = ", ".join(f"{_SKIP_RU.get(k, k)} — {v}"
+    reasons = ", ".join(f"{SKIP_RU.get(k, k)} — {v}"
                         for k, v in sorted(coverage.skipped_by_reason.items()))
     out += ["", f"Учтено блоков текста: {coverage.blocks_checked}. Входят в требования: "
                 f"{coverage.in_units}. Не содержат требований: {coverage.skipped}"
                 + (f" ({reasons})" if reasons else "") + "."]
     if coverage.unclassified:
-        places = ", ".join(_place([i], blocks) for i in coverage.unclassified[:15])
+        places = ", ".join(place([i], blocks) for i in coverage.unclassified[:15])
         count = plural(len(coverage.unclassified), "блок", "блока", "блоков")
         out += ["", f"**Не удалось классифицировать {count}** ({places}). "
                     "Они не проверялись."]
@@ -224,7 +152,7 @@ def _segmentation(state: RunState) -> str:
         count = plural(len(coverage.obligations_outside), "блок", "блока", "блоков")
         out += ["", f"**Сверка вторым способом:** {count} с явным обязательством не вошли "
                     "в требования; их проверяет общая проверка документа:", ""]
-        out += [f"- {_place([i], blocks)}: «{word}»"
+        out += [f"- {place([i], blocks)}: «{word}»"
                 for i, word in coverage.obligations_outside.items()]
     if coverage.dropped_units:
         out += ["", "Отброшены как не подтверждённые текстом документа:", ""]
@@ -235,25 +163,20 @@ def _segmentation(state: RunState) -> str:
     return "\n".join(out)
 
 
-_DECISION_RU = {"confirmed": "Дефект остаётся: документ нужно исправить.",
-                "changed": "Дефект остаётся, серьёзность изменена.",
-                "resolved": "Находка снята: ответ показывает, что документ это покрывает."}
-
-
 def _finding(f: Finding, blocks: dict[str, Block]) -> str:
     units = ", ".join(f.unit_ids) or "документ целиком"
     lines = [f"#### {f.id}. {f.title}", "",
              f"Критерий: {criteria.label(f.criterion)} · Серьёзность: "
-             f"{_SEVERITY_RU[f.severity]} · Требования: {units}", "", f.explanation, ""]
+             f"{SEVERITY_RU[f.severity]} · Требования: {units}", "", f.explanation, ""]
     for e in f.evidence:
-        lines += [f"> «{display_quote(e.quote)}» — {_place([e.block_id], blocks)}", ""]
+        lines += [f"> «{display_quote(e.quote)}» — {place([e.block_id], blocks)}", ""]
     if f.suggestion:
         lines += [f"**Как исправить.** {f.suggestion}", ""]
     if f.question:
         lines += [f"**Вопрос автору.** {f.question}", ""]
     if f.author_answer:
         lines += [f"**Ответ автора.** {f.author_answer}", ""]
-        decision = _DECISION_RU.get(f.answer_decision or "", "")
+        decision = DECISION_RU.get(f.answer_decision or "", "")
         if decision:
             note = f" {f.answer_note}" if f.answer_note else ""
             lines += [f"**После ответа.** {decision}{note}", ""]
@@ -302,7 +225,7 @@ def _per_requirement(state: RunState, confirmed: list[Finding],
 
 def _summary(state: RunState, confirmed: list[Finding]) -> str:
     count = {s: sum(1 for f in confirmed if f.severity == s) for s in Severity}
-    by_gate = sum(1 for f in state.rejected if any(t.startswith("gate:") for t in f.trail))
+    by_gate = sum(1 for f in state.rejected if rejected_by_gate(f))
     rows = [
         ["Требований выделено", len(state.units)],
         ["Нарушений найдено", len(confirmed)],
@@ -343,50 +266,33 @@ def _summary(state: RunState, confirmed: list[Finding]) -> str:
 
 
 def _verdict(state: RunState, confirmed: list[Finding]) -> str:
-    critical = [f for f in confirmed if f.severity == Severity.CRITICAL]
-    major = [f for f in confirmed if f.severity == Severity.MAJOR]
-    if critical:
-        n = plural(len(critical), "критичный дефект", "критичных дефекта", "критичных дефектов")
-        verb = plural_form(len(critical), "делает", "делают", "делают")
-        head = (f"**Нет.** Начинать разработку и тестирование по этому документу нельзя: {n} "
-                f"{verb} поведение системы неопределённым или противоречивым.")
-    elif major:
-        n = plural(len(major), "существенный дефект", "существенных дефекта",
-                   "существенных дефектов")
-        verb = plural_form(len(major), "приведёт", "приведут", "приведут")
-        head = (f"**С оговорками.** Критичных дефектов нет, но {n} {verb} к разному "
-                "пониманию требований; их стоит исправить до начала разработки.")
-    else:
-        head = ("**Да.** Существенных дефектов не найдено; незначительные замечания можно "
-                "исправить по ходу работы.")
-    out = [head]
-    if state.check_failures:
+    v = verdict(state, confirmed)
+    out = [f"**{v.word}.** {v.text}"]
+    if v.incomplete:
         out += ["", "Вывод неполный: часть проверок не выполнена, см. раздел «Сводка»."]
-    fixes = [f for f in confirmed if f.document_fix]
-    if fixes:
-        count = plural(len(fixes), "находки", "находок", "находок")
+    if v.fixes_ready:
+        count = plural(v.fixes_ready, "находки", "находок", "находок")
         out += ["", f"По ответам автора готовы правки текста для {count}: они приведены у "
                     "каждой находки. После их внесения документ стоит проверить снова."]
-    first = (critical + major)[:7]
-    if first:
+    if v.first:
         out += ["", "Исправить в первую очередь:", ""]
-        out += [f"{n}. {f.id} — {f.title}" for n, f in enumerate(first, 1)]
+        out += [f"{n}. {f.id} — {f.title}" for n, f in enumerate(v.first, 1)]
     return "\n".join(out)
 
 
 def _rejected(state: RunState) -> str:
     rows = []
     for f in state.rejected:
-        who = ("проверка цитат" if any(t.startswith("gate:") for t in f.trail)
+        who = ("проверка цитат" if rejected_by_gate(f)
                else "оппонент и арбитр")
         rows.append([f.title, criteria.label(f.criterion), who, (f.review_note or "")[:300]])
     return _table(["Кандидат", "Критерий", "Кем отклонён", "Почему"], rows)
 
 
 def render_markdown(p: Passport, state: RunState, plan: list[tuple[str, str]]) -> str:
-    confirmed = [f for f in state.findings if f.in_report]
+    confirmed = reported(state)
     resolved = [f for f in state.findings if f.resolved]
-    checks_ran = set(state.completed) >= _CHECK_STAGES
+    checks_ran = has_checks(state)
     no_checks = _not_done("s5", state)
     blocks = {b.id: b for b in state.document.blocks} if state.document else {}
     out: list[str] = ["# Отчёт о проверке требований", ""]

@@ -11,22 +11,27 @@ from __future__ import annotations
 import json
 import re
 import time
-import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from reqaudit import criteria
-from reqaudit.evidence import _DASHES, _QUOTES, MIN_KEY_LENGTH, match_key
+from reqaudit.evidence import quote_span
 from reqaudit.models import Block, Finding, Severity
 from reqaudit.passport import Passport
 from reqaudit.pipeline import IMPLEMENTED, STAGE_PLAN
-from reqaudit.report.render import _CHECK_STAGES, _place, _verdict, display_quote
+from reqaudit.report.views import (
+    display_quote,
+    has_checks,
+    place,
+    rejected_by_gate,
+    reported,
+    verdict,
+)
 from reqaudit.stages.base import RunState
 
 RUN_ID = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{4}$")
 _ARTIFACTS = {stage.code: stage.artifact for stage in IMPLEMENTED}
-_MARKUP_CHARS = set("*_`#>|")
 # A run without `run_end` whose trace has been silent this long is treated as interrupted.
 STALE_AFTER_S = 15 * 60
 _PAGE = Path(__file__).with_name("index.html")
@@ -158,16 +163,21 @@ def run_summary(run_dir: Path, alive: bool | None = None) -> dict[str, Any]:
         live = progress(run_dir, alive)
         row.update(document=live["input"], started_at=live["started_at"],
                    status=live["status"], profile=live["profile"], models=[])
-    state = _load_json(run_dir / "state.json")
+    state = load_state(run_dir)
     if state:
-        reported = [f for f in (Finding.model_validate(raw) for raw in state.get("findings", []))
-                    if f.in_report]
-        row.update(has_report=True, units=len(state.get("units", [])),
-                   findings=len(reported),
-                   critical=sum(1 for f in reported if f.severity == Severity.CRITICAL),
-                   questions=len(state.get("questions", [])),
-                   checks_ran=set(state.get("completed", [])) >= _CHECK_STAGES)
+        counted = reported(state)
+        row.update(has_report=True, units=len(state.units), findings=len(counted),
+                   critical=sum(1 for f in counted if f.severity == Severity.CRITICAL),
+                   questions=len(state.questions), checks_ran=has_checks(state))
     return row
+
+
+def load_state(run_dir: Path) -> RunState | None:
+    """The run's state.json, or None while the run has not written a readable one."""
+    try:
+        return RunState.model_validate_json((run_dir / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
 
 
 def list_runs(runs_dir: Path, alive: dict[str, bool] | None = None) -> list[dict[str, Any]]:
@@ -182,50 +192,6 @@ def list_runs(runs_dir: Path, alive: dict[str, bool] | None = None) -> list[dict
 # --- where a quote sits inside its block ------------------------------------------------
 
 
-def _key_with_positions(text: str) -> tuple[str, list[int]]:
-    """`match_key` of the text, with the source index of every character of the key."""
-    chars: list[str] = []
-    index: list[int] = []
-    for i, source in enumerate(text):
-        for ch in unicodedata.normalize("NFKC", source):
-            if ch in "ёЁ":
-                ch = "е" if ch == "ё" else "Е"
-            if _DASHES.match(ch):
-                ch = "-"
-            elif _QUOTES.match(ch):
-                ch = '"'
-            elif ch in _MARKUP_CHARS:
-                ch = " "
-            for folded in ch.casefold():
-                if folded.isspace():
-                    if not chars or chars[-1] == " ":
-                        continue
-                    folded = " "
-                chars.append(folded)
-                index.append(i)
-    while chars and chars[-1] == " ":
-        chars.pop()
-        index.pop()
-    return "".join(chars), index
-
-
-def quote_span(quote: str, block_text: str) -> tuple[int, int] | None:
-    """Character range of the quote in the block text, by the same key the gate matches on.
-
-    None when the range cannot be told; the caller then marks the whole block.
-    """
-    key = match_key(quote)
-    if len(key) < MIN_KEY_LENGTH:
-        return None
-    stream, index = _key_with_positions(block_text)
-    if stream != match_key(block_text):
-        return None  # the per-character key drifted from the gate's key; do not guess
-    at = stream.find(key)
-    if at < 0:
-        return None
-    return index[at], index[at + len(key) - 1] + 1
-
-
 # --- report bundle ----------------------------------------------------------------------
 
 
@@ -237,17 +203,11 @@ def _standard(source: str) -> str | None:
     return None
 
 
-def _verdict_data(state: RunState, confirmed: list) -> dict[str, Any]:
-    """The verdict of the Markdown report, split into the word, the sentence and the list."""
-    lines = _verdict(state, confirmed).split("\n")
-    head = re.match(r"\*\*(.+?)\.?\*\*\s*(.*)", lines[0])
-    word, text = (head.group(1), head.group(2)) if head else ("", lines[0])
-    first = [m.group(1) for line in lines if (m := re.match(r"\d+\.\s+(\S+)\s+—", line))]
-    critical = any(f.severity == Severity.CRITICAL for f in confirmed)
-    major = any(f.severity == Severity.MAJOR for f in confirmed)
-    return {"word": word, "text": text, "first": first,
-            "level": "no" if critical else "conditional" if major else "yes",
-            "incomplete": bool(state.check_failures)}
+def _verdict_data(state: RunState, confirmed: list[Finding]) -> dict[str, Any]:
+    """The verdict as data: the same values the Markdown report prints."""
+    v = verdict(state, confirmed)
+    return {"word": v.word, "text": v.text, "level": v.level, "incomplete": v.incomplete,
+            "first": [f.id for f in v.first]}
 
 
 def _finding_view(f: Finding, blocks: dict[str, Block]) -> dict[str, Any]:
@@ -256,7 +216,7 @@ def _finding_view(f: Finding, blocks: dict[str, Block]) -> dict[str, Any]:
     for evidence, raw in zip(item["evidence"], f.evidence, strict=True):
         block = blocks.get(raw.block_id)
         span = quote_span(raw.quote, block.text) if block else None
-        evidence["place"] = _place([raw.block_id], blocks)
+        evidence["place"] = place([raw.block_id], blocks)
         evidence["display"] = display_quote(raw.quote)
         evidence["span"] = list(span) if span else None
     return item
@@ -280,18 +240,18 @@ def build_report(run_dir: Path) -> dict[str, Any]:
         (run_dir / "passport.json").read_text(encoding="utf-8"))
     blocks: dict[str, Block] = ({b.id: b for b in state.document.blocks}
                                 if state.document else {})
-    confirmed = [f for f in state.findings if f.in_report]
-    checks_ran = set(state.completed) >= _CHECK_STAGES
+    confirmed = reported(state)
+    checks_ran = has_checks(state)
     findings = [_finding_view(f, blocks) for f in confirmed]
     resolved = [_finding_view(f, blocks) for f in state.findings if f.resolved]
 
     units = []
     for u in state.units:
         item = u.model_dump(mode="json")
-        item["place"] = _place(u.block_ids, blocks)
+        item["place"] = place(u.block_ids, blocks)
         units.append(item)
 
-    by_gate = sum(1 for f in state.rejected if any(t.startswith("gate:") for t in f.trail))
+    by_gate = sum(1 for f in state.rejected if rejected_by_gate(f))
     intake = state.intake.model_dump(mode="json", exclude={"text", "path"}) \
         if state.intake else None
     document = state.document.model_dump(mode="json") if state.document else None
@@ -317,7 +277,7 @@ def build_report(run_dir: Path) -> dict[str, Any]:
         "plan_notes": state.plan_notes,
         "rejected_findings": [{"id": f.id, "title": f.title, "criterion": f.criterion.value,
                                "severity": f.severity.value, "review_note": f.review_note,
-                               "by_gate": any(t.startswith("gate:") for t in f.trail)}
+                               "by_gate": rejected_by_gate(f)}
                               for f in state.rejected],
         "editor": _editor_counts(run_dir),
         "questions": [q.model_dump(mode="json") for q in state.questions],

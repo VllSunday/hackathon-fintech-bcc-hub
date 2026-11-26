@@ -288,3 +288,14 @@ def test_network_address_needs_an_explicit_flag(capsys):
 
     assert main(["--host", "0.0.0.0", "--no-browser"]) == 2
     assert "--allow-network" in capsys.readouterr().err
+
+
+def test_highlight_key_is_the_gate_key():
+    """The per-character key used for highlighting must equal match_key, which the gates use."""
+    from reqaudit.evidence import match_key, match_key_with_index
+
+    samples = ["* **Ф-1.** Порог — «от 1 000 до 1 000 000 ₸»", "| Поле | Значение |",
+               "Ёлка   и  ёж\tс `code` и > цитатой", "ﬁ лигатура и ½"]
+    for text in samples:
+        stream, index = match_key_with_index(text)
+        assert stream == match_key(text) and len(index) == len(stream)

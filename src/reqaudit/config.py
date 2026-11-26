@@ -83,6 +83,9 @@ class Settings:
     request_timeout_s: float = 180.0
     max_attempts: int = 5
     backoff_base_s: float = 4.0
+    # Seconds a call waits out rate limits (429) on its model before falling back: a
+    # rate limit passes by itself, and the next model in the chain is usually weaker.
+    rate_limit_patience_s: float = 300.0
     output_retries: int = 2
     # Characters of rendered document per model call; longer documents are split by sections.
     window_chars: int = 40_000
@@ -210,6 +213,7 @@ def load_settings(
         requests_per_minute=float(rpm) if rpm else None,
         max_cost_usd=float(cost) if (cost := _env("REQAUDIT_MAX_COST_USD")) else None,
         concurrency=max(1, int(_env("REQAUDIT_CONCURRENCY") or 6)),
+        rate_limit_patience_s=float(_env("REQAUDIT_RATE_LIMIT_PATIENCE_S") or 300),
         vision=_choice("REQAUDIT_VISION", ("auto", "all", "off"),
                        "all" if chosen == "thorough" else "auto"),
         pdf_reader=_choice("REQAUDIT_PDF_READER", ("auto", "pymupdf", "docling"), "auto"),

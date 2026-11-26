@@ -45,8 +45,9 @@ class Sleeps:
 
 
 def client_for(tmp_path: Path, models: dict, chain=("fake:a",), **overrides):
+    overrides = {"backoff_base_s": 0.0, **overrides}
     settings = replace(Settings(), models={"judge": list(chain)},
-                       cache_dir=tmp_path / "cache", backoff_base_s=0.0, **overrides)
+                       cache_dir=tmp_path / "cache", **overrides)
     sleeps = Sleeps()
     client = LLMClient(settings, Trace(tmp_path / "trace.jsonl"),
                        model_factory=lambda model_id: models[model_id], sleep=sleeps)
@@ -174,11 +175,11 @@ def test_a_request_lost_to_rate_limits_gets_a_second_chance(tmp_path):
     """Five rate-limit answers exhaust the attempts; after the other requests it is asked
     once more instead of the check being lost."""
     busy = ModelRateLimitError("fake:a", "slow down", retry_after=0.0)
-    model, state = answering(busy, busy, busy, busy, busy, RU)
-    client, _ = client_for(tmp_path, {"fake:a": model}, max_attempts=5)
+    model, state = answering(busy, RU)
+    client, _ = client_for(tmp_path, {"fake:a": model}, rate_limit_patience_s=0.0)
     [result] = client.many([dict(step="s5[x]", role="judge", instructions="Answer.",
                                  prompt="Сколько требований?", output_type=Summary)])
-    assert result == Summary(**RU) and state["calls"] == 6
+    assert result == Summary(**RU) and state["calls"] == 2
     assert '"llm_second_chance"' in (tmp_path / "trace.jsonl").read_text(encoding="utf-8")
 
 
@@ -200,3 +201,24 @@ def test_a_sequential_call_lost_to_server_errors_gets_a_second_chance(tmp_path):
     client, _ = client_for(tmp_path, {"fake:a": model}, max_attempts=3)
     assert ask(client) == Summary(**RU) and state["calls"] == 4
     assert '"llm_second_chance"' in (tmp_path / "trace.jsonl").read_text(encoding="utf-8")
+
+
+def test_rate_limits_are_waited_out_before_falling_back(tmp_path):
+    """A model that is only busy keeps the call: the weaker fallback answers only after the
+    patience runs out, and refused requests do not eat the call budget."""
+    busy = ModelRateLimitError("fake:a", "slow down")
+    model, state = answering(*([busy] * 8), RU)
+    backup, backup_calls = answering(RU)
+    client, sleeps = client_for(tmp_path, {"fake:a": model, "fake:b": backup},
+                                chain=("fake:a", "fake:b"), backoff_base_s=4.0,
+                                max_attempts=5, max_llm_calls=3)
+    assert ask(client) == Summary(**RU)
+    assert client.models_used == ["fake:a"] and backup_calls["calls"] == 0
+    assert state["calls"] == 9 and max(sleeps.delays) <= 60 * 1.25
+
+    slow, _ = answering(busy)
+    client, sleeps = client_for(tmp_path / "x", {"fake:a": slow, "fake:b": backup},
+                                chain=("fake:a", "fake:b"), backoff_base_s=4.0,
+                                rate_limit_patience_s=30.0)
+    assert ask(client) == Summary(**RU)
+    assert client.models_used == ["fake:b"] and sum(sleeps.delays[:-1]) < 30

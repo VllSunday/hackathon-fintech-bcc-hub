@@ -387,6 +387,9 @@ class LLMClient:
                 raise ModelRetry(complaint)
 
         attempt = 0
+        failures = 0  # attempts lost to errors other than a rate limit
+        rate_limited = 0
+        waited = 0.0
         while True:
             attempt += 1
             self._reserve()
@@ -395,12 +398,24 @@ class LLMClient:
             with capture_run_messages() as messages:
                 try:
                     result = await agent.run(prompt, model_settings=settings)
+                except pai.ModelRateLimitError as err:
+                    # Refused, not served: it costs nothing and does not count against the
+                    # call budget. Waited out up to the patience, then the chain moves on.
+                    rate_limited += 1
+                    if (waited >= self.settings.rate_limit_patience_s
+                            or rate_limited >= _MAX_RATE_LIMIT_TRIES):
+                        raise _ModelGaveUp(f"{type(err).__name__} после {attempt} попыток, "
+                                           f"ожидание {waited:.0f} с {_TRANSIENT_MARK}") from err
+                    waited += await self._backoff(err, rate_limited, step, model_id,
+                                                  cap=_MAX_RATE_LIMIT_DELAY_S)
+                    continue
                 except _RETRYABLE as err:
                     self.requests += 1
-                    if attempt >= self.settings.max_attempts:
+                    failures += 1
+                    if failures >= self.settings.max_attempts:
                         raise _ModelGaveUp(f"{type(err).__name__} после {attempt} попыток "
                                            f"{_TRANSIENT_MARK}") from err
-                    await self._backoff(err, attempt, step, model_id)
+                    await self._backoff(err, failures, step, model_id)
                     continue
                 except _FALL_THROUGH as err:
                     self.requests += 1
@@ -426,13 +441,17 @@ class LLMClient:
             self.requests += max(usage.requests, 1)
             return result.output, usage, attempt, time.perf_counter() - started
 
-    async def _backoff(self, err: Exception, attempt: int, step: str, model_id: str) -> None:
+    async def _backoff(self, err: Exception, attempt: int, step: str, model_id: str,
+                       cap: float | None = None) -> float:
         delay = getattr(err, "retry_after", None)
         if delay is None:
             delay = self.settings.backoff_base_s * 2 ** (attempt - 1) * (1 + random.random() / 4)
+        if cap is not None:
+            delay = min(delay, cap * (1 + random.random() / 4))
         self.trace.event("llm_retry", step=step, model=model_id, attempt=attempt,
                          error=type(err).__name__, delay=round(delay, 2))
         await self._sleep(delay)
+        return delay
 
     def _trace_rejections(self, messages: list, step: str, model_id: str) -> None:
         """Record why the model's answers were rejected; otherwise the cause is invisible.
@@ -458,6 +477,8 @@ _SPARE_CALLS = 10
 _MINUTE_QUOTA = re.compile(r"PerMinute", re.IGNORECASE)
 _RETRY_DELAY = re.compile(r"retryDelay['\"]?\s*:\s*['\"]?(\d+(?:\.\d+)?)s")
 _MAX_QUOTA_WAIT_S = 120.0
+_MAX_RATE_LIMIT_DELAY_S = 60.0
+_MAX_RATE_LIMIT_TRIES = 20
 
 
 def _minute_quota_wait(err: Exception) -> float | None:

@@ -118,7 +118,8 @@ def _answer_type(cell: Cell, markers: list[MarkerHit]) -> type[BaseModel]:
 
 def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
                markers: list[MarkerHit] | None = None,
-               trace_units: list[str] | None = None) -> Check:
+               trace_units: list[str] | None = None,
+               anchors: list[CoverageAnchor] | None = None) -> Check:
     # A cell names the criteria it is about, but a defect found on the way is filed under the
     # criterion that fits it, whichever that is: duplicates across cells are merged before
     # the opponent, and sending the answer back for a «foreign» criterion only cost a call.
@@ -150,6 +151,16 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
                         "`checklist` must trace every requirement of the main part, one item "
                         f"each with its `unit_id` (status n/a when the interface has nothing to "
                         f"do with it); missing {missing}")
+            if anchors and len(anchors) <= _MAX_ANCHORS:
+                listed_blocks = {i.block_id for i in answer.checklist}
+                skipped = [a for a in anchors if not set(a.blocks) & listed_blocks]
+                if skipped:
+                    shown = "; ".join(f"{a.label} [{', '.join(a.blocks)}]" for a in skipped[:15])
+                    complaints.append(
+                        "`checklist` must have an item for every limit, period and status under "
+                        "<limits_and_states>, with one of its blocks: its boundaries and what "
+                        "happens past them; for a status, how it is entered and left, including "
+                        f"when no one acts. Missing {len(skipped)}: {shown}")
         if isinstance(answer, RequirementsWithMarkersAnswer):
             decided = {m.marker_id: m for m in answer.markers}
             undecided = [m.id for m in markers if m.id not in decided]
@@ -189,6 +200,45 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
 
     return combine(check, require_russian(*_RUSSIAN_FIELDS, "markers.reason",
                                           "checklist.note"))
+
+
+class CoverageAnchor(BaseModel):
+    """Something the completeness checklist must have an item for, found by s3."""
+
+    label: str
+    blocks: list[str]
+
+
+_LIMIT_ATTRIBUTES = ("timing", "range", "count")
+_MAX_ANCHORS = 80  # beyond this the list is shown but not enforced: one answer cannot hold it
+
+
+def coverage_anchors(state, cell: Cell, blocks: dict) -> list[CoverageAnchor]:
+    """Every limit or period (one per entity) and every status the fact table holds."""
+    if cell.kind != CellKind.COMPLETENESS or state.facts is None:
+        return []
+    limits: dict[str, list] = {}
+    anchors: list[CoverageAnchor] = []
+    for f in state.facts.facts:
+        if f.block_id not in blocks:
+            continue
+        if f.attribute in _LIMIT_ATTRIBUTES:
+            limits.setdefault(f.entity, []).append(f)
+        elif f.attribute == "status":
+            anchors.append(CoverageAnchor(label=f"{f.entity_label}: «{f.value}»",
+                                          blocks=[f.block_id]))
+    for facts in limits.values():
+        values = ", ".join(dict.fromkeys(f.value for f in facts))
+        anchors.append(CoverageAnchor(label=f"{facts[0].entity_label}: {values}"[:120],
+                              blocks=sorted({f.block_id for f in facts})))
+    return anchors
+
+
+def _anchors_view(anchors: list[CoverageAnchor]) -> str:
+    lines = "\n".join(f"- {a.label} [{', '.join(a.blocks)}]" for a in anchors)
+    return ("<limits_and_states>\nLimits, periods and statuses the document states. The "
+            "checklist needs an item for each, with one of its blocks.\n" + lines
+            + "\n</limits_and_states>")
 
 
 def _main_units(state, cell: Cell) -> list[str]:
@@ -262,6 +312,9 @@ def _prompt(ctx: RunContext, cell: Cell, markers: list[MarkerHit] | None = None)
         parts.append(_outside_view(state))
     if cell.kind == CellKind.FOCUS:
         parts.append(f"<focus>\n{cell.instruction}\n</focus>")
+    if anchors := coverage_anchors(state, cell, {b.id: b for b in state.document.blocks
+                                                 if not b.hidden}):
+        parts.append(_anchors_view(anchors))
     if cell.kind == CellKind.REQUIREMENTS:
         listed = "\n".join(
             f"{u.id} ({u.kind.value}, {u.doc_label or 'без номера'}, blocks "
@@ -337,8 +390,9 @@ class CandidatesStage(Stage):
                     instructions=instructions,
                     prompt=prompt if n == 1 else prompt + _ANOTHER_PASS,
                     output_type=_answer_type(cell, mine),
-                    prompt_ids=ids, check=cell_check(cell, unit_ids, blocks, mine,
-                                                     _main_units(state, cell))))
+                    prompt_ids=ids, check=cell_check(
+                        cell, unit_ids, blocks, mine, _main_units(state, cell),
+                        coverage_anchors(state, cell, blocks))))
                 owners.append((cell, n))
 
         candidates: list[Finding] = []
@@ -352,6 +406,12 @@ class CandidatesStage(Stage):
                 errors.setdefault(cell.id, result)
                 continue
             answered.add(cell.id)
+            if isinstance(result, ChecklistAnswer):
+                # What the reviewer enumerated and judged: the only way to see later why a
+                # gap was missed (never listed, or listed and judged covered).
+                ctx.trace.event("checklist", step=f"s5[{cell.id}]", items=[
+                    {"unit": i.unit_id, "item": i.item, "block": i.block_id,
+                     "status": i.status, "note": i.note} for i in result.checklist])
             found, dropped = _to_findings(cell, result, n)
             candidates.extend(found)
             unknown += dropped

@@ -459,3 +459,41 @@ def test_reviewer_opponent_and_arbiter_share_the_gap_rules(tmp_path):
     assert "What counts as a gap" in text and any(i.startswith("gaps@") for i in ids)
     source = Path("src/reqaudit/stages/s6_review.py").read_text(encoding="utf-8")
     assert source.count('"severity", "gaps"') == 2
+
+
+def test_completeness_checklist_must_cover_every_limit_and_status():
+    """Limits, periods and statuses the fact table found each need a checklist item; the model
+    still judges each one, code only makes sure none is skipped."""
+    from types import SimpleNamespace
+
+    from reqaudit.criteria import Criterion
+    from reqaudit.models import Fact, FactTable
+    from reqaudit.stages.s5_candidates import (
+        ChecklistAnswer,
+        ChecklistItem,
+        cell_check,
+        coverage_anchors,
+    )
+
+    def fact(fid, entity, attribute, value, block):
+        return Fact(id=fid, entity=entity, entity_label=entity, attribute=attribute,
+                    value=value, normalized=value, block_id=block, quote=value)
+
+    facts = FactTable(conflicts=[], facts=[
+        fact("F-1", "draft_retention", "timing", "30", "b1"),
+        fact("F-2", "draft_retention", "unit", "дней", "b1"),
+        fact("F-3", "application_status", "status", "Одобрена", "b2"),
+        fact("F-4", "application_status", "status", "Отозвана", "b3"),
+        fact("F-5", "currency", "value", "тенге", "b4"),
+    ])
+    blocks = {b: SimpleNamespace(id=b, text="") for b in ("b1", "b2", "b3", "b4")}
+    cell = Cell(id="completeness", kind=CellKind.COMPLETENESS, title="t",
+                criteria=[Criterion.COMPLETE])
+    anchors = coverage_anchors(SimpleNamespace(facts=facts), cell, blocks)
+    assert sorted(a.blocks[0] for a in anchors) == ["b1", "b2", "b3"]  # no plain values
+
+    check = cell_check(cell, set(), blocks, anchors=anchors)
+    item = ChecklistItem(item="Срок хранения черновика", block_id="b1", status="ok",
+                         note="Задан срок 30 дней.")
+    complaint = check(ChecklistAnswer(analysis="Итог проверки.", checklist=[item], findings=[]))
+    assert complaint and "Missing 2" in complaint and "b2" in complaint

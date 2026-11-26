@@ -170,7 +170,7 @@ def _outside_view(state) -> str:
 def _prompt(ctx: RunContext, cell: Cell, markers: list[MarkerHit] | None = None) -> str:
     state = ctx.state
     units = {u.id: u for u in state.units}
-    focus = {b for uid in cell.unit_ids for b in units[uid].block_ids}
+    focus = {b for uid in cell.unit_ids for b in units[uid].block_ids} | set(cell.block_ids)
     parts = [document_view(state.document, focus or {b.id for b in state.document.blocks},
                            ctx.settings.window_chars),
              profile_view(state.profile),
@@ -179,6 +179,8 @@ def _prompt(ctx: RunContext, cell: Cell, markers: list[MarkerHit] | None = None)
         parts.append(fact_table_view(state.facts))
     if cell.kind == CellKind.GENERAL:
         parts.append(_outside_view(state))
+    if cell.kind == CellKind.FOCUS:
+        parts.append(f"<focus>\n{cell.instruction}\n</focus>")
     if cell.kind == CellKind.REQUIREMENTS:
         listed = "\n".join(
             f"{u.id} ({u.kind.value}, {u.doc_label or 'без номера'}, blocks "

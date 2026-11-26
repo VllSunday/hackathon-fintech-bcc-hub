@@ -124,3 +124,35 @@ def test_second_segmenter_catches_a_missed_obligation(tmp_path):
     assert "general" in [c["id"] for c in state["cells"]]
     general = [f for f in state["findings"] if f["cell"] == "general"]
     assert general[0]["evidence"][0]["quote"].startswith("Система должна хранить журнал")
+
+
+
+# --- focus checks: the profiler adds checks this document needs ---------------------------
+
+
+def test_profiler_focus_checks_become_cells_within_the_frame(tmp_path):
+    def focus(first_block):
+        return [
+            {"title": "Жизненный цикл статусов", "instruction": "Сверить переходы статусов "
+             "заявки с критериями приёмки.", "criteria": ["set_consistent", "made_up"],
+             "start_block_ids": [first_block, "b9999"]},
+            {"title": "Без критериев", "instruction": "Что-то проверить.",
+             "criteria": ["made_up"], "start_block_ids": []},
+        ]
+
+    model, _ = fake_team(focus=focus)
+    settings = replace(Settings(), runs_dir=tmp_path / "runs", cache_dir=tmp_path / "cache",
+                       models={"judge": ["fake:team"]})
+    result = run_pipeline(ORGANIZERS_DOC, tmp_path / "report.md", settings,
+                          model_factory=lambda _id: model)
+    state = json.loads((result.run_dir / "state.json").read_text(encoding="utf-8"))
+    trace = (result.run_dir / "trace.jsonl").read_text(encoding="utf-8")
+    report = (tmp_path / "report.md").read_text(encoding="utf-8")
+
+    focus_cells = [c for c in state["cells"] if c["kind"] == "focus"]
+    assert [c["title"] for c in focus_cells] == ["Жизненный цикл статусов"]
+    assert focus_cells[0]["criteria"] == ["set_consistent"]  # unknown codes dropped
+    assert "b9999" not in focus_cells[0]["block_ids"]
+    assert "unknown criteria" in trace  # the profiler was asked to fix them first
+    assert '"s5_focus@' in trace
+    assert "«Жизненный цикл статусов»" in report

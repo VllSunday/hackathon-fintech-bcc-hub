@@ -144,6 +144,21 @@ class DocumentPart(BaseModel):
                                "part it details. Otherwise null.")
 
 
+MAX_FOCUS_CHECKS = 5
+
+
+class FocusCheck(BaseModel):
+    """A check this document needs beyond the standard ones, proposed by the profiler."""
+
+    title: str = Field(description="In Russian, a few words: what is checked, e.g. "
+                       "'Жизненный цикл статусов заявки'.")
+    instruction: str = Field(description="What to verify and against what, in two to four "
+                             "sentences, naming the sections and the cross-checks.")
+    criteria: list[str] = Field(description="Criterion codes from the list given.")
+    start_block_ids: list[str] = Field(default_factory=list, description="Ids of the "
+                                       "headings or first blocks of the sections involved.")
+
+
 class DocumentProfile(BaseModel):
     """What the document is and what it contains. Decides which checks apply (s4)."""
 
@@ -158,6 +173,14 @@ class DocumentProfile(BaseModel):
     has_data_requirements: bool
     has_non_functional: bool
     has_ui_spec: bool
+    focus_checks: list[FocusCheck] = Field(
+        default_factory=list, description="Checks specific to this document's content, "
+        f"beyond the standard ones; at most {MAX_FOCUS_CHECKS}, often none.")
+
+    @field_validator("focus_checks", mode="after")
+    @classmethod
+    def _at_most_five(cls, value: list[FocusCheck]) -> list[FocusCheck]:
+        return value[:MAX_FOCUS_CHECKS]
 
 
 class SkipReason(StrEnum):
@@ -279,6 +302,7 @@ class CellKind(StrEnum):
     API_CONTRACT = "api_contract"
     VALUES = "values"
     GENERAL = "general"
+    FOCUS = "focus"
 
 
 class Cell(BaseModel):
@@ -290,6 +314,10 @@ class Cell(BaseModel):
     unit_ids: list[str] = Field(default_factory=list,
                                 description="Requirements under check; empty for set cells.")
     criteria: list[Criterion]
+    instruction: str = Field(default="", description="Focus cells: what to verify, as the "
+                             "profiler wrote it for this document.")
+    block_ids: list[str] = Field(default_factory=list, description="Focus cells: where the "
+                                 "sections involved start.")
 
 
 class CellPlan(BaseModel):

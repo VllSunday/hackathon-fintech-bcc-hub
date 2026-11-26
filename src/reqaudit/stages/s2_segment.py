@@ -26,7 +26,7 @@ import re
 
 from pydantic import BaseModel, Field
 
-from reqaudit import prompt_store
+from reqaudit import criteria, prompt_store
 from reqaudit.evidence import (
     MIN_KEY_LENGTH,
     blocks_key,
@@ -170,9 +170,17 @@ def profile_check(document: DocumentIR) -> Check:
         starts = [order[p.start_block_id] for p in profile.parts if p.start_block_id in order]
         if starts != sorted(starts):
             problems.append("parts must be listed in document order")
+        known = {c.value for c in criteria.Criterion}
+        for focus in profile.focus_checks:
+            unknown = [c for c in focus.criteria if c not in known]
+            if unknown:
+                problems.append(f"focus check '{focus.title}': unknown criteria {unknown}")
+            missing = [b for b in focus.start_block_ids if b not in order]
+            if missing:
+                problems.append(f"focus check '{focus.title}': blocks {missing} do not exist")
         return "; ".join(problems) or None
 
-    return combine(check, require_russian("summary"))
+    return combine(check, require_russian("summary", "focus_checks.title"))
 
 
 # --- prompts ----------------------------------------------------------------------------
@@ -322,7 +330,9 @@ class SegmentStage(Stage):
         assert document is not None, "s2 needs s1"
         window_chars = ctx.settings.window_chars
 
-        instructions, ids = prompt_store.compose("s2_profile", legend=LEGEND)
+        codes = "\n".join(f"- `{c.code.value}`: {c.label_ru}" for c in criteria.CRITERIA.values())
+        instructions, ids = prompt_store.compose("s2_profile", legend=LEGEND,
+                                                 criteria_codes=codes)
         profile = ctx.llm.structured(
             step="s2_profile", role=ROLE, instructions=instructions,
             prompt=_profile_prompt(document, window_chars), output_type=DocumentProfile,

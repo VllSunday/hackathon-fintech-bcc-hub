@@ -181,7 +181,8 @@ def fake_team(mutate_segment: Mutate | None = None,
               page: Callable[[str], dict] = honest_page,
               page_check: Callable[[str], dict] = lambda prompt: honest_page_lines(),
               picture: Callable[[str], dict] = honest_picture,
-              facts: Callable[[str], dict] = lambda prompt: {"facts": []}):
+              facts: Callable[[str], dict] = lambda prompt: {"facts": []},
+              focus: Callable[[str], list] = lambda first_block: []):
     """A model that plays every role. Returns the model and per-role call counters.
 
     `refute(title)` decides which findings the opponent refutes; `keep_disputed` is the
@@ -203,7 +204,8 @@ def fake_team(mutate_segment: Mutate | None = None,
                                "parent": None}],
                     "numbering": "нумерации нет", "has_acceptance_criteria": True,
                     "has_api_spec": False, "has_data_requirements": False,
-                    "has_non_functional": False, "has_ui_spec": False}
+                    "has_non_functional": False, "has_ui_spec": False,
+                    "focus_checks": focus(first)}
         elif "skipped" in fields:
             calls["segment"] += 1
             args = segmenter(prompt)

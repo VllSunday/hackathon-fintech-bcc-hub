@@ -14,8 +14,18 @@ exactly the plan it got before.
 
 from __future__ import annotations
 
+from reqaudit.criteria import Criterion
 from reqaudit.criteria import Criterion as C
-from reqaudit.models import Cell, CellKind, CellPlan, Coverage, PartRole, Unit
+from reqaudit.models import (
+    MAX_FOCUS_CHECKS,
+    Cell,
+    CellKind,
+    CellPlan,
+    Coverage,
+    FocusCheck,
+    PartRole,
+    Unit,
+)
 from reqaudit.stages.base import RunContext, Stage
 
 BATCH_SIZE = 8
@@ -85,7 +95,9 @@ def requirement_batches(units: list[Unit], size: int = BATCH_SIZE) -> list[list[
 
 def plan_cells(ctx_units: list[Unit], has_child_spec: bool, has_acceptance: bool,
                has_api: bool, has_facts: bool = False,
-               general_reasons: list[str] | None = None) -> CellPlan:
+               general_reasons: list[str] | None = None,
+               focus_checks: list[FocusCheck] | None = None,
+               block_ids: set[str] | None = None) -> CellPlan:
     cells: list[Cell] = []
     notes: list[str] = []
 
@@ -120,7 +132,28 @@ def plan_cells(ctx_units: list[Unit], has_child_spec: bool, has_acceptance: bool
     for kind in kinds:
         cells.append(Cell(id=kind.value, kind=kind, title=SET_TITLES[kind],
                           criteria=SET_CRITERIA[kind]))
+    focus = focus_cells(focus_checks or [], block_ids)
+    if focus:
+        cells.extend(focus)
+        notes.append("Проверки под содержание этого документа, предложенные при его разборе: "
+                     + "; ".join(f"«{c.title}»" for c in focus) + ".")
     return CellPlan(cells=cells, notes=notes)
+
+
+def focus_cells(checks: list[FocusCheck], block_ids: set[str] | None = None) -> list[Cell]:
+    """Cells for the profiler's focus checks. Code keeps the frame: known criteria only,
+    existing blocks only, at most MAX_FOCUS_CHECKS; what to look at is the model's call."""
+    known = {c.value for c in Criterion}
+    cells = []
+    for check in checks[:MAX_FOCUS_CHECKS]:
+        codes = [Criterion(c) for c in dict.fromkeys(check.criteria) if c in known]
+        if not codes or not check.instruction.strip():
+            continue
+        starts = [b for b in check.start_block_ids if block_ids is None or b in block_ids]
+        cells.append(Cell(id=f"focus-{len(cells) + 1}", kind=CellKind.FOCUS,
+                          title=check.title.strip() or "Проверка под документ", criteria=codes,
+                          instruction=check.instruction.strip(), block_ids=starts))
+    return cells
 
 
 class PlanStage(Stage):
@@ -138,6 +171,8 @@ class PlanStage(Stage):
             has_api=profile.has_api_spec,
             has_facts=bool(ctx.state.facts and ctx.state.facts.facts),
             general_reasons=assumption_check(ctx.state.coverage, ctx.state.units),
+            focus_checks=profile.focus_checks,
+            block_ids={b.id for b in ctx.state.document.blocks} if ctx.state.document else None,
         )
         ctx.state.cells = plan.cells
         ctx.state.plan_notes = plan.notes

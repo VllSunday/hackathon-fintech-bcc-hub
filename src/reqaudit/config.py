@@ -105,6 +105,23 @@ def has_key(model_id: str) -> bool:
     return keys is None or any(_env(k) for k in keys)
 
 
+def _with_vertex_fallback(chain: list[str], role: str, notes: list[str]) -> list[str]:
+    """With a Google Cloud key, each gemini:X model gets vertex:X as its fallback.
+
+    A Cloud key may or may not be allowed to call AI Studio; when it is not, the provider
+    answers 403 and the client moves on to the same model on Vertex AI, so one key works
+    either way without editing the configuration.
+    """
+    if not vertex_key():
+        return chain
+    extra = [f"vertex:{m.partition(':')[2]}" for m in chain if m.startswith("gemini:")]
+    extra = [m for m in extra if m not in chain]
+    if extra:
+        notes.append(f"Роль {role}: ключ Google Cloud найден, запасные модели через Vertex AI: "
+                     f"{', '.join(extra)}.")
+    return chain + extra
+
+
 def _resolve_models(notes: list[str]) -> dict[str, list[str]]:
     """Configured chains minus models without a key; an automatic choice if nothing is left."""
     models: dict[str, list[str]] = {}
@@ -115,7 +132,7 @@ def _resolve_models(notes: list[str]) -> dict[str, list[str]]:
             keys = " или ".join(PROVIDER_KEYS[missing.partition(':')[0]])
             notes.append(f"Модель {missing} (роль {role}) пропущена: не задан {keys}.")
         if usable:
-            models[role] = usable
+            models[role] = _with_vertex_fallback(usable, role, notes)
 
     if "judge" not in models:
         auto = [m for m in AUTO_MODELS if has_key(m)]

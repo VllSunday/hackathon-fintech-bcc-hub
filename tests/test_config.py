@@ -70,3 +70,12 @@ def test_vertex_client_is_not_shared_between_calls(monkeypatch):
     first = default_model("vertex:gemini-3.5-flash")
     second = default_model("vertex:gemini-3.5-flash")
     assert first._provider is not second._provider
+
+
+def test_gemini_model_falls_back_to_vertex_with_a_cloud_key(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "AQ.test-cloud-key")
+    monkeypatch.setenv("REQAUDIT_MODEL_JUDGE", "gemini:gemini-3.5-flash")
+    settings = load_settings()
+    assert settings.chain_for("judge") == ["gemini:gemini-3.5-flash", "vertex:gemini-3.5-flash"]
+    assert settings.chain_for("vision") == settings.chain_for("judge")  # vision falls back to judge
+    assert any("Vertex" in n for n in settings.notes)

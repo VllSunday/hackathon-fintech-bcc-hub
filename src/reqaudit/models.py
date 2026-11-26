@@ -346,6 +346,17 @@ class CheckFailure(BaseModel):
     message: str
 
 
+class MarkerRecord(BaseModel):
+    """A marker word found by code in s5 and the reviewer's decision on it."""
+
+    id: str
+    unit_id: str
+    category: str
+    word: str
+    defect: bool | None = Field(default=None, description="None when the cell was not done.")
+    reason: str | None = None
+
+
 # --- s8: questions ----------------------------------------------------------------------
 
 

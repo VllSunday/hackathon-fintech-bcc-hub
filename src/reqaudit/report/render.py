@@ -297,6 +297,10 @@ def _summary(state: RunState, confirmed: list[Finding]) -> str:
         ["Кандидатов отклонено оппонентом и арбитром", len(state.rejected) - by_gate],
         ["Кандидатов отклонено проверкой цитат", by_gate],
     ]
+    if state.markers:
+        judged = sum(1 for m in state.markers if m.defect)
+        rows.append(["Слов-маркеров найдено кодом / признано дефектом рецензентом",
+                     f"{len(state.markers)} / {judged}"])
     answered = [q for q in state.questions if q.answer]
     if answered:
         resolved = sum(1 for f in state.findings if f.answer_decision == "resolved")

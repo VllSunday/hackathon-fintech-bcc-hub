@@ -60,6 +60,9 @@ class Settings:
     # PDF reader: "pymupdf" (text layer), "docling" (structure; needs the docling extra),
     # "auto" uses Docling when it is installed and the profile is thorough.
     pdf_reader: str = "auto"
+    # Marker words (s5): code lists words that often signal a defect, the reviewer decides
+    # on each in context. Cells without markers send the same request as with this off.
+    markers: bool = True
     # Decisions taken while reading the configuration, shown in the console and the passport.
     notes: list[str] = field(default_factory=list)
 
@@ -144,5 +147,6 @@ def load_settings(
         vision=_choice("REQAUDIT_VISION", ("auto", "all", "off"),
                        "all" if chosen == "thorough" else "auto"),
         pdf_reader=_choice("REQAUDIT_PDF_READER", ("auto", "pymupdf", "docling"), "auto"),
+        markers=_choice("REQAUDIT_MARKERS", ("on", "off"), "on") == "on",
         notes=notes,
     )

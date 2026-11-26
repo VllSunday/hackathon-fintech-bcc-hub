@@ -15,6 +15,7 @@ from reqaudit import criteria, prompt_store
 from reqaudit.criteria import Criterion
 from reqaudit.llm.checks import Check, combine, require_russian
 from reqaudit.llm.client import LLMError
+from reqaudit.markers import MarkerHit, find_markers
 from reqaudit.models import (
     Cell,
     CellKind,
@@ -22,6 +23,7 @@ from reqaudit.models import (
     Evidence,
     Finding,
     FindingStatus,
+    MarkerRecord,
     Scope,
 )
 from reqaudit.reading.render import LEGEND
@@ -51,6 +53,21 @@ class RequirementsAnswer(BaseModel):
     findings: list[CandidateDraft]
 
 
+class MarkerVerdict(BaseModel):
+    marker_id: str
+    defect: bool
+    reason: str
+
+
+class RequirementsWithMarkersAnswer(BaseModel):
+    """Used only for cells where code found marker words; other cells keep the plain schema,
+    so their requests stay exactly as before."""
+
+    reviewed: list[Reviewed]
+    markers: list[MarkerVerdict]
+    findings: list[CandidateDraft]
+
+
 class SetAnswer(BaseModel):
     analysis: str
     findings: list[CandidateDraft]
@@ -64,19 +81,34 @@ class CandidateSet(BaseModel):
     dropped_unknown_criterion: int = 0
 
 
-def _answer_type(cell: Cell) -> type[BaseModel]:
-    return RequirementsAnswer if cell.kind == CellKind.REQUIREMENTS else SetAnswer
+def _answer_type(cell: Cell, markers: list[MarkerHit]) -> type[BaseModel]:
+    if cell.kind != CellKind.REQUIREMENTS:
+        return SetAnswer
+    return RequirementsWithMarkersAnswer if markers else RequirementsAnswer
 
 
-def cell_check(cell: Cell, unit_ids: set[str], blocks: dict) -> Check:
+def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
+               markers: list[MarkerHit] | None = None) -> Check:
     allowed = set(cell.criteria)
+    markers = markers or []
 
-    def check(answer: RequirementsAnswer | SetAnswer) -> str | None:
+    def check(answer: RequirementsAnswer | RequirementsWithMarkersAnswer | SetAnswer
+              ) -> str | None:
         complaints: list[str] = []
-        if isinstance(answer, RequirementsAnswer):
+        if hasattr(answer, "reviewed"):
             missing = [u for u in cell.unit_ids if u not in {r.unit_id for r in answer.reviewed}]
             if missing:
                 complaints.append(f"`reviewed` must list every requirement; missing {missing}")
+        if isinstance(answer, RequirementsWithMarkersAnswer):
+            decided = {m.marker_id: m for m in answer.markers}
+            undecided = [m.id for m in markers if m.id not in decided]
+            if undecided:
+                complaints.append(f"`markers` must decide on every marker; missing {undecided}")
+            flagged = {m.unit_id for m in markers if decided.get(m.id) and decided[m.id].defect}
+            reported = {u for f in answer.findings for u in f.unit_ids}
+            for unit in sorted(flagged - reported):
+                complaints.append(f"a marker in {unit} was judged a defect, but no finding "
+                                  "names that requirement; report it or change the decision")
         for n, f in enumerate(answer.findings):
             where = f"findings[{n}] ({f.title[:40]!r})"
             if f.criterion not in allowed:
@@ -100,20 +132,22 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict) -> Check:
                 + "\n".join(f"- {c}" for c in shown)
                 + (f"\n- and {more} more of the same kind" if more > 0 else ""))
 
-    return combine(check, require_russian(*_RUSSIAN_FIELDS))
+    return combine(check, require_russian(*_RUSSIAN_FIELDS, "markers.reason"))
 
 
-def _instructions(cell: Cell, has_parent_child: bool) -> tuple[str, list[str]]:
+def _instructions(cell: Cell, has_parent_child: bool,
+                  with_markers: bool = False) -> tuple[str, list[str]]:
     scope_note = ("Conflicts between the main part and its child specification are covered by a "
                   "separate check; report here conflicts within one part and between "
                   "requirements and acceptance criteria." if has_parent_child else "")
     criteria_text = "\n".join(f"- `{c.value}`: {criteria.CRITERIA[c].definition}"
                               for c in cell.criteria)
-    return prompt_store.compose("s5_common", f"s5_{cell.kind.value}", legend=LEGEND,
-                                criteria=criteria_text, scope_note=scope_note)
+    names = ["s5_common", f"s5_{cell.kind.value}"] + (["s5_markers"] if with_markers else [])
+    return prompt_store.compose(*names, legend=LEGEND, criteria=criteria_text,
+                                scope_note=scope_note)
 
 
-def _prompt(ctx: RunContext, cell: Cell) -> str:
+def _prompt(ctx: RunContext, cell: Cell, markers: list[MarkerHit] | None = None) -> str:
     state = ctx.state
     units = {u.id: u for u in state.units}
     focus = {b for uid in cell.unit_ids for b in units[uid].block_ids}
@@ -128,6 +162,10 @@ def _prompt(ctx: RunContext, cell: Cell) -> str:
             f"{u.id} ({u.kind.value}, {u.doc_label or 'без номера'}, blocks "
             f"{', '.join(u.block_ids)}): «{u.quote}»" for u in (units[i] for i in cell.unit_ids))
         parts.append(f"<requirements_to_check>\n{listed}\n</requirements_to_check>")
+        if markers:
+            found = "\n".join(f"{m.id} in {m.unit_id}: «{m.word}» ({m.category_ru})"
+                              for m in markers)
+            parts.append(f"<marker_candidates>\n{found}\n</marker_candidates>")
     parts.append(f"Check: {cell.title}.")
     return "\n\n".join(parts) + "\n"
 
@@ -175,17 +213,22 @@ class CandidatesStage(Stage):
         unit_ids = {u.id for u in state.units}
         has_parent_child = any(c.kind == CellKind.PARENT_CHILD for c in state.cells)
 
+        hits = find_markers(state.units) if ctx.settings.markers else []
         requests = []
         for cell in state.cells:
-            instructions, ids = _instructions(cell, has_parent_child)
+            # Cells without marker hits keep exactly the request they had before markers.
+            mine = ([h for h in hits if h.unit_id in set(cell.unit_ids)]
+                    if cell.kind == CellKind.REQUIREMENTS else [])
+            instructions, ids = _instructions(cell, has_parent_child, with_markers=bool(mine))
             requests.append(dict(
                 step=f"s5[{cell.id}]", role=ROLE, instructions=instructions,
-                prompt=_prompt(ctx, cell), output_type=_answer_type(cell), prompt_ids=ids,
-                check=cell_check(cell, unit_ids, blocks)))
+                prompt=_prompt(ctx, cell, mine), output_type=_answer_type(cell, mine),
+                prompt_ids=ids, check=cell_check(cell, unit_ids, blocks, mine)))
 
         candidates: list[Finding] = []
         failures: list[CheckFailure] = []
         unknown = 0
+        verdicts: dict[str, MarkerVerdict] = {}
         for cell, result in zip(state.cells, ctx.llm.many(requests), strict=True):
             if isinstance(result, LLMError):
                 failures.append(CheckFailure(stage=self.code, cell=cell.title,
@@ -194,9 +237,15 @@ class CandidatesStage(Stage):
                 found, dropped = _to_findings(cell, result)
                 candidates.extend(found)
                 unknown += dropped
+                for verdict in getattr(result, "markers", []):
+                    verdicts[verdict.marker_id] = verdict
 
         state.candidates = candidates
         state.check_failures.extend(failures)
+        state.markers = [MarkerRecord(
+            id=h.id, unit_id=h.unit_id, category=h.category_ru, word=h.word,
+            defect=verdicts[h.id].defect if h.id in verdicts else None,
+            reason=verdicts[h.id].reason if h.id in verdicts else None) for h in hits]
         ctx.trace.event("candidates_summary", stage=self.code, candidates=len(candidates),
                         dropped_unknown_criterion=unknown,
                         failed_cells=[f.cell for f in failures])

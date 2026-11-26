@@ -21,6 +21,7 @@ from reqaudit.models import (
     FactTable,
     Finding,
     IntakeResult,
+    MarkerRecord,
     Question,
     Unit,
 )
@@ -44,6 +45,7 @@ class RunState(BaseModel):
     facts: FactTable | None = None
     cells: list[Cell] = Field(default_factory=list)
     candidates: list[Finding] = Field(default_factory=list)
+    markers: list[MarkerRecord] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
     rejected: list[Finding] = Field(default_factory=list)
     check_failures: list[CheckFailure] = Field(default_factory=list)

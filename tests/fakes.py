@@ -67,6 +67,18 @@ def honest_review(prompt: str) -> dict:
             "findings": findings}
 
 
+_MARKER_LINE = re.compile(r"^(M-\d+) in (\S+): «(.+?)»", re.MULTILINE)
+
+
+def honest_markers(prompt: str, findings: list[dict]) -> list[dict]:
+    """A marker is a defect where the review reported its requirement, otherwise not."""
+    reported = {u for f in findings for u in f["unit_ids"]}
+    return [{"marker_id": mid, "defect": unit in reported,
+             "reason": "Слово оставляет поведение неопределённым." if unit in reported
+             else "Здесь слово не входит в обязательство."}
+            for mid, unit, _ in _MARKER_LINE.findall(prompt)]
+
+
 def honest_set_review(prompt: str) -> dict:
     """Consistency cell: a conflict between the first two list items; other cells: nothing."""
     check = _CHECK.search(prompt).group(1)
@@ -148,7 +160,7 @@ def fake_team(mutate_segment: Mutate | None = None,
     arbiter's answer for them.
     """
     calls = {"profile": 0, "segment": 0, "review": 0, "opponent": 0, "arbiter": 0,
-             "editor": 0, "page": 0, "picture": 0, "facts": 0, "reassess": 0}
+             "editor": 0, "page": 0, "picture": 0, "facts": 0, "reassess": 0, "markers": 0}
 
     def respond(messages, info: AgentInfo) -> ModelResponse:
         tool = info.output_tools[0]
@@ -171,6 +183,10 @@ def fake_team(mutate_segment: Mutate | None = None,
         elif "reviewed" in fields:
             calls["review"] += 1
             args = review(prompt)
+            if "markers" in fields:
+                calls["markers"] += 1
+                if "markers" not in args:
+                    args = {**args, "markers": honest_markers(prompt, args["findings"])}
         elif "analysis" in fields:
             calls["review"] += 1
             args = set_review(prompt)

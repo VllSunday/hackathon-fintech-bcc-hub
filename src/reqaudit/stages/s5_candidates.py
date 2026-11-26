@@ -222,7 +222,7 @@ def _instructions(cell: Cell, has_parent_child: bool,
                   "separate check; report here conflicts within one part and between "
                   "requirements and acceptance criteria." if has_parent_child else "")
     criteria_text = criteria.cards(list(cell.criteria))
-    names = ["s5_common", "severity", f"s5_{cell.kind.value}"] + (
+    names = ["s5_common", "severity", "gaps", f"s5_{cell.kind.value}"] + (
         ["s5_markers"] if with_markers else [])
     return prompt_store.compose(*names, legend=LEGEND, criteria=criteria_text,
                                 scope_note=scope_note)

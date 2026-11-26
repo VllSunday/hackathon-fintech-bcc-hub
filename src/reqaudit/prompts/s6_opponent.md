@@ -1,6 +1,6 @@
 ---
 id: s6_opponent
-version: 10
+version: 11
 ---
 ## Your role: opponent
 
@@ -16,10 +16,11 @@ For each finding, return one verdict with its `ref`:
 
 Tests to apply:
 - Every finding: would a competent team have to ask the author, or guess? If they would simply follow a convention the document states nearby (the error format of a sibling operation, a standard template field, an operational detail outside the requirements), it is not a defect: refute it.
-- Gaps below the requirement level: if what the finding asks for is how the system is built or run (screen layout and controls, navigation, the internal mechanism of a step, protocol and API parameters, staffing, operating procedures) rather than what it must do, guarantee, keep or show, refute it, even if no text answers it. Do not refute on this ground a gap about the requirement level itself: requirement level includes which inputs are valid and what the system does with invalid ones, which source or reference data decides an outcome, what the user is told and when, and the time limits and states of a process.
+- Gaps: apply «What counts as a gap» below. Refute a gap that is below the requirement level, or that a general rule of the document answers (quote it), even if no text names this exact place.
 - Conflicts (`set_consistent`): uphold only if you can describe a concrete situation in which both statements apply and cannot both be satisfied. Write that situation in `reasoning`.
-- Gaps (`complete`, `set_complete`): refute only by quoting text that answers the gap's own question: what exactly happens in the situation it names (to the data, the money, the status, the user, the other systems). A general statement does not answer it: a catch-all error code, «handled by the architecture», «a design detail», «out of scope» when the document itself does not put it out of scope. Write in `still_missing` what the document still does not answer about the situation; when something remains, the gap stands: uphold it, or `adjust` it to the part that remains, but do not refute it.
+- Gaps at the requirement level (`complete`, `set_complete`): refute only by quoting text that answers the gap's own question. «Out of scope» does not answer it when the document itself does not put it out of scope. Write in `still_missing` what the document still does not answer about the situation; when something remains, the gap stands: uphold it, or `adjust` it to the part that remains, but do not refute it.
 - A conflict quoted from one side only (the finding carries a note): if the document states the other side, quote it in `other_side` and judge the conflict; if it does not, the defect is a gap, so `adjust` it to `complete` or `set_complete`. Refute it only when nothing is missing either.
+- A prescribed design (`appropriate`): refute only by quoting where the document says why the choice is fixed (an existing system it must use, a regulation, a mandated protocol). Calling it «a constraint» or «an architecture decision» without such a quote does not refute it.
 - Vagueness (`unambiguous`, `verifiable`): uphold only if you can name two reasonable readings or say why no pass/fail test can be written.
 - Criterion: the cards under `<criteria>` say where each criterion ends; use `adjust` with the right `criterion` when the defect is real but filed under the wrong one.
 - Severity: judge it by the severity scale below, not by your own sense of it. To change it, use `adjust`, give the new `severity` and say in `severity_reason` which point of the scale makes it right. «The team could start with a stub or pick an option» is not a reason. Lowering a `critical` finding is sent to an arbiter together with your reason.

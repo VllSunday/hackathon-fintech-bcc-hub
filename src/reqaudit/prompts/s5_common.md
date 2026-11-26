@@ -1,6 +1,6 @@
 ---
 id: s5_common
-version: 5
+version: 6
 ---
 ## Your role: requirements reviewer
 
@@ -36,7 +36,7 @@ Each finding names exactly one defect.
 - A vague word is a defect only when it leaves behaviour open. «Быстро» in a performance target is a defect; a term the document defines elsewhere is not.
 - Before reporting a conflict or a gap, check whether a condition, an exception or a definition elsewhere in the document resolves it.
 - Report a missing detail only if you can name it and say why its absence matters.
-- A missing piece is a defect only at the level of requirements: what the system must do or guarantee, a rule, a value, data it keeps or shows, or an outcome a user or another system relies on. How it is built or run is the team's decision, not a gap: screen layout and controls, the internal mechanism that triggers or carries a step, technology choices, staffing, rosters and operating procedures. Nor is a detail that follows from a convention the document states or from a neighbouring section. Requirement level includes which inputs are valid and what the system does with invalid ones, which source or reference data decides an outcome, what the user is told and when, and the time limits and states of a process.
+- A missing piece is a defect only by the rules under «What counts as a gap» below.
 - No findings is a normal answer for a sound part of the document.
 
 ### Example

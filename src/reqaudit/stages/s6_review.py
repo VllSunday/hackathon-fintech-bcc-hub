@@ -236,7 +236,7 @@ class ReviewStage(Stage):
                         one_sided=sum(1 for f in candidates if one_sided(f)))
         batches = _batches(candidates)
 
-        instructions, ids = prompt_store.compose("s6_opponent", "severity", legend=LEGEND)
+        instructions, ids = prompt_store.compose("s6_opponent", "severity", "gaps", legend=LEGEND)
         requests = []
         for n, batch in enumerate(batches, 1):
             refs = [f"F{i}" for i in range(1, len(batch) + 1)]
@@ -308,7 +308,7 @@ class ReviewStage(Stage):
                    blocks: dict) -> tuple[list[Finding], list[Finding]]:
         if not disputed:
             return [], []
-        instructions, ids = prompt_store.compose("s6_arbiter", "severity", legend=LEGEND)
+        instructions, ids = prompt_store.compose("s6_arbiter", "severity", "gaps", legend=LEGEND)
         chunks = [disputed[i:i + BATCH_SIZE] for i in range(0, len(disputed), BATCH_SIZE)]
         requests = []
         for n, chunk in enumerate(chunks, 1):

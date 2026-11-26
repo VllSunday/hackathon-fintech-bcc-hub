@@ -446,3 +446,16 @@ def test_same_places_quoted_under_two_criteria_are_one_defect():
     single_b = _f("D4", ["b9"], criterion="singular")
     merged, n = merge_duplicates([a, b, single_a, single_b])
     assert n == 1 and len(merged) == 3  # the pair merged; one place, two criteria kept apart
+
+
+def test_reviewer_opponent_and_arbiter_share_the_gap_rules(tmp_path):
+    """The arbiter must judge a gap by the rules the opponent refuted it under."""
+    from reqaudit.criteria import Criterion
+    from reqaudit.stages.s5_candidates import _instructions
+
+    cell = Cell(id="completeness", kind=CellKind.COMPLETENESS, title="t",
+                criteria=[Criterion.COMPLETE])
+    text, ids = _instructions(cell, has_parent_child=False)
+    assert "What counts as a gap" in text and any(i.startswith("gaps@") for i in ids)
+    source = Path("src/reqaudit/stages/s6_review.py").read_text(encoding="utf-8")
+    assert source.count('"severity", "gaps"') == 2

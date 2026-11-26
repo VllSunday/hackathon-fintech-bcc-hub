@@ -45,8 +45,8 @@ class Settings:
     max_cost_usd: float | None = None
     requests_per_minute: float | None = None
     request_timeout_s: float = 180.0
-    max_attempts: int = 4
-    backoff_base_s: float = 2.0
+    max_attempts: int = 5
+    backoff_base_s: float = 4.0
     output_retries: int = 2
     # Characters of rendered document per model call; longer documents are split by sections.
     window_chars: int = 40_000

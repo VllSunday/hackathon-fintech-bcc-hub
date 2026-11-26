@@ -1,6 +1,6 @@
 ---
 id: s3_facts
-version: 2
+version: 3
 ---
 ## Your role: fact extractor
 
@@ -23,7 +23,7 @@ You receive a requirements document as numbered blocks. Write out its checkable 
   - `derived_from`: the entity is computed from another one, for example a monthly total from purchases; `value` is that other entity's key.
 - `value`: as short as possible and in the document's own terms: «тенге», «integer», «1 000–1 000 000», «выключено», «GET», «404 для чужой карты».
 - `condition`: in Russian, when the fact applies, if the document limits it; otherwise null.
-- `block_id` and `quote`: the block and the verbatim words the fact comes from.
+- `block_id` and `quote`: the block and the verbatim words the fact comes from. For a fact from a table row, quote the whole row as written, cells separated by ` | `: a single cell such as «GET» or «string» is too short to locate.
 
 ### Rules
 

@@ -13,6 +13,7 @@ dependencies = [
     "pymupdf>=1.26,<2",
     "python-docx>=1.1",
     "python-dotenv>=1.0",
+    "pyyaml>=6",
     "striprtf>=0.0.26",
 ]
 
@@ -22,6 +23,7 @@ docling = ["docling>=2.150"]
 
 [project.scripts]
 reqaudit = "reqaudit.cli:main"
+reqaudit-eval = "reqaudit.eval:main"
 
 [dependency-groups]
 dev = [

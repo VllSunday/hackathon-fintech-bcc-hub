@@ -87,6 +87,8 @@ class Settings:
     # Seconds a call waits out rate limits (429) on its model before falling back: a
     # rate limit passes by itself, and the next model in the chain is usually weaker.
     rate_limit_patience_s: float = 300.0
+    # Independent severity ratings per finding (s6 calibration); the median level wins.
+    calibration_samples: int = 3
     output_retries: int = 2
     # Characters of rendered document per model call; longer documents are split by sections.
     window_chars: int = 40_000
@@ -215,6 +217,7 @@ def load_settings(
         max_cost_usd=float(cost) if (cost := _env("REQAUDIT_MAX_COST_USD")) else None,
         concurrency=max(1, int(_env("REQAUDIT_CONCURRENCY") or 6)),
         rate_limit_patience_s=float(_env("REQAUDIT_RATE_LIMIT_PATIENCE_S") or 300),
+        calibration_samples=max(1, int(_env("REQAUDIT_CALIBRATION_SAMPLES") or 3)),
         vision=_choice("REQAUDIT_VISION", ("auto", "all", "off"),
                        "all" if chosen == "thorough" else "auto"),
         pdf_reader=_choice("REQAUDIT_PDF_READER", ("auto", "pymupdf", "docling"), "auto"),

@@ -500,66 +500,61 @@ def test_completeness_checklist_must_cover_every_limit_and_status():
     assert complaint and "Missing 2" in complaint and "b2" in complaint
 
 
-def test_calibration_rates_all_confirmed_findings_together(tmp_path):
-    """One call sees every confirmed finding; a changed level keeps its reason and trail."""
-    model, calls = fake_team(calibrate=lambda severity: "major")
+def test_calibration_is_blind_and_the_level_comes_from_the_answers(tmp_path):
+    """The calibrator never sees the reviewer's level; code sets it from the answers, and
+    the median of three independent ratings wins."""
+    seen: list[str] = []
+
+    def rate(title):
+        seen.append(title)
+        if CONFLICT in title:  # a conflict in a secondary detail: major, whatever it was
+            return {"path": "secondary", "consequence": "detail", "kind": "conflict",
+                    "frequency": "regular", "harm": False}
+        return None
+
+    model, calls = fake_team(calibrate=rate)
     _, state, _, trace = run(tmp_path, lambda _id: model)
-    assert calls["calibrate"] == 1 and '"core_flow"' in trace and '"harm"' in trace
+    assert calls["calibrate"] >= 3 and '"core_flow"' in trace and '"consequence"' in trace
     conflict = next(f for f in state["findings"] if CONFLICT in f["title"])
     assert conflict["severity"] == "major"
     assert "calibrated:critical→major" in conflict["trail"] and conflict["severity_reason"]
 
 
-def test_calibrated_level_must_follow_from_the_answers():
-    from reqaudit.stages.s6_calibrate import CalibrationAnswer, Rating, _check
+def test_the_severity_table():
+    from reqaudit.stages.s6_calibrate import Rating, level, median_level
 
-    def answer(path, harm, severity):
-        return CalibrationAnswer(core_flow="Основной поток: подача заявки.", ratings=[
-            Rating(ref="C1", path=path, harm=harm, severity=severity,
-                   reason="Решено по шкале.")])
+    def r(**kw):
+        base = {"ref": "C1", "path": "core", "consequence": "outcome", "kind": "gap",
+                "frequency": "regular", "harm": False, "reason": "Последствие."}
+        return Rating(**{**base, **kw})
 
-    check = _check(["C1"])
-    assert check(answer("core", False, "critical")) is None
-    assert check(answer("secondary", True, "critical")) is None  # harm on a side path
-    assert "not critical" in check(answer("secondary", False, "critical"))
-    assert "not major" in check(answer("none", False, "major"))
-
-
-def test_a_merged_finding_stays_visible_in_the_kept_one():
-    """The editor may merge two different defects by mistake; the report still shows both."""
-    from reqaudit.report.render import _finding
-    from reqaudit.stages.s8_questions import DuplicateGroup, apply_groups
-
-    a = _f("D-001", ["b1"], criterion="complete", severity=Severity.CRITICAL)
-    b = _f("D-002", ["b2"], criterion="unambiguous").model_copy(
-        update={"title": "Термин не определён", "explanation": "Слово можно понять двояко."})
-    kept, redirect = apply_groups([a, b], [DuplicateGroup(finding_ids=["D-001", "D-002"],
-                                                          keep="D-001", reason="Один дефект.")])
-    assert len(kept) == 1 and redirect["D-002"] == "D-001"
-    assert [m.title for m in kept[0].merged] == ["Термин не определён"]
-    text = _finding(kept[0], {})
-    assert "Сведено в эту находку" in text and "Слово можно понять двояко." in text
+    assert level(r()) == Severity.CRITICAL  # a rule the main function needs is missing
+    assert level(r(frequency="edge")) == Severity.MAJOR  # a rare case of a gap
+    assert level(r(frequency="edge", kind="conflict")) == Severity.CRITICAL  # must choose
+    assert level(r(path="secondary")) == Severity.MAJOR
+    assert level(r(consequence="detail")) == Severity.MAJOR
+    assert level(r(consequence="none")) == Severity.MINOR
+    assert level(r(path="secondary", consequence="none", harm=True)) == Severity.CRITICAL
+    assert median_level([Severity.CRITICAL, Severity.MAJOR, Severity.MAJOR]) == Severity.MAJOR
+    assert median_level([Severity.CRITICAL, Severity.MINOR]) == Severity.MINOR  # the milder
 
 
-def test_a_remark_is_listed_apart_and_never_hides_a_defect_of_the_document():
-    """Remarks change no behaviour; conflicts and integrity defects are never remarks."""
-    from reqaudit.stages.s6_calibrate import CalibrationAnswer, Rating, _check
+def test_the_calibrator_does_not_see_the_reviewers_level():
+    from reqaudit.stages.s6_calibrate import _view
 
-    conflict = _f("D-1", ["b1", "b2"], criterion="set_consistent", severity=Severity.MINOR)
-    wording = _f("D-2", ["b3"], criterion="complete", severity=Severity.MINOR)
-    check = _check(["C1", "C2"], {"C1": conflict, "C2": wording})
+    shown = _view("C1", _f("D-1", ["b1"], severity=Severity.CRITICAL))
+    assert "critical" not in shown and "severity" not in shown
 
-    def rating(ref, path, remark):
-        return Rating(ref=ref, path=path, harm=False, severity="minor", remark=remark,
-                      reason="Решено по шкале.")
 
-    ok = CalibrationAnswer(core_flow="Основной поток: подача заявки.",
-                           ratings=[rating("C1", "none", False), rating("C2", "none", True)])
-    assert check(ok) is None
-    bad = CalibrationAnswer(core_flow="Основной поток: подача заявки.",
-                            ratings=[rating("C1", "none", True), rating("C2", "core", True)])
-    complaint = check(bad)
-    assert "only a gap" in complaint and "path none" in complaint
+def test_only_a_gap_that_changes_nothing_becomes_a_remark():
+    from reqaudit.stages.s6_calibrate import Rating, is_remark
+
+    none = Rating(ref="C1", path="core", consequence="none", kind="gap", frequency="regular",
+                  harm=False, reason="Текст сообщения.")
+    assert is_remark(_f("D-1", ["b1"], criterion="complete"), none)
+    assert not is_remark(_f("D-2", ["b1"], criterion="singular"), none)  # a quality defect
+    assert not is_remark(_f("D-3", ["b1"], criterion="complete"),
+                         none.model_copy(update={"consequence": "detail"}))
 
 
 def test_remarks_stay_in_the_report_but_not_among_the_defects(tmp_path):

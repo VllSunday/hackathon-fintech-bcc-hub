@@ -140,7 +140,7 @@ defects:
   - id: G-17
     scope: pair
     criterion: set_complete
-    severity: critical
+    severity: major
     kind: cross_section
     quotes:
       - "Клиент может приостановить автоплатёж на срок из таблицы «Общие параметры»."
@@ -158,7 +158,7 @@ defects:
   - id: G-19
     scope: set
     criterion: set_feasible
-    severity: major
+    severity: critical
     kind: cross_section
     quotes:
       - "Повторные попытки автоплатежа по расписанию выполняются только в день списания"
@@ -173,6 +173,8 @@ defects:
     quotes:
       - "Например, при дне списания 15 уведомление придёт 13-го числа."
     note: При уведомлении за 1 день до дня 15 оно должно прийти 14-го; пример противоречит правилу и таблице параметров.
+# Severity of G-17, G-19 revised 2026-11-27: two independent raters (document
+# only, same scale) agreed with each other and against the original level.
 traps:
   - id: T-01
     quotes:

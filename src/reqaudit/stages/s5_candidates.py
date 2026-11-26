@@ -47,6 +47,7 @@ _RUSSIAN_FIELDS = ("findings.title", "findings.explanation", "findings.suggestio
 
 class Reviewed(BaseModel):
     unit_id: str
+    violated: list[str] = []  # criterion codes this requirement violates; empty when sound
     note: str
 
 
@@ -126,6 +127,14 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
             missing = [u for u in cell.unit_ids if u not in {r.unit_id for r in answer.reviewed}]
             if missing:
                 complaints.append(f"`reviewed` must list every requirement; missing {missing}")
+            reported = {(u, str(f.criterion)) for f in answer.findings for u in f.unit_ids}
+            for r in answer.reviewed:
+                for code in r.violated:
+                    if code in known and (r.unit_id, code) not in reported:
+                        complaints.append(
+                            f"reviewed {r.unit_id} names `{code}` as violated, but no finding "
+                            f"under `{code}` names {r.unit_id}: report it, or remove it from "
+                            "`violated` if the requirement meets the criterion")
         if isinstance(answer, ChecklistAnswer):
             complaints += _checklist_complaints(answer, blocks)
         if isinstance(answer, RequirementsWithMarkersAnswer):

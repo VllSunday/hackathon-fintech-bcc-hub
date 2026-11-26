@@ -396,3 +396,15 @@ def test_a_checklist_gap_needs_a_finding(tmp_path):
     model, _ = fake_team(set_review=lists_a_gap)
     _, _, _, trace = run(tmp_path, lambda _id: model)
     assert "is marked gap, but no finding quotes block" in trace
+
+
+def test_a_violation_named_in_reviewed_needs_its_finding(tmp_path):
+    def names_but_skips(prompt):
+        answer = honest_review(prompt)
+        for r in answer["reviewed"]:
+            r["violated"] = ["singular"]
+        return answer
+
+    model, _ = fake_team(review=names_but_skips)
+    _, _, _, trace = run(tmp_path, lambda _id: model)
+    assert "names `singular` as violated, but no finding under `singular`" in trace

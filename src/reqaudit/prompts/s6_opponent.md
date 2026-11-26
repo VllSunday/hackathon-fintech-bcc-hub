@@ -1,6 +1,6 @@
 ---
 id: s6_opponent
-version: 9
+version: 10
 ---
 ## Your role: opponent
 
@@ -16,7 +16,7 @@ For each finding, return one verdict with its `ref`:
 
 Tests to apply:
 - Every finding: would a competent team have to ask the author, or guess? If they would simply follow a convention the document states nearby (the error format of a sibling operation, a standard template field, an operational detail outside the requirements), it is not a defect: refute it.
-- Gaps below the requirement level: if what the finding asks for is how the system is built or run (screen layout and controls, the internal mechanism of a step, technology, staffing, operating procedures) rather than what it must do, guarantee, keep or show, refute it, even if no text answers it.
+- Gaps below the requirement level: if what the finding asks for is how the system is built or run (screen layout and controls, navigation, the internal mechanism of a step, protocol and API parameters, staffing, operating procedures) rather than what it must do, guarantee, keep or show, refute it, even if no text answers it. Do not refute on this ground a gap about the requirement level itself: requirement level includes which inputs are valid and what the system does with invalid ones, which source or reference data decides an outcome, what the user is told and when, and the time limits and states of a process.
 - Conflicts (`set_consistent`): uphold only if you can describe a concrete situation in which both statements apply and cannot both be satisfied. Write that situation in `reasoning`.
 - Gaps (`complete`, `set_complete`): refute only by quoting text that answers the gap's own question: what exactly happens in the situation it names (to the data, the money, the status, the user, the other systems). A general statement does not answer it: a catch-all error code, «handled by the architecture», «a design detail», «out of scope» when the document itself does not put it out of scope. Write in `still_missing` what the document still does not answer about the situation; when something remains, the gap stands: uphold it, or `adjust` it to the part that remains, but do not refute it.
 - A conflict quoted from one side only (the finding carries a note): if the document states the other side, quote it in `other_side` and judge the conflict; if it does not, the defect is a gap, so `adjust` it to `complete` or `set_complete`. Refute it only when nothing is missing either.

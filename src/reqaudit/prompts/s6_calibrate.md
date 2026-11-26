@@ -1,6 +1,6 @@
 ---
 id: s6_calibrate
-version: 8
+version: 9
 ---
 ## Your role: severity analyst
 
@@ -14,8 +14,8 @@ Then, for every finding, answer with its `ref`:
 
 - `path`: `core` when the finding concerns the main function or a check or decision on it; `secondary` when it concerns something around it: failures of the infrastructure (a service down, a timeout, retries), alternatives the user chooses (cancel, withdraw, edit, pause), administration, reports, quality targets, secondary screens.
 - `consequence`: what goes wrong if the team guesses differently from what the author meant.
-  - `outcome`: a result someone relies on differs: money (an amount, a fee, a limit), whether an operation is accepted, refused, sent or allowed, the status it ends in, which data is kept or shown to whom, whether a mandatory check runs.
-  - `detail`: only how a secondary aspect behaves: an error code or response format, a timeout or retry policy, what a secondary field or screen shows, the order of steps.
+  - `outcome`: a result someone relies on differs: money (an amount, a fee, a limit), whether an operation is accepted, refused, sent or allowed, the status it ends in, which data is kept, who may see which data, whether a mandatory check runs.
+  - `detail`: only how a secondary aspect behaves: an error code or response format, a timeout or retry policy, which value a screen, a field or a message displays, the order of steps.
   - `none`: nothing observable changes: the wording of a message or label, presentation, the layout of the description, identifiers, an unfilled template field, a design named inside a requirement, a requirement that bundles several obligations. A quality target that cannot be measured as written (no period, no threshold) is `detail`, not `none`: it cannot be tested.
 - `kind`: `conflict` (two statements of the document disagree), `ambiguity` (one statement has two reasonable readings), `gap` (a needed rule, value, operation or case is missing), `other`.
 - `branch`: `success` when the situation lies on the successful path of the main function, including its amounts, limits, rules and the choices it makes for every case (several accounts, large amounts, rounding); `failure` when it lies only on a branch of refusal, rejection, error, timeout, cancellation or unavailability of another system.
@@ -32,3 +32,4 @@ Examples from other domains, for the meaning of the answers only:
 - A payroll system: whether the bonus is paid before or after tax is not said → `core`, `outcome`, `ambiguity`, `success`, `harm` true.
 - A delivery service: the courier app may skip the signature check when offline, although the contract requires it → `harm` true.
 - An online store: how a discount is rounded is not said → `core`, `outcome`, `gap`, `success`.
+- An online store: the order screen should show «the total», and it is unclear whether with delivery or without → `core`, `detail`, `ambiguity`, `success` (what is displayed; the charged amount is defined elsewhere).

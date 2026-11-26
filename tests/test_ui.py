@@ -315,3 +315,46 @@ def test_highlight_key_is_the_gate_key():
     for text in samples:
         stream, index = match_key_with_index(text)
         assert stream == match_key(text) and len(index) == len(stream)
+
+
+def test_author_answers_from_the_page_start_the_same_cli_recheck(tmp_path, monkeypatch):
+    """The page posts answers; the server writes the answers file the CLI reads and starts
+    `reqaudit --answers` on the same document. Foreign pages cannot do it."""
+    from reqaudit.answers import parse
+    from reqaudit.ui import server
+
+    run_dir = full_run(tmp_path)
+    state = json.loads((run_dir / "state.json").read_text(encoding="utf-8"))
+    question = state["questions"][0]
+    started: list[list[str]] = []
+
+    class FakeRun:
+        def __init__(self, args, **_):
+            started.append(list(args))
+            new = tmp_path / "runs" / "20990101-000000-beef"
+            new.mkdir()
+            (new / "trace.jsonl").write_text(json.dumps({"event": "run_start", "input": args[3]})
+                                             + "\n", encoding="utf-8")
+
+        def poll(self):
+            return 0
+
+        def terminate(self):
+            pass
+
+    monkeypatch.setattr(server.subprocess, "Popen", FakeRun)
+    client = TestClient(create_app(tmp_path / "runs"), base_url="http://127.0.0.1")
+    url = f"/api/runs/{run_dir.name}/answers"
+    body = {"answers": {question["id"]: "Лимит считается по календарным суткам Алматы."}}
+
+    foreign = client.post(url, json=body, headers={"Origin": "https://evil.example"})
+    empty = client.post(url, json={"answers": {question["id"]: "  "}})
+    assert foreign.status_code == 403 and empty.status_code == 400
+
+    response = client.post(url, json=body)
+    assert response.status_code == 200 and response.json()["run_id"] == "20990101-000000-beef"
+    args = started[-1]
+    assert Path(args[3]) == ORGANIZERS_DOC.resolve() or Path(args[3]) == ORGANIZERS_DOC
+    answers_file = Path(args[args.index("--answers") + 1])
+    assert list(parse(answers_file.read_text(encoding="utf-8")).values()) == [
+        "Лимит считается по календарным суткам Алматы."]

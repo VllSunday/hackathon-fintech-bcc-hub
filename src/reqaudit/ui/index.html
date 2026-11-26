@@ -380,6 +380,9 @@ mark.q.critical.pulse { background: var(--pulse-critical); box-shadow: inset 0 -
 .quote .unverified { color: var(--marker-ink); }
 .fix-text { background: var(--ok-soft); border-left: 2px solid var(--ok); padding: var(--s2) var(--s3); }
 .findings details.resolved { margin: var(--s4); }
+.answers { margin-top: var(--s4); }
+.answer-field { display: block; margin: 10px 0; }
+.answer-field textarea { display: block; width: 100%; margin-top: 4px; font: inherit; padding: 6px 8px; box-sizing: border-box; }
 .findings details.resolved summary { cursor: pointer; color: var(--muted); }
 .filters { display: flex; gap: var(--s2); flex-wrap: wrap; align-items: center; margin-bottom: var(--s3); }
 .filters select { min-height: 32px; border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--surface);
@@ -1501,7 +1504,40 @@ function showReport(R) {
       answer(q),
       h('div', { class: 'qmeta' }, q.addressee, h('span', { class: 'sep' }, '·'), `приоритет ${PRIORITY_RU[q.priority] || q.priority}`,
         h('span', { class: 'sep' }, '·'), blocks(q), chips(q).length ? [h('span', { class: 'sep' }, '·'), chips(q)] : null)))));
+    if (!EMBEDDED) box.append(answerForm());
     return box;
+  }
+
+  // The author answers here; the server re-checks the document with these answers.
+  function answerForm() {
+    const fields = R.questions.map((q) => {
+      const area = h('textarea', { rows: 2, 'data-q': q.id, placeholder: 'Ответ автора; оставьте пустым, если ответа нет' });
+      area.value = q.answer || '';
+      return h('label', { class: 'answer-field' }, h('span', { class: 'mono muted' }, q.id), ' ', q.text, area);
+    });
+    const status = h('p', { class: 'muted', role: 'status' });
+    const button = h('button', { class: 'btn primary', type: 'button' }, 'Перепроверить с ответами');
+    button.onclick = async () => {
+      const answers = {};
+      for (const area of fields.map((f) => f.querySelector('textarea'))) {
+        if (area.value.trim()) answers[area.dataset.q] = area.value.trim();
+      }
+      if (!Object.keys(answers).length) { status.textContent = 'Впишите ответ хотя бы на один вопрос.'; return; }
+      button.disabled = true;
+      status.textContent = 'Запускаю перепроверку…';
+      try {
+        const res = await api(`/api/runs/${R.run_id}/answers`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers }) });
+        go(`#/run/${res.run_id}`);
+      } catch (err) {
+        button.disabled = false;
+        status.textContent = err.message || String(err);
+      }
+    };
+    return h('div', { class: 'card pad answers' },
+      h('h3', null, 'Ответить на вопросы'),
+      h('p', { class: 'muted' }, 'Агент перепроверит находки, к которым относится каждый ответ: дефект останется (ответ вне документа его не исправляет, и агент предложит правку текста), снимется или поменяет серьёзность. Уже сделанные этапы берутся из кэша.'),
+      fields, h('div', { style: 'margin-top:12px' }, button), status);
   }
 
   // ---- tab: details — requirements, matrix, contradictions, how it was checked

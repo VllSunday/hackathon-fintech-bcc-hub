@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import atexit
+import json
 import os
 import re
 import secrets
@@ -33,7 +34,9 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from reqaudit import __version__
+from reqaudit.answers import fingerprint, render_template
 from reqaudit.config import PROFILES, load_settings
+from reqaudit.models import RunState
 from reqaudit.ui import rundata
 
 _UPLOADS = "_uploads"
@@ -41,6 +44,8 @@ _START_TIMEOUT_S = 90.0
 _BAD_NAME = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
 LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
 _UPLOAD_TYPE = "application/octet-stream"
+_ANSWERS_TYPE = "application/json"
+_MAX_ANSWER_CHARS = 4000
 
 
 def _problem(status: int, message: str) -> HTTPException:
@@ -131,19 +136,27 @@ def create_app(runs_dir: Path | None = None,
     def list_runs() -> dict:
         return {"runs": rundata.list_runs(runs, alive_map())}
 
+    def own_page_only(request: Request, expected_type: str) -> None:
+        """Only this page may start a run: a foreign site cannot send this content type
+        without a CORS preflight, which the server never grants."""
+        content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+        origin = request.headers.get("origin")
+        if content_type != expected_type or (
+                origin and _host_name(origin.split("://", 1)[-1]) !=
+                _host_name(request.headers.get("host", ""))):
+            raise _problem(403, "Запрос принимается только со страницы этого интерфейса.")
+
+    def one_run_at_a_time() -> None:
+        if any(alive_map().values()):
+            raise _problem(409, "Уже идёт проверка другого документа. Дождитесь её окончания: "
+                                "один прогон за раз, чтобы не тратить ключ модели параллельно.")
+
     @app.post("/api/runs")
     async def start_run(request: Request, name: str, profile: str = "quick") -> dict:
         if profile not in PROFILES:
             raise _problem(400, f"Неизвестный профиль «{profile}». Выберите quick или thorough.")
-        content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
-        origin = request.headers.get("origin")
-        if content_type != _UPLOAD_TYPE or (
-                origin and _host_name(origin.split("://", 1)[-1]) !=
-                _host_name(request.headers.get("host", ""))):
-            raise _problem(403, "Загрузка принимается только со страницы этого интерфейса.")
-        if any(alive_map().values()):
-            raise _problem(409, "Уже идёт проверка другого документа. Дождитесь её окончания: "
-                                "один прогон за раз, чтобы не тратить ключ модели параллельно.")
+        own_page_only(request, _UPLOAD_TYPE)
+        one_run_at_a_time()
         limit = load_settings(runs_dir=runs).max_input_mb
         too_big = (f"Файл больше {limit} МБ. Уменьшите его или поднимите "
                    "REQAUDIT_MAX_INPUT_MB в файле .env.")
@@ -160,20 +173,26 @@ def create_app(runs_dir: Path | None = None,
         # Starting the agent waits for its run folder; keep that off the event loop.
         return await asyncio.to_thread(launch, file_name, body, profile)
 
-    def launch(file_name: str, body: bytes, profile: str) -> dict:
+    def work_dir() -> Path:
         token = f"{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(3)}"
-        upload = (runs / _UPLOADS / token).resolve()
-        upload.mkdir(parents=True, exist_ok=True)
+        folder = (runs / _UPLOADS / token).resolve()
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
+
+    def launch(file_name: str, body: bytes, profile: str) -> dict:
+        upload = work_dir()
         source = upload / file_name
         source.write_bytes(body)
-        log = upload / "console.log"
+        return start(source, upload, ["--profile", profile])
 
+    def start(source: Path, upload: Path, extra: list[str]) -> dict:
+        log = upload / "console.log"
         known = {d.name for d in runs.iterdir() if d.is_dir()}
         env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
         with log.open("wb") as out:
-            proc = subprocess.Popen(  # noqa: S603 - fixed command, the file name is an argument
+            proc = subprocess.Popen(  # noqa: S603 - fixed command, paths are arguments
                 [sys.executable, "-m", "reqaudit", str(source), str(upload / "report.md"),
-                 "--profile", profile, "--runs-dir", str(runs)],
+                 *extra, "--runs-dir", str(runs)],
                 stdout=out, stderr=subprocess.STDOUT, env=env)
 
         # The pipeline names the run folder itself; find it by the document it was given.
@@ -197,6 +216,47 @@ def create_app(runs_dir: Path | None = None,
                                 "reqaudit из консоли и посмотрите вывод.")
         raise _problem(500, "Агент завершился, не начав прогон. Вывод консоли: "
                             + (tail or "пусто"))
+
+    @app.post("/api/runs/{run_id}/answers")
+    async def answer_questions(run_id: str, request: Request) -> dict:
+        """The author's answers: written to an answers file, then the same document is
+        re-checked with `reqaudit --answers`; unchanged stages come from the cache."""
+        own_page_only(request, _ANSWERS_TYPE)
+        one_run_at_a_time()
+        folder = run_dir(run_id)
+        try:
+            payload = await request.json()
+        except ValueError:
+            raise _problem(400, "Ответы не прочитаны: ожидался JSON.") from None
+        given = payload.get("answers") if isinstance(payload, dict) else None
+        if not isinstance(given, dict):
+            raise _problem(400, "Ответы не прочитаны: ожидалось поле answers.")
+        state_path = folder / "state.json"
+        if not state_path.exists():
+            raise _problem(409, "Прогон не завершён: отвечать пока не на что.")
+        state = RunState.model_validate_json(state_path.read_text(encoding="utf-8"))
+        known = {q.id: q for q in state.questions}
+        answers = {fingerprint(known[qid].text): " ".join(str(text).split())[:_MAX_ANSWER_CHARS]
+                   for qid, text in given.items() if qid in known and str(text).strip()}
+        answers |= {fingerprint(q.text): q.answer for q in state.questions
+                    if q.answer and fingerprint(q.text) not in answers}
+        if not answers:
+            raise _problem(400, "Впишите ответ хотя бы на один вопрос.")
+        source = Path(state.intake.path) if state.intake else None
+        if source is None or not source.is_file():
+            raise _problem(409, "Исходный документ этого прогона не найден на диске; загрузите "
+                                "его заново и ответьте на вопросы нового прогона.")
+        folder_for_answers = work_dir()
+        answers_file = folder_for_answers / "answers.md"
+        answers_file.write_text(render_template(state.questions, source.name, answers),
+                                encoding="utf-8")
+        passport = folder / "passport.json"
+        profile = (json.loads(passport.read_text(encoding="utf-8")).get("profile")
+                   if passport.exists() else None)
+        if profile not in PROFILES:
+            profile = load_settings(runs_dir=runs).profile
+        return await asyncio.to_thread(start, source, folder_for_answers,
+                                       ["--profile", profile, "--answers", str(answers_file)])
 
     @app.get("/api/runs/{run_id}/progress")
     def run_progress(run_id: str) -> dict:

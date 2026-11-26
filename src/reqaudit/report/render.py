@@ -18,6 +18,8 @@ from reqaudit.report.views import (
     SEVERITY_RU,
     SKIP_RU,
     STATUS_RU,
+    by_task_type,
+    criterion_ref,
     display_quote,
     has_checks,
     place,
@@ -166,7 +168,7 @@ def _segmentation(state: RunState) -> str:
 def _finding(f: Finding, blocks: dict[str, Block]) -> str:
     units = ", ".join(f.unit_ids) or "документ целиком"
     lines = [f"#### {f.id}. {f.title}", "",
-             f"Критерий: {criteria.label(f.criterion)} · Серьёзность: "
+             f"Критерий: {criterion_ref(f.criterion)} · Серьёзность: "
              f"{SEVERITY_RU[f.severity]} · Требования: {units}", "", f.explanation, ""]
     for e in f.evidence:
         lines += [f"> «{display_quote(e.quote)}» — {place([e.block_id], blocks)}", ""]
@@ -256,8 +258,11 @@ def _summary(state: RunState, confirmed: list[Finding]) -> str:
 
     critical = [f for f in confirmed if f.severity == Severity.CRITICAL]
     if critical:
-        out += ["", "Критичные дефекты:", ""]
-        out += [f"- {f.id}: {f.title} ({criteria.label(f.criterion)})" for f in critical]
+        out += ["", "Критичные дефекты — противоречивые, непроверяемые и неполные формулировки "
+                    "и другие, без которых нельзя начинать разработку:", ""]
+        for kind, items in by_task_type(critical):
+            out.append(f"- **{kind.capitalize()}:**")
+            out += [f"  - {f.id}: {f.title} ({criteria.label(f.criterion)})" for f in items]
     if state.check_failures:
         out += ["", "**Не проверено** (модель не выполнила проверку, её область осталась "
                     "без оценки):", ""]

@@ -140,9 +140,9 @@ def _instructions(cell: Cell, has_parent_child: bool,
     scope_note = ("Conflicts between the main part and its child specification are covered by a "
                   "separate check; report here conflicts within one part and between "
                   "requirements and acceptance criteria." if has_parent_child else "")
-    criteria_text = "\n".join(f"- `{c.value}`: {criteria.CRITERIA[c].definition}"
-                              for c in cell.criteria)
-    names = ["s5_common", f"s5_{cell.kind.value}"] + (["s5_markers"] if with_markers else [])
+    criteria_text = criteria.cards(list(cell.criteria))
+    names = ["s5_common", "severity", f"s5_{cell.kind.value}"] + (
+        ["s5_markers"] if with_markers else [])
     return prompt_store.compose(*names, legend=LEGEND, criteria=criteria_text,
                                 scope_note=scope_note)
 

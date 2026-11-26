@@ -116,7 +116,8 @@ def test_every_quote_is_located_inside_its_block(tmp_path):
 def test_criteria_carry_the_standard_clause(tmp_path):
     report = rundata.build_report(full_run(tmp_path))
 
-    assert report["criteria"]["unambiguous"]["standard"] == "ISO/IEC/IEEE 29148:2018, п. 5.2.5"
+    assert report["criteria"]["unambiguous"]["standard"] == (
+        "ISO/IEC/IEEE 29148:2018, п. 5.2.5; IEEE Std 830-1998, п. 4.3.2")
     assert report["criteria"]["traceable"]["standard"] == "IEEE Std 830-1998, п. 4.3.8"
     assert report["criteria"]["suspicious_content"]["standard"] is None
 

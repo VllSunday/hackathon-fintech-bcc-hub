@@ -106,7 +106,7 @@ class AnswersStage(Stage):
         by_id = {f.id: f for f in state.findings}
         decisions: dict[str, str] = {}
         if answered:
-            instructions, ids = prompt_store.compose("s8b_reassess", legend=LEGEND)
+            instructions, ids = prompt_store.compose("s8b_reassess", "severity", legend=LEGEND)
             context = document_view(state.document, {b.id for b in state.document.blocks},
                                     ctx.settings.window_chars)
             batches = [answered[i:i + BATCH_SIZE] for i in range(0, len(answered), BATCH_SIZE)]

@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from reqaudit.criteria import CRITERIA, TZ_TYPES, Criterion
 from reqaudit.models import (
     Block,
     BlockSource,
@@ -168,3 +169,23 @@ def verdict(state: RunState, confirmed: list[Finding]) -> Verdict:
     return Verdict(level=level, word=word, text=text, incomplete=bool(state.check_failures),
                    fixes_ready=sum(1 for f in confirmed if f.document_fix),
                    first=(critical + major)[:FIRST_FIXES])
+
+
+# --- criteria in the report -------------------------------------------------------------
+
+
+def criterion_ref(code: Criterion) -> str:
+    """«однозначность (ISO/IEC/IEEE 29148:2018, п. 5.2.5; IEEE Std 830-1998, п. 4.3.2)»."""
+    info = CRITERIA[code]
+    return f"{info.label_ru} ({info.standard_ru})" if info.standard_ru else info.label_ru
+
+
+def by_task_type(findings: list[Finding]) -> list[tuple[str, list[Finding]]]:
+    """Findings grouped as the task's summary names critical defects: contradictory,
+    unverifiable, incomplete; the rest last. Empty groups are left out."""
+    groups: dict[str | None, list[Finding]] = {t: [] for t in TZ_TYPES}
+    groups[None] = []
+    for f in findings:
+        groups[CRITERIA[f.criterion].tz_type].append(f)
+    named = [(TZ_TYPES[t], groups[t]) for t in TZ_TYPES]
+    return [(name, items) for name, items in [*named, ("другие", groups[None])] if items]

@@ -195,14 +195,6 @@ def list_runs(runs_dir: Path, alive: dict[str, bool] | None = None) -> list[dict
 # --- report bundle ----------------------------------------------------------------------
 
 
-def _standard(source: str) -> str | None:
-    for short, full in (("ISO 29148 ", "ISO/IEC/IEEE 29148:2018, п. "),
-                        ("IEEE 830 ", "IEEE Std 830-1998, п. ")):
-        if source.startswith(short):
-            return full + source[len(short):]
-    return None
-
-
 def _verdict_data(state: RunState, confirmed: list[Finding]) -> dict[str, Any]:
     """The verdict as data: the same values the Markdown report prints."""
     v = verdict(state, confirmed)
@@ -289,7 +281,7 @@ def build_report(run_dir: Path) -> dict[str, Any]:
         "gate_stats": gate.get("stats") if isinstance(gate, dict) else None,
         "verdict": _verdict_data(state, confirmed) if checks_ran else None,
         "criteria": {info.code.value: {"label": info.label_ru, "level": info.level.value,
-                                       "standard": _standard(info.source)}
+                                       "standard": info.standard_ru}
                      for info in criteria.CRITERIA.values()},
         "progress": progress(run_dir),
         "report_md": report_md.read_text(encoding="utf-8") if report_md.exists() else None,

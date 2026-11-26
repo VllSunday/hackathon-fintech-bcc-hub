@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -121,6 +122,45 @@ def test_failed_fix_needs_a_better_one(tmp_path):
     model, _ = fake_team(fix=lambda title: {"fix_works": False})
     _, _, _, trace = run(tmp_path, lambda _id: model)
     assert "fix_works is false, so give better_fix" in trace
+
+
+CONFLICT = "противоречат"
+
+
+def lowers(reason: str = "") -> Callable[[str], dict | None]:
+    """The opponent confirms the conflict but rates it major."""
+    def adjust(title):
+        if CONFLICT not in title:
+            return None
+        return {"verdict": "adjust", "severity": "major", "severity_reason": reason}
+    return adjust
+
+
+def test_lowering_a_critical_finding_needs_a_reason_and_the_arbiter(tmp_path):
+    model, calls = fake_team(adjust=lowers())
+    _, state, _, trace = run(tmp_path, lambda _id: model)
+    assert "say in severity_reason which point of the severity scale" in trace
+    conflict = next(f for f in state["findings"] if CONFLICT in f["title"])
+    # The arbiter gave no severity: the reviewer's stands, the dispute is on record.
+    assert calls["arbiter"] == 1 and conflict["severity"] == "critical"
+    assert "arbiter:severity" in conflict["trail"]
+
+
+def test_arbiter_settles_a_severity_dispute(tmp_path):
+    model, _ = fake_team(adjust=lowers("Затрагивает только текст сообщения."),
+                         arbiter_severity="major")
+    _, state, _, trace = run(tmp_path, lambda _id: model)
+    conflict = next(f for f in state["findings"] if CONFLICT in f["title"])
+    assert conflict["severity"] == "major" and "opponent:severity_disputed" in conflict["trail"]
+    assert "say in severity_reason" not in trace
+
+
+def test_report_summary_groups_critical_defects_by_the_task_kinds(tmp_path):
+    model, _ = fake_team()
+    _, _, report, _ = run(tmp_path, lambda _id: model)
+    assert "- **Противоречивые:**" in report
+    assert "непротиворечивость (ISO/IEC/IEEE 29148:2018, п. 5.2.6; IEEE Std 830-1998, п. 4.3.4)" \
+        in report
 
 
 def test_arbiter_can_keep_a_disputed_finding(tmp_path):

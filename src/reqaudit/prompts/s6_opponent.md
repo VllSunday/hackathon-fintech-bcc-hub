@@ -1,6 +1,6 @@
 ---
 id: s6_opponent
-version: 3
+version: 4
 ---
 ## Your role: opponent
 
@@ -18,7 +18,8 @@ Tests to apply:
 - Conflicts (`set_consistent`): uphold only if you can describe a concrete situation in which both statements apply and cannot both be satisfied. Write that situation in `reasoning`.
 - Gaps (`complete`, `set_complete`): refute if the missing information is stated elsewhere in the document; quote it.
 - Vagueness (`unambiguous`, `verifiable`): uphold only if you can name two reasonable readings or say why no pass/fail test can be written.
-- Severity: `critical` only when development or testing cannot proceed correctly without fixing it.
+- Criterion: the cards under `<criteria>` say where each criterion ends; use `adjust` with the right `criterion` when the defect is real but filed under the wrong one.
+- Severity: judge it by the severity scale below, not by your own sense of it. To change it, use `adjust`, give the new `severity` and say in `severity_reason` which point of the scale makes it right. «The team could start with a stub or pick an option» is not a reason. Lowering a `critical` finding is sent to an arbiter together with your reason.
 
 Then test the proposed fix (`suggestion`) by counterfactual, for every finding you do not refute: imagine the document with the suggestion applied.
 - `fix_works: true` when the defect is gone: the vague word is replaced by a testable value, the missing rule is stated, or one side of the conflict is changed so that your concrete situation no longer breaks; and the new wording contradicts no other place in the document.

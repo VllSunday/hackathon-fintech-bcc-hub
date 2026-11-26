@@ -10,7 +10,7 @@ import warnings
 
 from genai_prices import Usage, calc_price
 
-_PROVIDER = {"openai": "openai", "gemini": "google", "google": "google",
+_PROVIDER = {"openai": "openai", "gemini": "google", "google": "google", "vertex": "google",
              "anthropic": "anthropic"}
 
 

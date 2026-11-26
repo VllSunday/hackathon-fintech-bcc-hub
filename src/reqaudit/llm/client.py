@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import os
 import random
+import re
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime
@@ -19,6 +20,7 @@ from typing import Any, TypeVar
 
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
+from google.genai import Client as GenaiClient  # noqa: E402
 from pydantic import BaseModel, ValidationError  # noqa: E402
 from pydantic_ai import (  # noqa: E402
     Agent,
@@ -30,8 +32,10 @@ from pydantic_ai import (  # noqa: E402
 from pydantic_ai import exceptions as pai  # noqa: E402
 from pydantic_ai.messages import RetryPromptPart, ToolReturnPart  # noqa: E402
 from pydantic_ai.models import Model  # noqa: E402
+from pydantic_ai.models.google import GoogleModel  # noqa: E402
+from pydantic_ai.providers.google import GoogleProvider  # noqa: E402
 
-from reqaudit.config import Settings  # noqa: E402
+from reqaudit.config import PROVIDER_KEYS, Settings, vertex_key  # noqa: E402
 from reqaudit.llm.cache import DiskCache, cache_key  # noqa: E402
 from reqaudit.llm.checks import Check  # noqa: E402
 from reqaudit.llm.pricing import price_usd  # noqa: E402
@@ -65,6 +69,28 @@ class LLMUnavailable(LLMError):
     pass
 
 
+def default_model(model_id: str) -> Model | str:
+    """What PydanticAI needs for one of our model ids: a model object or its own id."""
+    provider, _, name = model_id.partition(":")
+    if provider == "vertex" and name:
+        return GoogleModel(name, provider=_vertex_provider(vertex_key() or _vertex_env_key()))
+    return to_library_model_id(model_id)
+
+
+def _vertex_env_key() -> str:
+    for env in PROVIDER_KEYS["vertex"]:
+        if value := os.environ.get(env, "").strip():
+            return value
+    raise LLMUnavailable("Для vertex:… задайте VERTEX_API_KEY (ключ Google Cloud).")
+
+
+def _vertex_provider(api_key: str) -> GoogleProvider:
+    # Vertex AI express mode: a Google Cloud API key, no project or service account files.
+    # A new client per model: its HTTP client belongs to the event loop it was first used
+    # in, and every synchronous call runs in a loop of its own.
+    return GoogleProvider(client=GenaiClient(vertexai=True, api_key=api_key))
+
+
 def to_library_model_id(model_id: str) -> str:
     provider, sep, name = model_id.partition(":")
     if not sep or not name:
@@ -84,7 +110,7 @@ class LLMClient:
         self.settings = settings
         self.trace = trace
         self.cache = DiskCache(settings.cache_dir)
-        self._factory = model_factory or to_library_model_id
+        self._factory = model_factory or default_model
         self._sleep = sleep
         self._last_request: dict[str, float] = {}
         # Models that ran out of quota or rejected the key; skipped for the rest of the run.
@@ -328,6 +354,13 @@ class LLMClient:
                 except _FALL_THROUGH as err:
                     self.requests += 1
                     self._trace_rejections(messages, step, model_id)
+                    wait = _minute_quota_wait(err)
+                    if wait is not None and attempt < self.settings.max_attempts:
+                        # A per-minute limit passes by itself; a daily one does not.
+                        self.trace.event("llm_retry", step=step, model=model_id,
+                                         attempt=attempt, error="minute_quota", delay=wait)
+                        await self._sleep(wait)
+                        continue
                     if isinstance(err, pai.ModelQuotaExceededError | pai.ModelAuthenticationError):
                         # No point asking this model again in this run.
                         reason = ("квота или баланс исчерпаны"
@@ -365,6 +398,23 @@ class LLMClient:
                     feedback.append(str(part.content)[:1500])
         if feedback:
             self.trace.event("llm_invalid_output", step=step, model=model_id, feedback=feedback)
+
+
+_MINUTE_QUOTA = re.compile(r"PerMinute", re.IGNORECASE)
+_RETRY_DELAY = re.compile(r"retryDelay['\"]?\s*:\s*['\"]?(\d+(?:\.\d+)?)s")
+_MAX_QUOTA_WAIT_S = 120.0
+
+
+def _minute_quota_wait(err: Exception) -> float | None:
+    """Seconds to wait out a per-minute quota (Gemini free tier), or None if it is not one."""
+    if not isinstance(err, pai.ModelQuotaExceededError):
+        return None
+    text = str(err)
+    if not _MINUTE_QUOTA.search(text) or "PerDay" in text:
+        return None
+    match = _RETRY_DELAY.search(text)
+    delay = float(match.group(1)) + 1.0 if match else 30.0
+    return delay if delay <= _MAX_QUOTA_WAIT_S else None
 
 
 _WARM_UP_MIN_GROUP = 3

@@ -9,6 +9,7 @@ be replaced without touching the stages.
 from __future__ import annotations
 
 import asyncio
+import functools
 import hashlib
 import os
 import random
@@ -20,6 +21,7 @@ from typing import Any, TypeVar
 
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
+from google.genai import Client as GenaiClient  # noqa: E402
 from pydantic import BaseModel, ValidationError  # noqa: E402
 from pydantic_ai import (  # noqa: E402
     Agent,
@@ -31,8 +33,10 @@ from pydantic_ai import (  # noqa: E402
 from pydantic_ai import exceptions as pai  # noqa: E402
 from pydantic_ai.messages import RetryPromptPart, ToolReturnPart  # noqa: E402
 from pydantic_ai.models import Model  # noqa: E402
+from pydantic_ai.models.google import GoogleModel  # noqa: E402
+from pydantic_ai.providers.google import GoogleProvider  # noqa: E402
 
-from reqaudit.config import Settings  # noqa: E402
+from reqaudit.config import PROVIDER_KEYS, Settings, vertex_key  # noqa: E402
 from reqaudit.llm.cache import DiskCache, cache_key  # noqa: E402
 from reqaudit.llm.checks import Check  # noqa: E402
 from reqaudit.llm.pricing import price_usd  # noqa: E402
@@ -66,6 +70,27 @@ class LLMUnavailable(LLMError):
     pass
 
 
+def default_model(model_id: str) -> Model | str:
+    """What PydanticAI needs for one of our model ids: a model object or its own id."""
+    provider, _, name = model_id.partition(":")
+    if provider == "vertex" and name:
+        return GoogleModel(name, provider=_vertex_provider(vertex_key() or _vertex_env_key()))
+    return to_library_model_id(model_id)
+
+
+def _vertex_env_key() -> str:
+    for env in PROVIDER_KEYS["vertex"]:
+        if value := os.environ.get(env, "").strip():
+            return value
+    raise LLMUnavailable("Для vertex:… задайте VERTEX_API_KEY (ключ Google Cloud).")
+
+
+@functools.cache
+def _vertex_provider(api_key: str) -> GoogleProvider:
+    # Vertex AI express mode: a Google Cloud API key, no project or service account files.
+    return GoogleProvider(client=GenaiClient(vertexai=True, api_key=api_key))
+
+
 def to_library_model_id(model_id: str) -> str:
     provider, sep, name = model_id.partition(":")
     if not sep or not name:
@@ -85,7 +110,7 @@ class LLMClient:
         self.settings = settings
         self.trace = trace
         self.cache = DiskCache(settings.cache_dir)
-        self._factory = model_factory or to_library_model_id
+        self._factory = model_factory or default_model
         self._sleep = sleep
         self._last_request: dict[str, float] = {}
         # Models that ran out of quota or rejected the key; skipped for the rest of the run.

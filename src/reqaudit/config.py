@@ -21,6 +21,8 @@ PROVIDER_KEYS: dict[str, tuple[str, ...]] = {
     "openai": ("OPENAI_API_KEY",),
     "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
     "google": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    # Gemini on Google Cloud (Vertex AI express mode): a Cloud API key, usually "AQ.".
+    "vertex": ("VERTEX_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"),
     "anthropic": ("ANTHROPIC_API_KEY",),
 }
 
@@ -28,6 +30,17 @@ PROVIDER_KEYS: dict[str, tuple[str, ...]] = {
 # gpt-5.5 was chosen by a live comparison on the organisers' document (2026-11-26).
 # The Gemini default has not been tried live yet.
 AUTO_MODELS = ("openai:gpt-5.5", "gemini:gemini-3.5-flash-lite")
+# A Google Cloud key does not work with AI Studio, so its automatic choice is Vertex AI.
+AUTO_VERTEX_MODELS = ("vertex:gemini-3.1-pro-preview", "vertex:gemini-3.5-flash")
+
+
+def vertex_key() -> str | None:
+    """The Google key, if it is a Google Cloud (Vertex AI) key rather than an AI Studio one."""
+    for name in PROVIDER_KEYS["vertex"]:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value if name == "VERTEX_API_KEY" or value.startswith("AQ.") else None
+    return None
 
 
 @dataclass(frozen=True)
@@ -98,6 +111,8 @@ def _resolve_models(notes: list[str]) -> dict[str, list[str]]:
 
     if "judge" not in models:
         auto = [m for m in AUTO_MODELS if has_key(m)]
+        if vertex_key():
+            auto = [m for m in auto if not m.startswith("gemini:")] + list(AUTO_VERTEX_MODELS)
         if auto:
             models["judge"] = auto
             notes.append(f"Модель выбрана автоматически по найденному ключу API: {auto[0]}"

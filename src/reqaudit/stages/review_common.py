@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Literal, get_args
@@ -189,20 +190,30 @@ def screen(findings: list[Finding], blocks: dict[str, Block], units: list[Unit],
     return Screened(passed, rejected, stats)
 
 
+_TITLE_WORD = re.compile(r"[\wё]{4,}", re.IGNORECASE)
+
+
+def _title_overlap(a: Finding, b: Finding) -> float:
+    wa = {w.lower()[:6] for w in _TITLE_WORD.findall(a.title)}
+    wb = {w.lower()[:6] for w in _TITLE_WORD.findall(b.title)}
+    return len(wa & wb) / min(len(wa), len(wb)) if wa and wb else 0.0
+
+
 def _same_defect(a: Finding, b: Finding) -> bool:
+    """Only duplicates code can be sure of; the rest is the editor's call (s8).
+
+    The same two or more places quoted by both are one defect, whatever criterion each
+    used. One shared place is not enough: a requirement can have several defects quoted
+    from the same sentence (a missing default and a missing rounding rule), so one place
+    merges only under the same criterion and with titles naming the same thing.
+    """
     blocks_a = {e.block_id for e in a.evidence}
     blocks_b = {e.block_id for e in b.evidence}
-    overlap = len(blocks_a & blocks_b)
-    if not overlap:
+    if blocks_a != blocks_b:
         return False
-    if blocks_a == blocks_b and a.criterion == b.criterion:
+    if len(blocks_a) >= 2:
         return True
-    # The same two or more places quoted by both: one defect, whatever criterion each used.
-    # With one place, different criteria can be different defects of one requirement.
-    if blocks_a == blocks_b and len(blocks_a) >= 2:
-        return True
-    smaller = min(len(blocks_a), len(blocks_b))
-    return a.criterion == b.criterion and overlap / smaller >= 0.5 and len(blocks_a) > 1
+    return a.criterion == b.criterion and _title_overlap(a, b) >= 0.5
 
 
 def merge_duplicates(findings: list[Finding]) -> tuple[list[Finding], int]:

@@ -220,11 +220,27 @@ def _per_requirement(state: RunState, confirmed: list[Finding],
         target = own if f.scope == Scope.REQUIREMENT else in_set
         for u in f.unit_ids:
             target.setdefault(u, []).append(f.id)
-    rows = [[u.id, u.doc_label or "—", u.summary,
-             ", ".join(own.get(u.id, [])) or "замечаний нет",
-             ", ".join(in_set.get(u.id, [])) or "—"] for u in state.units]
-    out = [_table(["ID", "ID в документе", "Требование", "Замечания к требованию",
-                   "Участвует в дефектах набора"], rows)]
+    by_id = {f.id: f for f in confirmed}
+    reviews = {r.unit_id: r for r in state.reviews}
+
+    def outcome(unit_id: str) -> str:
+        ids = own.get(unit_id, [])
+        if not ids:
+            return "соответствует"
+        return "; ".join(f"{criteria.label(by_id[i].criterion)} ({i})" for i in ids)
+
+    def checked(unit_id: str) -> str:
+        r = reviews.get(unit_id)
+        return ", ".join(criteria.label(c) for c in r.criteria) if r else "—"
+
+    rows = [[u.id, u.doc_label or "—", u.summary, checked(u.id), outcome(u.id),
+             ", ".join(in_set.get(u.id, [])) or "—",
+             reviews[u.id].note if u.id in reviews else "—"] for u in state.units]
+    out = ["Каждое требование проверено отдельно по критериям ISO/IEC/IEEE 29148 (п. 5.2.5) и "
+           "IEEE 830 (п. 4.3). «Нарушено» — только то, что подтвердили оппонент и проверка "
+           "цитат; комментарий рецензента объясняет решение.", "",
+           _table(["ID", "ID в документе", "Требование", "Проверено по критериям",
+                   "Нарушено", "Участвует в дефектах набора", "Комментарий рецензента"], rows)]
     details = [_finding(f, blocks) for f in confirmed if f.scope == Scope.REQUIREMENT]
     if details:
         out += ["", "### Замечания к отдельным требованиям", "", "\n\n".join(details)]

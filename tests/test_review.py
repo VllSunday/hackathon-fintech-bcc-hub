@@ -89,7 +89,8 @@ def test_defects_reach_the_report_with_verdict_and_questions(tmp_path):
     assert "## Итог" in report and "**Нет.**" in report
     assert "Исправить в первую очередь" in report
     assert "| Q-01 |" in report
-    assert "замечаний нет" in report  # requirements without findings are listed too
+    assert "| соответствует |" in report  # requirements without findings are listed too
+    assert "Проверено по критериям" in report and state["reviews"]  # what each was checked by
 
 
 def test_opponent_refutation_goes_to_arbiter_and_appendix(tmp_path):

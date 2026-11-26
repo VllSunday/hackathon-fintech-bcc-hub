@@ -26,6 +26,7 @@ from reqaudit.models import (
     Finding,
     FindingStatus,
     MarkerRecord,
+    RequirementReview,
     scope_of,
 )
 from reqaudit.reading.render import LEGEND, needed_blocks
@@ -400,6 +401,8 @@ class CandidatesStage(Stage):
         unknown = 0
         verdicts: dict[str, MarkerVerdict] = {}
         answered: set[str] = set()
+        reviewed: dict[str, RequirementReview] = {}
+        known_codes = {c.value for c in Criterion}
         errors: dict[str, LLMError] = {}
         for (cell, n), result in zip(owners, ctx.llm.many(requests), strict=True):
             if isinstance(result, LLMError):
@@ -412,6 +415,12 @@ class CandidatesStage(Stage):
                 ctx.trace.event("checklist", step=f"s5[{cell.id}]", items=[
                     {"unit": i.unit_id, "item": i.item, "block": i.block_id,
                      "status": i.status, "note": i.note} for i in result.checklist])
+            for r in getattr(result, "reviewed", []):
+                if r.unit_id in unit_ids and r.unit_id not in reviewed:
+                    reviewed[r.unit_id] = RequirementReview(
+                        unit_id=r.unit_id, criteria=list(cell.criteria),
+                        violated=[c for c in r.violated if c in known_codes],
+                        note=r.note.strip())
             found, dropped = _to_findings(cell, result, n)
             candidates.extend(found)
             unknown += dropped
@@ -424,6 +433,7 @@ class CandidatesStage(Stage):
                                              message=errors[cell.id].message))
 
         state.candidates = candidates
+        state.reviews = [reviewed[u.id] for u in state.units if u.id in reviewed]
         state.check_failures.extend(failures)
         state.markers = [MarkerRecord(
             id=h.id, unit_id=h.unit_id, category=h.category_ru, word=h.word,

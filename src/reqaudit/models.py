@@ -484,6 +484,15 @@ class StageError(BaseModel):
     message: str
 
 
+class RequirementReview(BaseModel):
+    """What a reviewer said about one requirement in s5: checked criteria and a note."""
+
+    unit_id: str
+    criteria: list[Criterion]
+    violated: list[str] = Field(default_factory=list)
+    note: str = ""
+
+
 class RunState(BaseModel):
     """Everything the stages have produced so far. Serialised to runs/<id>/state.json."""
 
@@ -497,6 +506,7 @@ class RunState(BaseModel):
     plan_notes: list[str] = Field(default_factory=list)
     candidates: list[Finding] = Field(default_factory=list)
     markers: list[MarkerRecord] = Field(default_factory=list)
+    reviews: list[RequirementReview] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
     rejected: list[Finding] = Field(default_factory=list)
     check_failures: list[CheckFailure] = Field(default_factory=list)

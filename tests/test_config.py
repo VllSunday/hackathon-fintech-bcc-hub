@@ -59,3 +59,14 @@ def test_vertex_model_is_built_for_google_cloud(monkeypatch):
     model = default_model("vertex:gemini-3.5-flash")
     assert isinstance(model, GoogleModel) and model.model_name == "gemini-3.5-flash"
     assert default_model("openai:gpt-5.5") == "openai:gpt-5.5"
+
+
+def test_vertex_client_is_not_shared_between_calls(monkeypatch):
+    """Each synchronous call runs in its own event loop; a shared HTTP client would be
+    bound to the first, closed loop ("Event loop is closed")."""
+    from reqaudit.llm.client import default_model
+
+    monkeypatch.setenv("VERTEX_API_KEY", "AQ.test-cloud-key")
+    first = default_model("vertex:gemini-3.5-flash")
+    second = default_model("vertex:gemini-3.5-flash")
+    assert first._provider is not second._provider

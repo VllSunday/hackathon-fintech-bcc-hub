@@ -9,7 +9,6 @@ be replaced without touching the stages.
 from __future__ import annotations
 
 import asyncio
-import functools
 import hashlib
 import os
 import random
@@ -85,9 +84,10 @@ def _vertex_env_key() -> str:
     raise LLMUnavailable("Для vertex:… задайте VERTEX_API_KEY (ключ Google Cloud).")
 
 
-@functools.cache
 def _vertex_provider(api_key: str) -> GoogleProvider:
     # Vertex AI express mode: a Google Cloud API key, no project or service account files.
+    # A new client per model: its HTTP client belongs to the event loop it was first used
+    # in, and every synchronous call runs in a loop of its own.
     return GoogleProvider(client=GenaiClient(vertexai=True, api_key=api_key))
 
 

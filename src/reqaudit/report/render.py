@@ -214,6 +214,12 @@ def _segmentation(state: RunState) -> str:
         count = plural(len(coverage.unclassified), "блок", "блока", "блоков")
         out += ["", f"**Не удалось классифицировать {count}** ({places}). "
                     "Они не проверялись."]
+    if coverage.obligations_outside:
+        count = plural(len(coverage.obligations_outside), "блок", "блока", "блоков")
+        out += ["", f"**Сверка вторым способом:** {count} с явным обязательством не вошли "
+                    "в требования; их проверяет общая проверка документа:", ""]
+        out += [f"- {_place([i], blocks)}: «{word}»"
+                for i, word in coverage.obligations_outside.items()]
     if coverage.dropped_units:
         out += ["", "Отброшены как не подтверждённые текстом документа:", ""]
         out += [f"- {reason}" for reason in coverage.dropped_units]

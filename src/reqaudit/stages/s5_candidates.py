@@ -153,8 +153,17 @@ def _outside_view(state) -> str:
     covered = {b for u in state.units for b in u.block_ids}
     needed = set(needed_blocks(state.document.blocks))
     unclassified = set(state.coverage.unclassified) if state.coverage else set()
-    lines = [f"{b.id}" + (" (не классифицирован)" if b.id in unclassified else "")
-             for b in state.document.blocks if b.id in needed and b.id not in covered]
+    obligations = state.coverage.obligations_outside if state.coverage else {}
+
+    def line(block_id: str) -> str:
+        notes = (["не классифицирован"] if block_id in unclassified else []) + (
+            [f"обязательство: «{obligations[block_id]}»"] if block_id in obligations else [])
+        return block_id + (f" ({'; '.join(notes)})" if notes else "")
+
+    outside = [b.id for b in state.document.blocks if b.id in needed and b.id not in covered]
+    # Blocks the second segmenter flagged come first: they are the likeliest misses.
+    outside.sort(key=lambda i: i not in obligations)
+    lines = [line(i) for i in outside]
     listed = "\n".join(lines) or "нет"
     return f"<blocks_outside_requirements>\n{listed}\n</blocks_outside_requirements>"
 

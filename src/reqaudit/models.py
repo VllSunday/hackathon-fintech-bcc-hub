@@ -183,6 +183,10 @@ class Coverage(BaseModel):
     skipped_by_reason: dict[str, int] = Field(default_factory=dict)
     dropped_units: list[str] = Field(default_factory=list,
                                      description="Why model units were rejected by code.")
+    obligations_outside: dict[str, str] = Field(
+        default_factory=dict, description="Second segmenter: blocks outside every unit that "
+        "state an obligation explicitly, with the word found; skips the model justified "
+        "as goal, example, template or approval are not listed.")
 
 
 class UnitKind(StrEnum):

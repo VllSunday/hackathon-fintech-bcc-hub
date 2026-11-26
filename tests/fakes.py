@@ -14,6 +14,8 @@ from pydantic_ai import ModelResponse, ToolCallPart
 from pydantic_ai.messages import UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
+from reqaudit.stages.s2_segment import obligation_word
+
 _BLOCK_LINE = re.compile(r"^\[(b\d{4})\] (\w+): (.*)$", re.MULTILINE)
 _TO_CHECK = re.compile(r"^(R-\d{3}) \(.*?blocks ([b\d, ]+)\): «(.*)»$", re.MULTILINE)
 _REF = re.compile(r"^([FD]\d+): .*\n\s+title: (.*)$", re.MULTILINE)
@@ -31,15 +33,17 @@ def user_prompt(messages) -> str:
     return ""
 
 
-def honest_segmentation(prompt: str) -> dict:
-    """List items and table rows become units; other non-heading blocks are skipped."""
+def honest_segmentation(prompt: str, honest_paragraphs: bool = True) -> dict:
+    """List items, table rows and paragraphs that state an obligation become units; other
+    non-heading blocks are skipped. With `honest_paragraphs=False` the segmenter misses
+    obligations in paragraphs, as a weak model would."""
     units, skipped = [], []
     for block_id, tag, text in _BLOCK_LINE.findall(prompt):
         if tag in ("H", "TH"):
             continue
         if not text.strip(" |"):
             skipped.append({"block_id": block_id, "reason": "empty"})
-        elif tag in ("LI", "TR"):
+        elif tag in ("LI", "TR") or (honest_paragraphs and obligation_word(text)):
             units.append({"block_ids": [block_id], "doc_label": None, "kind": "functional",
                           "quote": text, "summary": "Требование из документа"})
         else:
@@ -154,6 +158,7 @@ def honest_picture(prompt: str) -> dict:
 
 
 def fake_team(mutate_segment: Mutate | None = None,
+              segmenter: Callable[[str], dict] = honest_segmentation,
               review: Callable[[str], dict] = honest_review,
               set_review: Callable[[str], dict] = honest_set_review,
               refute: Callable[[str], bool] = lambda title: False,
@@ -185,7 +190,7 @@ def fake_team(mutate_segment: Mutate | None = None,
                     "has_non_functional": False, "has_ui_spec": False}
         elif "skipped" in fields:
             calls["segment"] += 1
-            args = honest_segmentation(prompt)
+            args = segmenter(prompt)
             if mutate_segment:
                 args = mutate_segment(args, calls["segment"])
         elif "reviewed" in fields:

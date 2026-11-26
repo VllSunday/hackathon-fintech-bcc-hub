@@ -6,7 +6,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-from fakes import fake_team
+from fakes import fake_team, honest_segmentation
 
 from reqaudit.config import Settings
 from reqaudit.models import CellKind, Coverage, Unit, UnitKind
@@ -64,8 +64,13 @@ PROSE = "\n\n".join(
     + ["- Клиент задаёт порог расходов в тенге."])
 
 
-def run(tmp_path: Path, document: Path):
-    model, calls = fake_team()
+def weak_segmenter(prompt: str) -> dict:
+    """Misses obligations stated in paragraphs, as a weak model would."""
+    return honest_segmentation(prompt, honest_paragraphs=False)
+
+
+def run(tmp_path: Path, document: Path, segmenter=honest_segmentation):
+    model, calls = fake_team(segmenter=segmenter)
     settings = replace(Settings(), runs_dir=tmp_path / "runs", cache_dir=tmp_path / "cache",
                        models={"judge": ["fake:team"]})
     result = run_pipeline(document, tmp_path / "report.md", settings,
@@ -77,7 +82,7 @@ def run(tmp_path: Path, document: Path):
 def test_unfamiliar_document_takes_the_general_path(tmp_path):
     document = tmp_path / "prose.md"
     document.write_text(PROSE, encoding="utf-8")
-    result, state, report = run(tmp_path, document)
+    result, state, report = run(tmp_path, document, weak_segmenter)
 
     assert result.exit_code == 0, report
     assert "general" in [c["id"] for c in state["cells"]]
@@ -91,3 +96,31 @@ def test_organizers_document_keeps_the_usual_plan(tmp_path):
     _, state, report = run(tmp_path, ORGANIZERS_DOC)
     assert "general" not in [c["id"] for c in state["cells"]]
     assert "распознана не полностью" not in report
+
+
+SHORT = """# Требования к журналу
+
+- Сервис пишет в журнал каждое уведомление.
+- Запись журнала содержит идентификатор карты.
+
+Система должна хранить журнал не менее пяти лет.
+
+Документ подготовлен отделом цифровых продуктов.
+"""
+
+
+def test_second_segmenter_catches_a_missed_obligation(tmp_path):
+    """A short document: only the code cross-check can see the paragraph the model missed."""
+    document = tmp_path / "short.md"
+    document.write_text(SHORT, encoding="utf-8")
+    _, honest, _ = run(tmp_path / "honest", document)
+    assert honest["coverage"]["obligations_outside"] == {}
+    assert "general" not in [c["id"] for c in honest["cells"]]
+
+    result, state, report = run(tmp_path / "weak", document, weak_segmenter)
+    assert result.exit_code == 0, report
+    assert list(state["coverage"]["obligations_outside"].values()) == ["должна"]
+    assert "**Сверка вторым способом:** 1 блок с явным обязательством" in report
+    assert "general" in [c["id"] for c in state["cells"]]
+    general = [f for f in state["findings"] if f["cell"] == "general"]
+    assert general[0]["evidence"][0]["quote"].startswith("Система должна хранить журнал")

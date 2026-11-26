@@ -6,7 +6,8 @@ document has the kind of content it needs, not because a section has a certain n
 
 The assumption sensor: the cells rely on the structure s2 recognised. When that
 structure covers the document poorly (many blocks unclassified or skipped as "other",
-or almost no requirements in a long text), the plan adds a general cell that reads the
+a block stating an obligation left outside every requirement, or almost no requirements
+in a long text), the plan adds a general cell that reads the
 whole document without relying on it, and the report says so. A familiar document gets
 exactly the plan it got before.
 """
@@ -62,6 +63,10 @@ def assumption_check(coverage: Coverage | None, units: list[Unit]) -> list[str]:
     other = coverage.skipped_by_reason.get("other", 0)
     if other >= 2 and other / total >= OTHER_SHARE:
         reasons.append(f"{other} из {total} блоков пропущены без понятной причины")
+    if coverage.obligations_outside:
+        count = len(coverage.obligations_outside)
+        words = ", ".join(f"«{w}»" for w in dict.fromkeys(coverage.obligations_outside.values()))
+        reasons.append(f"блоков с явным обязательством ({words}) вне требований: {count}")
     if len(units) < FEW_UNITS and total >= LONG_TEXT:
         reasons.append(f"в документе из {total} блоков выделено требований: {len(units)}")
     return reasons

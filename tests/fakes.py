@@ -14,10 +14,13 @@ from pydantic_ai import ModelResponse, ToolCallPart
 from pydantic_ai.messages import UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
+from reqaudit.stages.s2_segment import obligation_word
+
 _BLOCK_LINE = re.compile(r"^\[(b\d{4})\] (\w+): (.*)$", re.MULTILINE)
 _TO_CHECK = re.compile(r"^(R-\d{3}) \(.*?blocks ([b\d, ]+)\): «(.*)»$", re.MULTILINE)
 _REF = re.compile(r"^([FD]\d+): .*\n\s+title: (.*)$", re.MULTILINE)
 _CHECK = re.compile(r"^Check: (.*)\.$", re.MULTILINE)
+_OUTSIDE = re.compile(r"<blocks_outside_requirements>\n(.*?)\n</blocks_outside", re.DOTALL)
 
 Mutate = Callable[[dict, int], dict]
 
@@ -30,15 +33,17 @@ def user_prompt(messages) -> str:
     return ""
 
 
-def honest_segmentation(prompt: str) -> dict:
-    """List items and table rows become units; other non-heading blocks are skipped."""
+def honest_segmentation(prompt: str, honest_paragraphs: bool = True) -> dict:
+    """List items, table rows and paragraphs that state an obligation become units; other
+    non-heading blocks are skipped. With `honest_paragraphs=False` the segmenter misses
+    obligations in paragraphs, as a weak model would."""
     units, skipped = [], []
     for block_id, tag, text in _BLOCK_LINE.findall(prompt):
         if tag in ("H", "TH"):
             continue
         if not text.strip(" |"):
             skipped.append({"block_id": block_id, "reason": "empty"})
-        elif tag in ("LI", "TR"):
+        elif tag in ("LI", "TR") or (honest_paragraphs and obligation_word(text)):
             units.append({"block_ids": [block_id], "doc_label": None, "kind": "functional",
                           "quote": text, "summary": "Требование из документа"})
         else:
@@ -67,6 +72,18 @@ def honest_review(prompt: str) -> dict:
             "findings": findings}
 
 
+_MARKER_LINE = re.compile(r"^(M-\d+) in (\S+): «(.+?)»", re.MULTILINE)
+
+
+def honest_markers(prompt: str, findings: list[dict]) -> list[dict]:
+    """A marker is a defect where the review reported its requirement, otherwise not."""
+    reported = {u for f in findings for u in f["unit_ids"]}
+    return [{"marker_id": mid, "defect": unit in reported,
+             "reason": "Слово оставляет поведение неопределённым." if unit in reported
+             else "Здесь слово не входит в обязательство."}
+            for mid, unit, _ in _MARKER_LINE.findall(prompt)]
+
+
 def honest_set_review(prompt: str) -> dict:
     """Consistency cell: a conflict between the first two list items; other cells: nothing."""
     check = _CHECK.search(prompt).group(1)
@@ -77,6 +94,13 @@ def honest_set_review(prompt: str) -> dict:
             findings.append(_finding("set_consistent", [],
                                      [{"block_id": b, "quote": t} for b, t in items],
                                      "Два требования противоречат друг другу", "critical"))
+    if check == "Общая проверка документа":
+        outside = _OUTSIDE.search(prompt)
+        first = outside.group(1).split()[0] if outside else None
+        text = {b: t for b, _, t in _BLOCK_LINE.findall(prompt)}.get(first)
+        if text:
+            findings.append(_finding("verifiable", [], [{"block_id": first, "quote": text}],
+                                     "Требование вне списка нельзя проверить"))
     return {"analysis": "Сравнены повторяющиеся параметры.", "findings": findings}
 
 
@@ -96,6 +120,25 @@ def honest_editor(prompt: str) -> dict:
     return {"duplicates": groups, "questions": questions}
 
 
+_ANSWERED = re.compile(r"^Q-\d+: .*\n  Author's answer: (.*)\n((?:  .*\n?)*)", re.MULTILINE)
+_LISTED_FINDING = re.compile(r"^  (D-\d{3}): ", re.MULTILINE)
+
+
+def honest_reassess(prompt: str) -> dict:
+    """An answer saying the document already covers it resolves; others give a fix."""
+    out = []
+    for answer, body in _ANSWERED.findall(prompt):
+        for fid in _LISTED_FINDING.findall(body):
+            if "уже" in answer.lower():
+                out.append({"finding_id": fid, "decision": "resolved",
+                            "reasoning": "Документ уже это покрывает.", "document_fix": None})
+            else:
+                out.append({"finding_id": fid, "decision": "confirmed",
+                            "reasoning": "Ответ не меняет текст документа.",
+                            "document_fix": f"Добавить в документ: {answer}"})
+    return {"reassessments": out}
+
+
 def honest_page(prompt: str) -> dict:
     """What a transcriber would return for a scanned page of a small specification."""
     return {"blocks": [
@@ -104,6 +147,17 @@ def honest_page(prompt: str) -> dict:
         {"kind": "table_row", "text": "Поле | Значение"},
         {"kind": "table_row", "text": "Порог | от 1 000 до 1 000 000 ₸"},
     ]}
+
+
+def honest_page_lines(**replace: str) -> dict:
+    """The second, line-by-line reading of the same page; `replace` misreads some words."""
+    lines = []
+    for block in honest_page("")["blocks"]:
+        line = block["text"]
+        for old, new in replace.items():
+            line = line.replace(old, new)
+        lines.append(line)
+    return {"lines": lines}
 
 
 def honest_picture(prompt: str) -> dict:
@@ -115,12 +169,15 @@ def honest_picture(prompt: str) -> dict:
 
 
 def fake_team(mutate_segment: Mutate | None = None,
+              segmenter: Callable[[str], dict] = honest_segmentation,
               review: Callable[[str], dict] = honest_review,
               set_review: Callable[[str], dict] = honest_set_review,
               refute: Callable[[str], bool] = lambda title: False,
+              fix: Callable[[str], dict] = lambda title: {"fix_works": True},
               keep_disputed: bool = False,
               editor: Callable[[str], dict] = honest_editor,
               page: Callable[[str], dict] = honest_page,
+              page_check: Callable[[str], dict] = lambda prompt: honest_page_lines(),
               picture: Callable[[str], dict] = honest_picture,
               facts: Callable[[str], dict] = lambda prompt: {"facts": []}):
     """A model that plays every role. Returns the model and per-role call counters.
@@ -129,7 +186,8 @@ def fake_team(mutate_segment: Mutate | None = None,
     arbiter's answer for them.
     """
     calls = {"profile": 0, "segment": 0, "review": 0, "opponent": 0, "arbiter": 0,
-             "editor": 0, "page": 0, "picture": 0, "facts": 0}
+             "editor": 0, "page": 0, "picture": 0, "facts": 0, "reassess": 0, "markers": 0,
+             "page_check": 0}
 
     def respond(messages, info: AgentInfo) -> ModelResponse:
         tool = info.output_tools[0]
@@ -146,12 +204,16 @@ def fake_team(mutate_segment: Mutate | None = None,
                     "has_non_functional": False, "has_ui_spec": False}
         elif "skipped" in fields:
             calls["segment"] += 1
-            args = honest_segmentation(prompt)
+            args = segmenter(prompt)
             if mutate_segment:
                 args = mutate_segment(args, calls["segment"])
         elif "reviewed" in fields:
             calls["review"] += 1
             args = review(prompt)
+            if "markers" in fields:
+                calls["markers"] += 1
+                if "markers" not in args:
+                    args = {**args, "markers": honest_markers(prompt, args["findings"])}
         elif "analysis" in fields:
             calls["review"] += 1
             args = set_review(prompt)
@@ -159,7 +221,8 @@ def fake_team(mutate_segment: Mutate | None = None,
             calls["opponent"] += 1
             args = {"verdicts": [
                 {"ref": ref, "verdict": "refuted" if refute(title) else "upheld",
-                 "reasoning": "Проверено по тексту документа.", "counter_evidence": []}
+                 "reasoning": "Проверено по тексту документа.", "counter_evidence": [],
+                 **fix(title)}
                 for ref, title in _REF.findall(prompt)]}
         elif "decisions" in fields:
             calls["arbiter"] += 1
@@ -169,12 +232,18 @@ def fake_team(mutate_segment: Mutate | None = None,
         elif "duplicates" in fields:
             calls["editor"] += 1
             args = editor(prompt)
+        elif fields == {"reassessments"}:
+            calls["reassess"] += 1
+            args = honest_reassess(prompt)
         elif fields == {"facts"}:
             calls["facts"] += 1
             args = facts(prompt)
         elif fields == {"blocks"}:
             calls["page"] += 1
             args = page(prompt)
+        elif fields == {"lines"}:
+            calls["page_check"] += 1
+            args = page_check(prompt)
         elif "statements" in fields:
             calls["picture"] += 1
             args = picture(prompt)

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from reqaudit.cli import main
 from reqaudit.config import Settings
 from reqaudit.evidence import match_key
-from reqaudit.pipeline import run_pipeline
+from reqaudit.pipeline import STAGE_PLAN, run_pipeline
 from reqaudit.ui import rundata
 from reqaudit.ui.server import create_app
 
@@ -95,8 +95,11 @@ def test_criteria_carry_the_standard_clause(tmp_path):
 def test_progress_follows_the_trace(tmp_path):
     progress = rundata.progress(full_run(tmp_path))
 
-    assert [s["code"] for s in progress["stages"]] == [f"s{n}" for n in range(10)]
-    assert all(s["status"] == "done" and s["seconds"] is not None for s in progress["stages"])
+    assert [s["code"] for s in progress["stages"]] == [code for code, _ in STAGE_PLAN]
+    by_code = {s["code"]: s for s in progress["stages"]}
+    # Nobody answered the agent's questions, so the re-check stage had nothing to do.
+    assert by_code.pop("s8b")["status"] == "not_needed"
+    assert all(s["status"] == "done" and s["seconds"] is not None for s in by_code.values())
     assert progress["finished"] and progress["status"] == "completed"
     assert progress["stages"][2]["llm_calls"] >= 1
     assert progress["stages"][0]["llm_calls"] == 0

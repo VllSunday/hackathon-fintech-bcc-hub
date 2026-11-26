@@ -183,6 +183,10 @@ class Coverage(BaseModel):
     skipped_by_reason: dict[str, int] = Field(default_factory=dict)
     dropped_units: list[str] = Field(default_factory=list,
                                      description="Why model units were rejected by code.")
+    obligations_outside: dict[str, str] = Field(
+        default_factory=dict, description="Second segmenter: blocks outside every unit that "
+        "state an obligation explicitly, with the word found; skips the model justified "
+        "as goal, example, template or approval are not listed.")
 
 
 class UnitKind(StrEnum):
@@ -262,6 +266,7 @@ class CellKind(StrEnum):
     COMPLETENESS = "completeness"
     API_CONTRACT = "api_contract"
     VALUES = "values"
+    GENERAL = "general"
 
 
 class Cell(BaseModel):
@@ -330,6 +335,12 @@ class Finding(BaseModel):
     cell: str | None = None
     review_note: str | None = Field(default=None, description="Why the opponent, the arbiter "
                                     "or a gate kept, changed or rejected the finding.")
+    author_answer: str | None = None
+    answer_decision: str | None = Field(default=None, description="confirmed, resolved or "
+                                        "changed, after the author's answer (s8b).")
+    answer_note: str | None = None
+    document_fix: str | None = Field(default=None, description="Wording to put into the "
+                                     "document, following the author's answer.")
 
 
 class CheckFailure(BaseModel):
@@ -338,6 +349,17 @@ class CheckFailure(BaseModel):
     stage: str
     cell: str
     message: str
+
+
+class MarkerRecord(BaseModel):
+    """A marker word found by code in s5 and the reviewer's decision on it."""
+
+    id: str
+    unit_id: str
+    category: str
+    word: str
+    defect: bool | None = Field(default=None, description="None when the cell was not done.")
+    reason: str | None = None
 
 
 # --- s8: questions ----------------------------------------------------------------------
@@ -350,3 +372,4 @@ class Question(BaseModel):
     text: str
     priority: int = Field(ge=1, le=3, description="1 is the most urgent.")
     blocks_development: bool = False
+    answer: str | None = Field(default=None, description="The author's answer, if given.")

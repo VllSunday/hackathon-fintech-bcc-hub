@@ -87,6 +87,8 @@ def progress(run_dir: Path, alive: bool | None = None) -> dict[str, Any]:
         elif kind == "stage_start" and stage:
             stage.update(status="running", started_at=ts)
             current = stage["code"]
+        elif kind == "stage_skipped" and stage:
+            stage["status"] = "not_needed"  # the stage had nothing to do in this run
         elif kind == "stage_end" and stage:
             stage.update(status="done", seconds=e.get("seconds"))
             current = None

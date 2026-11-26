@@ -8,8 +8,9 @@ import sys
 from pathlib import Path
 
 from reqaudit import __version__
+from reqaudit.answers import parse as parse_answers
 from reqaudit.config import PROFILES, load_settings
-from reqaudit.pipeline import run_pipeline
+from reqaudit.pipeline import answers_path_for, run_pipeline
 
 
 def _utf8_console() -> None:
@@ -38,6 +39,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--html", action="store_true",
                         help="записать рядом с отчётом тот же отчёт одним HTML-файлом, "
                              "который открывается без сервера")
+    parser.add_argument("--answers", type=Path,
+                        help="файл с ответами автора на вопросы агента; агент перепроверит "
+                             "связанные находки")
+    parser.add_argument("--ask", action="store_true",
+                        help="задать вопросы агента в терминале и перепроверить находки "
+                             "по ответам")
     parser.add_argument("--version", action="version", version=f"reqaudit {__version__}")
     return parser
 
@@ -55,8 +62,16 @@ def main(argv: list[str] | None = None) -> int:
     for note in settings.notes:
         print(note)
     output = args.output or Path("reports") / f"{args.input.stem}.report.md"
+    answers: dict[str, str] = {}
+    if args.answers is not None:
+        if not args.answers.is_file():
+            print(f"Файл ответов не найден: {args.answers}", file=sys.stderr)
+            return 2
+        answers = parse_answers(args.answers.read_text(encoding="utf-8"))
+        print(f"Ответов автора в файле: {len(answers)}")
     print(f"Проверяю {args.input} ...")
-    result = run_pipeline(args.input, output, settings)
+    result = run_pipeline(args.input, output, settings, answers=answers,
+                          ask=input if args.ask else None)
     print(f"Отчёт: {result.report_path}")
     if args.html:
         # Imported here: the page is read only when asked for.
@@ -65,6 +80,9 @@ def main(argv: list[str] | None = None) -> int:
         html = rundata.write_html(result.run_dir, result.report_path.with_suffix(".html"))
         shutil.copyfile(html, result.run_dir / "report.html")
         print(f"Отчёт HTML: {html}")
+    answers_file = answers_path_for(output)
+    if answers_file.exists():
+        print(f"Вопросы для ответов автора: {answers_file}")
     print(f"Артефакты прогона: {result.run_dir}")
     print(f"Расход модели: {result.spend}")
     if result.status != "completed":

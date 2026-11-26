@@ -110,7 +110,7 @@ table { border-collapse: collapse; width: 100%; }
 .table-scroll { overflow-x: auto; }
 
 /* stage chain */
-.chain { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 0; margin: 14px 0 4px; }
+.chain { display: grid; grid-template-columns: repeat(var(--stages, 10), minmax(0, 1fr)); gap: 0; margin: 14px 0 4px; }
 .stage { position: relative; padding: 10px 10px 12px; border: 1px solid var(--line); border-right-width: 0;
   background: var(--surface); min-height: 132px; }
 .stage:first-child { border-radius: 8px 0 0 8px; }
@@ -124,7 +124,7 @@ table { border-collapse: collapse; width: 100%; }
 .stage.running { border-top: 3px solid var(--accent); padding-top: 8px; background: var(--accent-soft); }
 .stage.error, .stage.interrupted { border-top: 3px solid var(--crit); padding-top: 8px; background: var(--crit-soft); }
 .stage.error .state, .stage.interrupted .state { color: var(--crit); }
-.stage.pending .state, .stage.skipped .state { color: var(--muted); font-weight: 400; }
+.stage.pending .state, .stage.skipped .state, .stage.not_needed .state { color: var(--muted); font-weight: 400; }
 @media (max-width: 1100px) { .chain { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .stage { border-right-width: 1px; border-radius: 0 !important; margin: 0 -1px -1px 0; } }
 @media (max-width: 620px) { .chain { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -361,7 +361,7 @@ const RUN_STATUS = {
   interrupted: 'прерван',
 };
 const STAGE_STATE = { pending: 'ожидает', running: 'выполняется', done: 'выполнен', error: 'ошибка',
-  skipped: 'не выполнялся', interrupted: 'прерван' };
+  skipped: 'не выполнялся', interrupted: 'прерван', not_needed: 'не требовался' };
 const SUMMARY_RU = {
   s1: [['blocks', 'блоков текста']],
   s2: [['units', 'требований']],
@@ -586,7 +586,7 @@ function screenUpload() {
 // ---------------------------------------------------------------- stage chain
 function stageChain(progress) {
   const now = Date.now();
-  return h('div', { class: 'chain' }, progress.stages.map((s) => {
+  return h('div', { class: 'chain', style: `--stages:${progress.stages.length}` }, progress.stages.map((s) => {
     const meta = [];
     const time = s.status === 'running' && s.started_at
       ? fmtSeconds(Math.max(0, (now - Date.parse(s.started_at)) / 1000)) : fmtSeconds(s.seconds);
@@ -1028,6 +1028,10 @@ function showReport(R) {
         body.append(h('div', null, h('h4', null, 'Вопрос автору' + (f.question_to && ROLE_RU[f.question_to] ? ` (${ROLE_RU[f.question_to]})` : '')),
           h('p', null, f.question)));
       }
+      // After the author answered the agent's question (stage s8b).
+      if (f.author_answer) body.append(h('div', null, h('h4', null, 'Ответ автора'), h('p', null, f.author_answer)));
+      if (f.answer_note) body.append(h('div', null, h('h4', null, 'Решение агента по ответу'), h('p', null, f.answer_note)));
+      if (f.document_fix) body.append(h('div', null, h('h4', null, 'Правка текста документа по ответу автора'), h('p', { class: 'fix-text' }, f.document_fix)));
       const trail = f.trail || [];
       if (trail.includes('arbiter:kept')) body.append(h('p', { class: 'muted' }, 'Оппонент оспаривал находку, арбитр её оставил.'));
       else if (trail.includes('opponent:unavailable')) body.append(h('p', { class: 'muted' }, 'Находка не проверена оппонентом: он был недоступен.'));
@@ -1325,7 +1329,8 @@ function showReport(R) {
     for (const q of R.questions) {
       body.append(h('tr', null,
         h('td', { class: 'mono' }, q.id), h('td', { class: 'prio' }, q.priority), h('td', null, q.addressee),
-        h('td', null, q.text), h('td', null, q.blocks_development ? h('b', null, 'да') : 'нет'),
+        h('td', null, q.text, q.answer ? h('p', { class: 'fix-text', style: 'margin:6px 0 0' }, h('b', null, 'Ответ автора: '), q.answer) : null),
+        h('td', null, q.blocks_development ? h('b', null, 'да') : 'нет'),
         h('td', null, q.finding_ids.map((id) => findingById.get(id)).filter(Boolean).map((f) =>
           h('button', { class: `chip ${f.severity}`, type: 'button', style: 'margin:0 4px 4px 0', title: f.title,
             onclick: () => select(f.id, 'jump') }, h('b', null, f.id), SEV[f.severity].word)))));

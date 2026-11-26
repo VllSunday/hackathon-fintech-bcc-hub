@@ -102,7 +102,7 @@ class ReadStage(Stage):
         if len(found) > len(pictures):
             warnings.append(f"Описаны первые {len(pictures)} изображений из {len(found)}.")
         if pictures and ctx.settings.vision != "off":
-            _, results = vision.run_vision(ctx.llm, {}, pictures)
+            _, results, _ = vision.run_vision(ctx.llm, {}, pictures)
             drafts = _insert_pictures(drafts, pictures, results, issues)
             chain.append("vision")
         elif pictures:
@@ -190,13 +190,23 @@ class ReadStage(Stage):
             pictures.append(vision.Picture(image.png, image.page, position,
                                            _context_around(drafts, position)))
 
-        transcripts, descriptions = vision.run_vision(ctx.llm, pages, pictures)
+        # Pages with no usable text layer are read a second time, by another strategy.
+        second = ({n: png for n, png in pages.items() if n in need}
+                  if settings.scan_reads >= 2 else {})
+        transcripts, descriptions, rereads = vision.run_vision(ctx.llm, pages, pictures,
+                                                               second)
         drafts = _insert_pictures(drafts, pictures, descriptions, issues)
 
         replace: dict[int, list[Draft]] = {}
         for page, result in transcripts.items():
+            reread = rereads.get(page)
             if isinstance(result, LLMError):
-                if page in need:
+                if page in need and isinstance(reread, vision.PageLines) and reread.lines:
+                    replace[page] = vision.lines_drafts(reread, page)
+                    issues.append(ReadIssue(kind="page_by_vision", message=(
+                        f"Страница {page} прочитана по изображению ({need[page]}) только "
+                        f"построчно: основное прочтение не удалось ({result.message}).")))
+                elif page in need:
                     issues.append(ReadIssue(kind="page_unread", message=(
                         f"Страница {page} не прочитана ({need[page]}): {result.message}")))
                 continue
@@ -206,6 +216,7 @@ class ReadStage(Stage):
                 issues.append(ReadIssue(kind="page_by_vision", message=(
                     f"Страница {page} прочитана по изображению ({need[page]}); цитаты с неё "
                     "взяты из распознанного текста.")))
+                issues.extend(_compare_readings(page, transcribed, reread))
                 continue
             layer = " ".join(d.text for d in drafts if d.page == page and not d.hidden)
             seen = " ".join(d.text for d in transcribed)
@@ -233,6 +244,38 @@ class ReadStage(Stage):
             index = next((i for i, d in enumerate(out) if (d.page or 0) > page), len(out))
             out[index:index] = replace[page]
         return out, issues
+
+
+def _compare_readings(page: int, transcribed: list[Draft],
+                      reread: vision.PageLines | LLMError | None) -> list[ReadIssue]:
+    """Mark where the second reading of a scanned page disagrees with the first."""
+    if reread is None:
+        return []
+    if isinstance(reread, LLMError):
+        return [ReadIssue(kind="scan_single_reading", message=(
+            f"Страница {page} прочитана один раз: второе прочтение не удалось "
+            f"({reread.message}), расхождения не проверены."))]
+    found = vision.discrepancies(" ".join(d.text for d in transcribed),
+                                 "\n".join(reread.lines))
+    if not found:
+        return []
+    if len(found) > vision.MAX_DISCREPANCIES:
+        for d in transcribed:
+            d.confidence = min(d.confidence, vision.DOUBT_CONFIDENCE)
+        return [ReadIssue(kind="scan_unreliable", message=(
+            f"Страница {page}: два прочтения скана расходятся в {len(found)} местах, текст "
+            "страницы ненадёжен; цитаты с неё стоит сверить с оригиналом."))]
+    unplaced = vision.mark_doubts(transcribed, found)
+    shown = "; ".join(str(d) for d in found[:5]) + ("; …" if len(found) > 5 else "")
+    issues = [ReadIssue(kind="scan_discrepancy_summary", message=(
+        f"Страница {page}: два независимых прочтения скана расходятся в {len(found)} "
+        f"местах (первое / второе): {shown}. Блоки с расхождениями помечены, цитаты из них "
+        "стоит сверить с оригиналом."))]
+    if unplaced:
+        issues.append(ReadIssue(kind="scan_discrepancy", message=(
+            f"Страница {page}: текст есть только во втором прочтении: "
+            + "; ".join(str(d) for d in unplaced[:5]) + ".")))
+    return issues
 
 
 def _title(blocks) -> str | None:

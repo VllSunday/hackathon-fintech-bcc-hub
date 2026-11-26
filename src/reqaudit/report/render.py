@@ -16,6 +16,7 @@ from reqaudit.models import (
     UnitKind,
 )
 from reqaudit.passport import Passport
+from reqaudit.reading.vision import DOUBT_CONFIDENCE
 from reqaudit.stages.base import RunState
 
 _KIND_RU = {
@@ -163,6 +164,8 @@ def _place(block_ids: list[str], blocks: dict[str, Block]) -> str:
     anchors = [b.anchor for b in found]
     note = (", распознано по изображению"
             if any(b.source == BlockSource.VLM for b in found) else "")
+    if any(b.source == BlockSource.VLM and b.confidence <= DOUBT_CONFIDENCE for b in found):
+        note += ", прочтения скана расходятся — сверить с оригиналом"
     pages = sorted({a.page for a in anchors if a.page})
     if pages:
         return "стр. " + ", ".join(map(str, pages)) + note
@@ -214,10 +217,24 @@ def _segmentation(state: RunState) -> str:
         count = plural(len(coverage.unclassified), "блок", "блока", "блоков")
         out += ["", f"**Не удалось классифицировать {count}** ({places}). "
                     "Они не проверялись."]
+    if coverage.obligations_outside:
+        count = plural(len(coverage.obligations_outside), "блок", "блока", "блоков")
+        out += ["", f"**Сверка вторым способом:** {count} с явным обязательством не вошли "
+                    "в требования; их проверяет общая проверка документа:", ""]
+        out += [f"- {_place([i], blocks)}: «{word}»"
+                for i, word in coverage.obligations_outside.items()]
     if coverage.dropped_units:
         out += ["", "Отброшены как не подтверждённые текстом документа:", ""]
         out += [f"- {reason}" for reason in coverage.dropped_units]
+    if state.plan_notes:
+        out += ["", "Решения при планировании проверок:", ""]
+        out += [f"- {note}" for note in state.plan_notes]
     return "\n".join(out)
+
+
+_DECISION_RU = {"confirmed": "Дефект остаётся: документ нужно исправить.",
+                "changed": "Дефект остаётся, серьёзность изменена.",
+                "resolved": "Находка снята: ответ показывает, что документ это покрывает."}
 
 
 def _finding(f: Finding, blocks: dict[str, Block]) -> str:
@@ -231,6 +248,14 @@ def _finding(f: Finding, blocks: dict[str, Block]) -> str:
         lines += [f"**Как исправить.** {f.suggestion}", ""]
     if f.question:
         lines += [f"**Вопрос автору.** {f.question}", ""]
+    if f.author_answer:
+        lines += [f"**Ответ автора.** {f.author_answer}", ""]
+        decision = _DECISION_RU.get(f.answer_decision or "", "")
+        if decision:
+            note = f" {f.answer_note}" if f.answer_note else ""
+            lines += [f"**После ответа.** {decision}{note}", ""]
+        if f.document_fix:
+            lines += [f"**Правка документа по ответу.** {f.document_fix}", ""]
     if "arbiter:kept" in f.trail:
         lines += ["*Оппонент оспаривал находку, арбитр её оставил.*", ""]
     elif "opponent:unavailable" in f.trail:
@@ -284,6 +309,15 @@ def _summary(state: RunState, confirmed: list[Finding]) -> str:
         ["Кандидатов отклонено оппонентом и арбитром", len(state.rejected) - by_gate],
         ["Кандидатов отклонено проверкой цитат", by_gate],
     ]
+    if state.markers:
+        judged = sum(1 for m in state.markers if m.defect)
+        rows.append(["Слов-маркеров найдено кодом / признано дефектом рецензентом",
+                     f"{len(state.markers)} / {judged}"])
+    answered = [q for q in state.questions if q.answer]
+    if answered:
+        resolved = sum(1 for f in state.findings if f.answer_decision == "resolved")
+        rows += [["Вопросов с ответом автора", f"{len(answered)} из {len(state.questions)}"],
+                 ["Находок снято по ответам автора", resolved]]
     out = [_table(["Показатель", "Значение"], rows)]
 
     by_criterion: dict[str, int] = {}
@@ -323,6 +357,11 @@ def _verdict(state: RunState, confirmed: list[Finding]) -> str:
     out = [head]
     if state.check_failures:
         out += ["", "Вывод неполный: часть проверок не выполнена, см. раздел «Сводка»."]
+    fixes = [f for f in confirmed if f.document_fix]
+    if fixes:
+        count = plural(len(fixes), "находки", "находок", "находок")
+        out += ["", f"По ответам автора готовы правки текста для {count}: они приведены у "
+                    "каждой находки. После их внесения документ стоит проверить снова."]
     first = (critical + major)[:7]
     if first:
         out += ["", "Исправить в первую очередь:", ""]
@@ -340,7 +379,9 @@ def _rejected(state: RunState) -> str:
 
 
 def render_markdown(p: Passport, state: RunState, plan: list[tuple[str, str]]) -> str:
-    confirmed = [f for f in state.findings if f.status == FindingStatus.CONFIRMED]
+    confirmed = [f for f in state.findings if f.status == FindingStatus.CONFIRMED
+                 and f.answer_decision != "resolved"]
+    resolved = [f for f in state.findings if f.answer_decision == "resolved"]
     checks_ran = set(state.completed) >= _CHECK_STAGES
     no_checks = _not_done("s5", state)
     blocks = {b.id: b for b in state.document.blocks} if state.document else {}
@@ -374,10 +415,16 @@ def render_markdown(p: Passport, state: RunState, plan: list[tuple[str, str]]) -
     out += ["## Уточняющие вопросы", ""]
     if state.questions:
         out.append(_table(
-            ["ID", "Кому", "Вопрос", "Приоритет", "Блокирует разработку", "Дефекты"],
+            ["ID", "Кому", "Вопрос", "Приоритет", "Блокирует разработку", "Дефекты",
+             "Ответ автора"],
             [[q.id, q.addressee, q.text, q.priority, "да" if q.blocks_development else "нет",
-              ", ".join(q.finding_ids)] for q in state.questions],
+              ", ".join(q.finding_ids), q.answer or "—"] for q in state.questions],
         ))
+        if not any(q.answer for q in state.questions):
+            out += ["", "Ответы можно вписать в файл `<отчёт>.answers.md`, который агент "
+                        "положил рядом с отчётом, и запустить проверку снова с "
+                        "`--answers <файл>`, либо ответить в терминале с `--ask`: агент "
+                        "перепроверит связанные находки."]
     else:
         out.append(_not_done("s8", state))
     out.append("")
@@ -398,6 +445,10 @@ def render_markdown(p: Passport, state: RunState, plan: list[tuple[str, str]]) -
                    "не означает, что документ без дефектов.")
     out.append("")
 
+    if resolved:
+        out += ["## Сняты после ответов автора", "",
+                "\n\n".join(_finding(f, blocks) for f in resolved), ""]
+
     if checks_ran and state.rejected:
         out += ["## Приложение. Отклонённые кандидаты", "",
                 "Находки, которые рецензент предложил, но оппонент с арбитром или проверка "
@@ -411,6 +462,8 @@ def render_markdown(p: Passport, state: RunState, plan: list[tuple[str, str]]) -
             status = "выполнен"
         elif code in errors:
             status = f"ошибка: {errors[code].message}"
+        elif code in state.skipped:
+            status = "не требовался"
         else:
             status = "не выполнялся"
         rows.append([code, title, status])

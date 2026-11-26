@@ -4,13 +4,18 @@ The opponent sees the document and the finding, not the reviewer's reasoning, an
 refute it. Upheld findings are confirmed, adjusted ones are confirmed with the opponent's
 correction, refuted ones go to the arbiter, who reads both sides and decides.
 If the opponent is unavailable, findings stay but are marked as not challenged.
+
+The opponent also tests the proposed fix by counterfactual: with the suggestion applied
+to the document, is the defect gone, and does the new wording not contradict another
+place? A fix that fails is replaced by the opponent's corrected one, so the report never
+recommends an edit that leaves the defect or creates a new one.
 """
 
 from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from reqaudit import prompt_store
 from reqaudit.criteria import Criterion
@@ -37,6 +42,10 @@ class Verdict(BaseModel):
     counter_evidence: list[EvidenceDraft] = []
     severity: Severity | None = None
     criterion: Criterion | None = None
+    fix_works: bool = Field(description="With the suggestion applied, the defect is gone and "
+                            "the new wording contradicts nothing else in the document.")
+    better_fix: str = Field(default="", description="In Russian: a corrected suggestion, "
+                            "required when fix_works is false.")
 
     @field_validator("verdict", mode="before")
     @classmethod
@@ -80,11 +89,12 @@ class ReviewResult(BaseModel):
     verdicts: dict[str, str]
 
 
-def _finding_view(ref: str, f: Finding) -> str:
+def _finding_view(ref: str, f: Finding, with_fix: bool = False) -> str:
     quotes = "\n".join(f"  - [{e.block_id}] «{e.quote}»" for e in f.evidence)
+    fix = f"\n  suggestion: {f.suggestion or '—'}" if with_fix else ""
     return (f"{ref}: criterion={f.criterion.value} severity={f.severity.value} "
             f"requirements={','.join(f.unit_ids) or '—'}\n"
-            f"  title: {f.title}\n  explanation: {f.explanation}\n  evidence:\n{quotes}")
+            f"  title: {f.title}\n  explanation: {f.explanation}{fix}\n  evidence:\n{quotes}")
 
 
 def _context(ctx: RunContext) -> str:
@@ -112,10 +122,15 @@ def _covers_refs(refs: list[str], field: str, blocks: dict) -> Check:
             for e in getattr(item, "counter_evidence", []):
                 if problem := evidence_problem(e, blocks):
                     complaints.append(f"{item.ref}: counter_evidence {problem}")
+            if (getattr(item, "fix_works", True) is False and item.verdict != "refuted"
+                    and not item.better_fix.strip()):
+                complaints.append(f"{item.ref}: fix_works is false, so give better_fix: the "
+                                  "corrected suggestion")
         return ("Fix these problems and return the full answer again:\n"
                 + "\n".join(f"- {c}" for c in complaints)) if complaints else None
 
-    return combine(check, require_russian(f"{field}.reasoning"))
+    russian = [f"{field}.reasoning"] + (["verdicts.better_fix"] if field == "verdicts" else [])
+    return combine(check, require_russian(*russian))
 
 
 class ReviewStage(Stage):
@@ -133,7 +148,8 @@ class ReviewStage(Stage):
         requests = []
         for n, batch in enumerate(batches, 1):
             refs = [f"F{i}" for i in range(1, len(batch) + 1)]
-            listing = "\n\n".join(_finding_view(r, f) for r, f in zip(refs, batch, strict=True))
+            listing = "\n\n".join(_finding_view(r, f, with_fix=True)
+                                  for r, f in zip(refs, batch, strict=True))
             requests.append(dict(
                 step=f"s6_opponent[{n}]", role="opponent", instructions=instructions,
                 prompt=f"{context}\n\n<findings>\n{listing}\n</findings>\n",
@@ -158,6 +174,9 @@ class ReviewStage(Stage):
             for i, f in enumerate(batch, 1):
                 v = by_ref.get(f"F{i}")
                 verdicts[f.id] = v.verdict if v else "missing"
+                if v and not v.fix_works and v.better_fix.strip() and v.verdict != "refuted":
+                    f = f.model_copy(update={"suggestion": v.better_fix.strip(),
+                                             "trail": [*f.trail, "opponent:fix_rewritten"]})
                 if v and v.verdict == "upheld":
                     confirmed.append(f.model_copy(update={
                         "status": FindingStatus.CONFIRMED, "trail": [*f.trail, "opponent:upheld"],

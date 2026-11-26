@@ -10,9 +10,19 @@ The model decides what counts as a requirement; code decides what is admissible:
 Violations go back to the model as a concrete complaint. What is still wrong after the
 last retry is repaired or dropped by code and recorded in the coverage report, so a
 partially bad answer never sinks the whole run and never reaches the report unchecked.
+
+A second segmenter with another strategy cross-checks the model: code marks every block
+that states an obligation explicitly («должен», «обязан», «необходимо», «shall»...).
+Such a block the model left outside all units as mere context, for no known reason, or
+unclassified is a possibly missed requirement: it is listed in the coverage report and
+makes s4 add the general check, which reads it first. Skips the model justified as a
+goal, an example, a template or an approval are trusted, so a filled-in checklist with
+«Не требуется» answers does not raise an alarm.
 """
 
 from __future__ import annotations
+
+import re
 
 from pydantic import BaseModel, Field
 
@@ -96,13 +106,28 @@ def unit_problems(draft: UnitDraft, by_id: dict[str, Block]) -> list[str]:
     return problems
 
 
-def _needed(window: list[Block]) -> list[str]:
+_OBLIGATION = re.compile(
+    # «не требуется» is a checklist answer, not an obligation; «не должен» is one.
+    r"(?<![\wё])(долж(?:ен|на|но|ны)|обязан\w*|обязательн\w*|обязуется|необходимо|"
+    r"(?<!не )требуется|следует|не допускается|запрещается|shall|must|is required to)"
+    r"(?![\wё])", re.IGNORECASE)
+# Skip reasons that do not explain away an explicit obligation.
+_WEAK_SKIPS = {SkipReason.CONTEXT, SkipReason.OTHER}
+
+
+def obligation_word(text: str) -> str | None:
+    """The first explicit obligation word in the text, if any."""
+    match = _OBLIGATION.search(text)
+    return match.group(0) if match else None
+
+
+def needed_blocks(window: list[Block]) -> list[str]:
     return [b.id for b in visible(window) if b.kind not in _STRUCTURAL]
 
 
 def segment_check(window: list[Block]) -> Check:
     by_id = {b.id: b for b in visible(window)}
-    needed = _needed(window)
+    needed = needed_blocks(window)
 
     def check(answer: SegmentAnswer) -> str | None:
         complaints = []
@@ -214,7 +239,7 @@ def assemble(document: DocumentIR, profile: DocumentProfile,
     needed: list[str] = []
     for window, answer in answers:
         by_id = {b.id: b for b in visible(window)}
-        needed.extend(_needed(window))
+        needed.extend(needed_blocks(window))
         for draft in answer.units:
             if isinstance(draft.kind, SkipReason):
                 for block_id in draft.block_ids:
@@ -260,7 +285,21 @@ def assemble(document: DocumentIR, profile: DocumentProfile,
         if skip.block_id not in in_units:
             by_reason[skip.reason.value] = by_reason.get(skip.reason.value, 0) + 1
 
+    by_block = {b.id: b for b in document.blocks}
+    obligations = {}
+    for block_id in needed:
+        if block_id in in_units:
+            continue
+        skip = skipped.get(block_id)
+        if skip is not None and skip.reason not in _WEAK_SKIPS:
+            continue
+        if by_block[block_id].kind == BlockKind.CODE:  # samples, not statements
+            continue
+        if word := obligation_word(by_block[block_id].text):
+            obligations[block_id] = word
+
     coverage = Coverage(
+        obligations_outside=obligations,
         blocks_checked=len(needed),
         in_units=sum(1 for i in needed if i in in_units),
         skipped=sum(1 for i in needed if i not in in_units and i in skipped),

@@ -8,7 +8,7 @@ import pytest
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from fakes import fake_team
+from fakes import fake_team, honest_page_lines
 
 from reqaudit.config import Settings
 from reqaudit.errors import InputError
@@ -18,6 +18,7 @@ from reqaudit.pipeline import run_pipeline
 from reqaudit.reading import office
 from reqaudit.reading.assemble import finalize
 from reqaudit.reading.pdf import read_pdf
+from reqaudit.reading.vision import discrepancies
 
 ROOT = Path(__file__).parents[1]
 CONTAINERS = ROOT / "corpus" / "inputs" / "containers"
@@ -93,6 +94,39 @@ def test_scan_is_read_by_vision(tmp_path):
     assert any(b["kind"] == "table" for b in blocks)
     assert sum(i["kind"] == "page_by_vision" for i in state["document"]["issues"]) == 5
     assert "распознано по изображению" in report
+
+
+def test_two_readings_differ_only_where_words_differ():
+    found = discrepancies("Порог | от 1 000 до 1 000 000 ₸. Push не позднее 60 секунд.",
+                          "Порог | от 1 000 до 100 000 ₸.\nPush не позднее 60 секунд.")
+    assert len(found) == 1 and "100" in found[0].second.split()
+    # A table read in another order is the same words, not a discrepancy.
+    assert discrepancies("| Поле | Значение |\n| Порог | 500 |",
+                         "| Порог | 500 |\n| Поле | Значение |") == []
+
+
+def test_scan_is_read_twice_and_disagreements_are_marked(tmp_path):
+    misread = honest_page_lines(**{"1 000 000": "100 000"})
+    model, calls = fake_team(page_check=lambda prompt: misread)
+    _, state, report = run(tmp_path, CONTAINERS / "requirements.scan.pdf", model)
+    assert calls["page"] == 5 and calls["page_check"] == 5
+    kinds = [i["kind"] for i in state["document"]["issues"]]
+    assert kinds.count("scan_discrepancy_summary") == 5
+    doubtful = [b for b in state["document"]["blocks"] if "1 000 000" in b["text"]]
+    assert doubtful and all(b["confidence"] == 0.6 for b in doubtful)
+    assert "«100 000»" in report
+
+
+def test_agreeing_readings_and_single_reading(tmp_path):
+    model, calls = fake_team()
+    _, state, _ = run(tmp_path / "two", CONTAINERS / "requirements.scan.pdf", model)
+    assert calls["page_check"] == 5
+    assert not any(i["kind"].startswith("scan_") for i in state["document"]["issues"])
+
+    model, calls = fake_team()
+    _, state, _ = run(tmp_path / "one", CONTAINERS / "requirements.scan.pdf", model,
+                      scan_reads=1)
+    assert calls["page_check"] == 0
 
 
 def test_picture_becomes_a_block_in_reading_order(tmp_path):

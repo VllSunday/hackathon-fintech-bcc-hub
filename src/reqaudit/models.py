@@ -404,6 +404,9 @@ class Finding(BaseModel):
     cell: str | None = None
     severity_reason: str | None = Field(default=None, description="In Russian: what set the "
                                         "severity when the calibration step changed it.")
+    remark: bool = Field(
+        default=False, description="True but changes nothing the team builds or tests (message "
+        "texts, layout of the description, deployment parameters): listed apart, not counted.")
     merged: list[MergedFinding] = Field(
         default_factory=list, description="Findings the editor judged to be this same defect; "
         "shown with it, so a wrong merge does not hide a defect.")

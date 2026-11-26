@@ -1280,6 +1280,13 @@ function showReport(R) {
         h('h3', { class: 'group-head' }, GROUP_RU[severity], h('span', { class: 'n' }, ` · ${group.length}`)),
         group.map((f) => findingRow(f, origin))));
     }
+    if ((R.remarks || []).length) {
+      box.append(h('details', { class: 'resolved' },
+        h('summary', null, `Замечания, не влияющие на поведение системы: ${R.remarks.length}`),
+        R.remarks.map((f) => h('div', { class: 'card pad', style: 'margin-top:8px' },
+          h('div', null, h('span', { class: 'mono' }, f.id), ' ', h('b', null, f.title)),
+          f.explanation ? h('p', { class: 'muted', style: 'margin:6px 0 0' }, f.explanation) : null))));
+    }
     if ((R.resolved || []).length) {
       box.append(h('details', { class: 'resolved' },
         h('summary', null, `Сняты после ответов автора: ${R.resolved.length}`),

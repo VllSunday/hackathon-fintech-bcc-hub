@@ -15,6 +15,7 @@ from typing import Literal
 from pydantic import BaseModel, field_validator
 
 from reqaudit import prompt_store
+from reqaudit.criteria import Criterion
 from reqaudit.llm.checks import Check, combine, require_russian
 from reqaudit.llm.client import LLMError
 from reqaudit.models import Finding, Severity
@@ -22,6 +23,9 @@ from reqaudit.reading.render import LEGEND
 from reqaudit.stages.base import RunContext
 
 CHUNK = 60  # findings per call; one call keeps them comparable, a huge list is split
+# A remark is a gap whose missing piece is below the requirement level (prompts/gaps.md).
+# A violation of any other criterion is a quality defect under the standards.
+REMARK_CRITERIA = frozenset({Criterion.COMPLETE, Criterion.SET_COMPLETE})
 
 
 class Rating(BaseModel):
@@ -30,6 +34,7 @@ class Rating(BaseModel):
     harm: bool
     severity: Severity
     reason: str
+    remark: bool = False
 
     @field_validator("path", mode="before")
     @classmethod
@@ -57,7 +62,9 @@ def _view(ref: str, f: Finding) -> str:
             f"  title: {f.title}\n  explanation: {f.explanation}\n  evidence: {quotes}")
 
 
-def _check(refs: list[str]) -> Check:
+def _check(refs: list[str], findings: dict[str, Finding] | None = None) -> Check:
+    findings = findings or {}
+
     def check(answer: CalibrationAnswer) -> str | None:
         rated = {r.ref for r in answer.ratings}
         complaints = ([f"rate every finding; missing {[r for r in refs if r not in rated]}"]
@@ -69,6 +76,14 @@ def _check(refs: list[str]) -> Check:
                     f"{r.ref}: path={r.path}, harm={str(r.harm).lower()} allows "
                     f"{' or '.join(sorted(s.value for s in allowed))}, not {r.severity.value}; "
                     "change the level or the answer that does not hold")
+            if r.remark and r.path != "none":
+                complaints.append(f"{r.ref}: a remark changes no behaviour, so its path is "
+                                  "`none`; set remark false or path none")
+            f = findings.get(r.ref)
+            if r.remark and f is not None and f.criterion not in REMARK_CRITERIA:
+                complaints.append(f"{r.ref}: only a gap (complete, set_complete) can be a "
+                                  f"remark; a {f.criterion.value} finding is a quality defect "
+                                  "under the standards: set remark false")
         return ("Fix these problems and return the full answer again:\n"
                 + "\n".join(f"- {c}" for c in complaints)) if complaints else None
 
@@ -89,7 +104,8 @@ def calibrate(ctx: RunContext, context: str, findings: list[Finding]) -> list[Fi
                              instructions=instructions,
                              prompt=f"{context}\n\n<findings>\n{listing}\n</findings>\n",
                              output_type=CalibrationAnswer, prompt_ids=ids,
-                             check=_check(refs), soft_check=True))
+                             check=_check(refs, dict(zip(refs, chunk, strict=True))),
+                             soft_check=True))
     out: list[Finding] = []
     changed = 0
     for chunk, result in zip(chunks, ctx.llm.many(requests), strict=True):
@@ -108,6 +124,9 @@ def calibrate(ctx: RunContext, context: str, findings: list[Finding]) -> list[Fi
             if r is None or r.severity not in bounds(r.path, r.harm):
                 out.append(f)
                 continue
+            if r.remark and r.path == "none" and f.criterion in REMARK_CRITERIA:
+                f = f.model_copy(update={"remark": True,
+                                         "trail": [*f.trail, "calibrated:remark"]})
             if r.severity != f.severity:
                 changed += 1
                 f = f.model_copy(update={

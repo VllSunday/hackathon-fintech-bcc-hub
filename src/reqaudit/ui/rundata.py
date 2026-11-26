@@ -26,6 +26,7 @@ from reqaudit.report.views import (
     has_checks,
     place,
     rejected_by_gate,
+    remarks,
     reported,
     verdict,
 )
@@ -241,6 +242,7 @@ def build_report(run_dir: Path) -> dict[str, Any]:
     checks_ran = has_checks(state)
     findings = [_finding_view(f, blocks) for f in confirmed]
     resolved = [_finding_view(f, blocks) for f in state.findings if f.resolved]
+    notes = [_finding_view(f, blocks) for f in remarks(state)]
 
     units = []
     for u in state.units:
@@ -270,6 +272,7 @@ def build_report(run_dir: Path) -> dict[str, Any]:
         "cells": [c.model_dump(mode="json") for c in state.cells],
         "findings": findings,
         "resolved": resolved,
+        "remarks": notes,
         "markers": [m.model_dump(mode="json") for m in state.markers],
         "plan_notes": state.plan_notes,
         "rejected_findings": [{"id": f.id, "title": f.title, "criterion": f.criterion.value,

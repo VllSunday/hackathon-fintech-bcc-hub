@@ -120,8 +120,13 @@ def has_checks(state: RunState) -> bool:
 
 
 def reported(state: RunState) -> list[Finding]:
-    """The findings the report counts as defects (see Finding.in_report)."""
-    return [f for f in state.findings if f.in_report]
+    """The findings the report counts as defects (see Finding.in_report), remarks apart."""
+    return [f for f in state.findings if f.in_report and not f.remark]
+
+
+def remarks(state: RunState) -> list[Finding]:
+    """True findings that change no behaviour: listed separately, not counted as defects."""
+    return [f for f in state.findings if f.in_report and f.remark]
 
 
 def rejected_by_gate(f: Finding) -> bool:

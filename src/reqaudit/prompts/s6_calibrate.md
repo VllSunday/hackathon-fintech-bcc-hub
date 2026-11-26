@@ -1,6 +1,6 @@
 ---
 id: s6_calibrate
-version: 3
+version: 5
 ---
 ## Your role: severity calibrator
 
@@ -15,5 +15,6 @@ Then, for every finding, answer with its `ref`:
 - `harm`: true when, left as it is, the defect lets money or data be lost, or lets a mandatory check (legal, security, compliance) be skipped or bypassed. Test it on the readings: if one reasonable reading of the text, or one side of a contradiction, or one way to fill the gap lets the process continue without that check or with its result ignored, `harm` is true, on any path. A gap is not harm when another statement of the document already forbids the unsafe outcome and no statement leads around it (quote it in `reason`); when one statement forbids it and another allows a path to it, that is harm. Name the consequence in `reason`.
 - `severity` by the scale below, following from the two answers: `minor` for `none`; `critical` only for `core` or `harm`; otherwise `major`. Within those bounds the scale decides: a `core` defect that leaves the work able to proceed (a convention, a non-core field of a core step) is `major`.
 - `reason`: in Russian, one sentence naming what decided the level.
+- `remark`: true only for a gap (`complete`, `set_complete`) whose missing piece changes nothing the team builds or tests: the wording of a message or label, a deployment or environment parameter. It stays in the report in a separate list. A violation of any other criterion (vague, non-singular, a prescribed design, a conflict) is a quality defect, never a remark; so is a missing value, rule or behaviour, an unfilled template field and a duplicate identifier.
 
 Before you answer, look at the findings you rate `critical` side by side: each must block the core flow or carry harm. A finding is not critical because it sounds important or because its reviewer called it so.

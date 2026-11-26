@@ -538,3 +538,37 @@ def test_a_merged_finding_stays_visible_in_the_kept_one():
     assert [m.title for m in kept[0].merged] == ["Термин не определён"]
     text = _finding(kept[0], {})
     assert "Сведено в эту находку" in text and "Слово можно понять двояко." in text
+
+
+def test_a_remark_is_listed_apart_and_never_hides_a_defect_of_the_document():
+    """Remarks change no behaviour; conflicts and integrity defects are never remarks."""
+    from reqaudit.stages.s6_calibrate import CalibrationAnswer, Rating, _check
+
+    conflict = _f("D-1", ["b1", "b2"], criterion="set_consistent", severity=Severity.MINOR)
+    wording = _f("D-2", ["b3"], criterion="complete", severity=Severity.MINOR)
+    check = _check(["C1", "C2"], {"C1": conflict, "C2": wording})
+
+    def rating(ref, path, remark):
+        return Rating(ref=ref, path=path, harm=False, severity="minor", remark=remark,
+                      reason="Решено по шкале.")
+
+    ok = CalibrationAnswer(core_flow="Основной поток: подача заявки.",
+                           ratings=[rating("C1", "none", False), rating("C2", "none", True)])
+    assert check(ok) is None
+    bad = CalibrationAnswer(core_flow="Основной поток: подача заявки.",
+                            ratings=[rating("C1", "none", True), rating("C2", "core", True)])
+    complaint = check(bad)
+    assert "only a gap" in complaint and "path none" in complaint
+
+
+def test_remarks_stay_in_the_report_but_not_among_the_defects(tmp_path):
+    model, _ = fake_team()
+    _, state, report, _ = run(tmp_path, lambda _id: model)
+    from reqaudit.models import RunState
+    from reqaudit.report.views import remarks, reported
+
+    rs = RunState.model_validate(state)
+    first = rs.findings[0]
+    rs.findings[0] = first.model_copy(update={"remark": True})
+    assert first.id not in {f.id for f in reported(rs)}
+    assert [f.id for f in remarks(rs)] == [first.id]

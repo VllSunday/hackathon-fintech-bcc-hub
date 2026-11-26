@@ -25,6 +25,7 @@ from reqaudit.report.views import (
     place,
     plural,
     rejected_by_gate,
+    remarks,
     reported,
     verdict,
 )
@@ -364,6 +365,14 @@ def render_markdown(p: Passport, state: RunState, plan: list[tuple[str, str]]) -
                    "проверка не выполнялась. Отсутствие замечаний в этом отчёте "
                    "не означает, что документ без дефектов.")
     out.append("")
+
+    notes = remarks(state)
+    if notes:
+        out += ["## Замечания, не влияющие на поведение системы", "",
+                "Верные наблюдения, которые не меняют того, что команда построит или проверит: "
+                "тексты сообщений, оформление описания, параметры развёртывания. В число "
+                "дефектов и в вывод они не входят.", "",
+                "\n\n".join(_finding(f, blocks) for f in notes), ""]
 
     if resolved:
         out += ["## Сняты после ответов автора", "",

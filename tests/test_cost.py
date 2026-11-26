@@ -146,7 +146,8 @@ def test_an_installed_agent_reports_the_commit_it_was_installed_from(monkeypatch
     class Dist:
         def read_text(self, name):
             assert name == "direct_url.json"
-            return '{"url": "https://example.org/repo", "vcs_info": {"vcs": "git", "commit_id": "abc123"}}'
+            return ('{"url": "https://example.org/repo", '
+                    '"vcs_info": {"vcs": "git", "commit_id": "abc123"}}')
 
     monkeypatch.setattr(passport, "_git", lambda *args: None)
     monkeypatch.setattr(passport.metadata, "distribution", lambda name: Dist())

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>reqaudit</title>
+<title>Specula</title>
 <link rel="icon" href="data:,">
 <style>
 /* Fonts ship with the page (SIL OFL 1.1, licences in fonts/): IBM Plex Sans for the interface,
@@ -473,7 +473,7 @@ mark.q.critical.pulse { background: var(--pulse-critical); box-shadow: inset 0 -
 </head>
 <body>
 <header class="top"><div class="wrap">
-  <a class="brand" href="#/">reqaudit</a>
+  <a class="brand" href="#/">Specula</a>
   <div class="grow"></div>
   <nav id="nav"></nav>
   <button class="btn icon" id="theme" type="button"></button>
@@ -681,7 +681,7 @@ window.addEventListener('hashchange', route);
 
 // ---------------------------------------------------------------- upload screen
 function screenUpload() {
-  document.title = 'reqaudit — проверка требований';
+  document.title = 'Specula — проверка требований';
   let file = null;
   let busy = false;
   const dropTitle = h('strong', null, 'Перетащите документ сюда');
@@ -944,7 +944,7 @@ function showReport(R) {
   const findingChip = (f, onclick) => h('button', { class: `chip ${f.severity}`, type: 'button', dataset: { f: f.id }, title: f.title, onclick },
     sq(f.severity), f.id);
 
-  document.title = `${P.document_name || 'Отчёт'} — reqaudit`;
+  document.title = `${P.document_name || 'Отчёт'} — Specula`;
 
   // ---- head: the answer to "can development start?", nothing else competes with it
   const head = h('div', { class: 'wrap report-head' });

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" width="1200" height="600" role="img">
-<title>Облёт схемы агента reqaudit: весь поток, затем каждая фаза по очереди</title>
+<title>Облёт схемы агента Specula: весь поток, затем каждая фаза по очереди</title>
 <style>
 :root {
   --bg: #F6F8F6; --surface: #FFFFFF; --fg: #18211D; --muted: #586760; --line: #D3DAD6; --lane: #F1F4F2; --edge: #7C8A83;
@@ -373,5 +373,5 @@ svg text { font-family: var(--font-body); }
 <g class="hl3"><rect class="chipon" x="476" y="11" width="180" height="26" rx="13"/><text class="chip on" x="490" y="29">Проверка ячеек<tspan class="chipk" dx="6">s5–s6</tspan></text></g>
 <rect class="chipbg" x="664" y="11" width="252" height="26" rx="13"/><text class="chip" x="678" y="29">Доказательство и выдача<tspan class="chipk" dx="6">s7–s9</tspan></text>
 <g class="hl4"><rect class="chipon" x="664" y="11" width="252" height="26" rx="13"/><text class="chip on" x="678" y="29">Доказательство и выдача<tspan class="chipk" dx="6">s7–s9</tspan></text></g>
-<text class="brand" x="1184" y="29" text-anchor="end">reqaudit · путь документа до отчёта</text>
+<text class="brand" x="1184" y="29" text-anchor="end">Specula · путь документа до отчёта</text>
 </svg>

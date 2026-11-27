@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Specula · презентация</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Сцена 1920×1080 масштабируется под окно; слайды — абсолютные слои; шаги внутри слайда открываются стрелками. */
+@property --c1 { syntax: '<color>'; inherits: true; initial-value: #7c3aed; }
+@property --c2 { syntax: '<color>'; inherits: true; initial-value: #06b6d4; }
+@property --c3 { syntax: '<color>'; inherits: true; initial-value: #ec4899; }
+:root {
+  --bg: #06060b; --ink: #F4F2FF; --muted: #A9A6C6; --dim: #67648a; --line: rgba(255,255,255,.09);
+  --cyan: #22D3EE; --violet: #A78BFA; --green: #34D399; --amber: #FBBF24; --pink: #F472B6; --red: #FB7185; --blue: #60A5FA;
+  --display: "Unbounded", "Segoe UI", system-ui, sans-serif;
+  --body: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", Consolas, monospace;
+  --ease: cubic-bezier(.2,.8,.2,1);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: var(--body); overflow: hidden; }
+body { transition: --c1 1.2s, --c2 1.2s, --c3 1.2s; }
+body[data-accent="0"]  { --c1: #7c3aed; --c2: #06b6d4; --c3: #ec4899; }
+body[data-accent="1"]  { --c1: #e11d48; --c2: #7c3aed; --c3: #f97316; }
+body[data-accent="2"]  { --c1: #0891b2; --c2: #7c3aed; --c3: #2563eb; }
+body[data-accent="3"]  { --c1: #06b6d4; --c2: #8b5cf6; --c3: #10b981; }
+body[data-accent="4"]  { --c1: #0ea5e9; --c2: #10b981; --c3: #6366f1; }
+body[data-accent="5"]  { --c1: #10b981; --c2: #06b6d4; --c3: #8b5cf6; }
+body[data-accent="6"]  { --c1: #8b5cf6; --c2: #ec4899; --c3: #3b82f6; }
+body[data-accent="7"]  { --c1: #7c3aed; --c2: #06b6d4; --c3: #a855f7; }
+body[data-accent="8"]  { --c1: #ec4899; --c2: #f59e0b; --c3: #8b5cf6; }
+body[data-accent="9"]  { --c1: #10b981; --c2: #06b6d4; --c3: #f59e0b; }
+body[data-accent="10"] { --c1: #06b6d4; --c2: #8b5cf6; --c3: #10b981; }
+body[data-accent="11"] { --c1: #8b5cf6; --c2: #06b6d4; --c3: #ec4899; }
+
+/* фон: три дышащих пятна и сетка */
+.aurora { position: fixed; inset: -20%; filter: blur(90px) saturate(140%); opacity: .55; pointer-events: none; }
+.aurora i { position: absolute; width: 46vmax; height: 46vmax; border-radius: 50%; mix-blend-mode: screen; }
+.aurora i:nth-child(1) { background: radial-gradient(circle, var(--c1), transparent 62%); left: 4%; top: 2%; animation: drift1 22s ease-in-out infinite alternate; }
+.aurora i:nth-child(2) { background: radial-gradient(circle, var(--c2), transparent 62%); right: 2%; top: 18%; animation: drift2 26s ease-in-out infinite alternate; }
+.aurora i:nth-child(3) { background: radial-gradient(circle, var(--c3), transparent 62%); left: 30%; bottom: -4%; animation: drift3 30s ease-in-out infinite alternate; }
+@keyframes drift1 { to { transform: translate(18vmax, 12vmax) scale(1.15); } }
+@keyframes drift2 { to { transform: translate(-16vmax, 10vmax) scale(.9); } }
+@keyframes drift3 { to { transform: translate(-10vmax, -14vmax) scale(1.2); } }
+.grid { position: fixed; inset: 0; pointer-events: none; background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: 64px 64px; mask-image: radial-gradient(ellipse at 50% 45%, #000 20%, transparent 75%); }
+.vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,.65)); }
+
+/* сцена */
+.viewport { position: fixed; inset: 0; overflow: hidden; }
+.stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform-origin: center center; }
+.slide { position: absolute; inset: 0; opacity: 0; visibility: hidden; transform: scale(1.03); filter: blur(8px); transition: opacity .8s var(--ease), transform .9s var(--ease), filter .8s var(--ease), visibility 0s .9s; }
+.slide.past { transform: scale(.97); }
+.slide.active { opacity: 1; visibility: visible; transform: none; filter: none; transition: opacity .8s var(--ease) .1s, transform .9s var(--ease) .1s, filter .8s var(--ease) .1s, visibility 0s; }
+
+/* появление элементов */
+.a { opacity: 0; transform: translateY(26px); filter: blur(6px); transition: opacity .7s var(--ease), transform .8s var(--ease), filter .7s var(--ease); transition-delay: calc(var(--d, 0) * 110ms + 120ms); }
+.a.on { opacity: 1; transform: none; filter: none; }
+.a.pop { transform: scale(.85); }
+.a.pop.on { transform: none; }
+.a.left { transform: translateX(-40px); }
+.a.right { transform: translateX(40px); }
+.a.left.on, .a.right.on { transform: none; }
+
+/* типографика */
+.head { position: absolute; left: 140px; right: 140px; top: 92px; }
+.kicker { font: 600 19px/1 var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 14px; }
+.kicker i { width: 10px; height: 10px; border-radius: 50%; background: var(--c2); box-shadow: 0 0 18px var(--c2); }
+.kicker b { color: var(--ink); font-weight: 600; }
+h2 { font: 700 58px/1.12 var(--display); letter-spacing: -.015em; margin: 22px 0 0; max-width: 1640px; }
+.grad { background: linear-gradient(92deg, #67e8f9, #a78bfa 45%, #f472b6 85%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.grad2 { background: linear-gradient(92deg, #6ee7b7, #67e8f9 50%, #a78bfa); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.sub { font-size: 27px; line-height: 1.45; color: var(--muted); margin: 18px 0 0; max-width: 1400px; }
+.mono { font-family: var(--mono); }
+
+/* карточки и метки */
+.card { position: absolute; border-radius: 26px; background: linear-gradient(180deg, rgba(255,255,255,.075), rgba(255,255,255,.025)); border: 1px solid rgba(255,255,255,.11); box-shadow: 0 30px 80px -30px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.08); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font: 600 15px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 8px 12px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.t-code { color: var(--cyan); background: rgba(34,211,238,.1); border-color: rgba(34,211,238,.35); }
+.t-model { color: var(--green); background: rgba(52,211,153,.1); border-color: rgba(52,211,153,.35); }
+.t-agent { color: var(--violet); background: rgba(167,139,250,.12); border-color: rgba(167,139,250,.4); }
+.t-gate { color: var(--amber); background: rgba(251,191,36,.1); border-color: rgba(251,191,36,.38); }
+.t-ext { color: var(--pink); background: rgba(244,114,182,.1); border-color: rgba(244,114,182,.38); }
+.t-red { color: var(--red); background: rgba(251,113,133,.1); border-color: rgba(251,113,133,.4); }
+.glow-code { box-shadow: 0 0 0 1px rgba(34,211,238,.55), 0 0 60px -12px rgba(34,211,238,.7); }
+.glow-model { box-shadow: 0 0 0 1px rgba(52,211,153,.55), 0 0 60px -12px rgba(52,211,153,.7); }
+.glow-agent { box-shadow: 0 0 0 1px rgba(167,139,250,.6), 0 0 60px -12px rgba(167,139,250,.8); }
+.glow-gate { box-shadow: 0 0 0 1px rgba(251,191,36,.55), 0 0 60px -12px rgba(251,191,36,.7); }
+.glow-ext { box-shadow: 0 0 0 1px rgba(244,114,182,.55), 0 0 60px -12px rgba(244,114,182,.7); }
+.ct { font: 700 28px/1.2 var(--body); }
+.cs { font-size: 20px; line-height: 1.45; color: var(--muted); margin-top: 8px; }
+
+/* линии потока */
+svg.wires { position: absolute; inset: 0; width: 1920px; height: 1080px; pointer-events: none; overflow: visible; }
+.wire { fill: none; stroke: rgba(255,255,255,.14); stroke-width: 2.5; }
+.flow { fill: none; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 2 14; animation: dash 1s linear infinite; }
+@keyframes dash { to { stroke-dashoffset: -16; } }
+.route { fill: none; stroke: rgba(255,255,255,.08); stroke-width: 2.5; transition: stroke .6s, stroke-width .6s, opacity .6s; }
+.route.on { stroke: var(--rc, var(--cyan)); stroke-width: 3; stroke-dasharray: 3 12; animation: dash .9s linear infinite; filter: drop-shadow(0 0 6px var(--rc, var(--cyan))); }
+
+/* интерфейс */
+.chrome { transition: opacity .4s; }
+body.clean .chrome { opacity: 0; pointer-events: none; }
+.progress { position: fixed; left: 0; top: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cyan), var(--violet), var(--pink)); box-shadow: 0 0 14px var(--violet); transition: width .6s var(--ease); z-index: 5; }
+.brand { position: fixed; left: 24px; bottom: 18px; font: 600 13px/1 var(--mono); letter-spacing: .14em; color: var(--dim); text-transform: uppercase; z-index: 5; }
+.counter { position: fixed; right: 24px; bottom: 18px; font: 600 13px/1 var(--mono); letter-spacing: .1em; color: var(--dim); z-index: 5; }
+.hint { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); font: 500 13px/1 var(--body); color: var(--muted); background: rgba(255,255,255,.06); border: 1px solid var(--line); padding: 8px 14px; border-radius: 999px; z-index: 5; transition: opacity .8s; }
+.hint.gone { opacity: 0; }
+.notes { position: fixed; left: 50%; bottom: 44px; transform: translate(-50%, 20px); width: min(1100px, 92vw); background: rgba(12,12,20,.92); border: 1px solid rgba(255,255,255,.14); border-radius: 16px; padding: 16px 20px; font-size: 18px; line-height: 1.5; color: #E6E4F5; opacity: 0; pointer-events: none; transition: opacity .3s, transform .3s; z-index: 6; backdrop-filter: blur(10px); }
+.notes b { display: block; font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+body.show-notes .notes { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- 1. Титул ---------- */
+.s-title .kicker { position: absolute; left: 160px; top: 230px; }
+.mega { position: absolute; left: 150px; top: 300px; margin: 0; font: 800 236px/1 var(--display); letter-spacing: -.04em; background: linear-gradient(100deg, #67e8f9 0%, #a78bfa 40%, #f472b6 75%, #fbbf24 100%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: sheen 8s ease-in-out infinite alternate; filter: drop-shadow(0 20px 60px rgba(167,139,250,.35)); }
+.mega.a.on { filter: drop-shadow(0 20px 60px rgba(167,139,250,.35)); }
+@keyframes sheen { to { background-position: 100% 0; } }
+.s-title .lead { position: absolute; left: 160px; top: 580px; margin: 0; font: 600 46px/1.3 var(--body); max-width: 1300px; }
+.s-title .chips { position: absolute; left: 160px; top: 740px; display: flex; gap: 14px; }
+.s-title .chips span { font: 600 19px/1 var(--mono); padding: 12px 18px; border-radius: 999px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.05); color: #DDDAF5; }
+.rail { position: absolute; left: 160px; right: 160px; top: 880px; height: 70px; }
+.rail::before { content: ""; position: absolute; left: 0; right: 0; top: 18px; height: 2px; background: linear-gradient(90deg, rgba(103,232,249,.4), rgba(167,139,250,.4), rgba(244,114,182,.4)); }
+.rail .pulse { position: absolute; top: 9px; left: 0; width: 160px; height: 20px; border-radius: 10px; background: radial-gradient(closest-side, rgba(255,255,255,.95), rgba(167,139,250,.5), transparent); animation: run 4.5s cubic-bezier(.5,0,.5,1) infinite; }
+@keyframes run { from { transform: translateX(-80px); } to { transform: translateX(1520px); } }
+.rail .st { position: absolute; top: 8px; width: 22px; height: 22px; margin-left: -11px; border-radius: 50%; background: #14131f; border: 2px solid rgba(255,255,255,.35); animation: blink 4.5s infinite; }
+.rail .st em { position: absolute; top: 34px; left: 50%; transform: translateX(-50%); font: 600 15px/1 var(--mono); font-style: normal; color: var(--dim); }
+@keyframes blink { 0%, 100% { border-color: rgba(255,255,255,.35); box-shadow: none; } 8% { border-color: #fff; box-shadow: 0 0 22px #a78bfa, 0 0 6px #fff; background: #a78bfa; } 20% { border-color: rgba(255,255,255,.35); box-shadow: none; background: #14131f; } }
+
+/* ---------- 2. Проблема ---------- */
+.tl { position: absolute; left: 200px; right: 200px; top: 520px; height: 4px; background: linear-gradient(90deg, rgba(52,211,153,.6), rgba(251,191,36,.6), rgba(251,113,133,.8)); border-radius: 2px; }
+.station { position: absolute; top: 470px; width: 380px; margin-left: -190px; text-align: center; }
+.station .dot { width: 34px; height: 34px; margin: 33px auto 0; border-radius: 50%; background: #0d0c16; border: 3px solid rgba(255,255,255,.5); }
+.station .nm { font: 700 30px/1.2 var(--display); margin-top: 26px; }
+.station .cost { font-size: 22px; color: var(--muted); margin-top: 12px; line-height: 1.4; }
+.station.hot .dot { border-color: var(--red); box-shadow: 0 0 0 8px rgba(251,113,133,.15), 0 0 40px var(--red); }
+.bug { position: absolute; top: 503px; left: 200px; width: 38px; height: 38px; margin-left: -19px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 10px rgba(251,113,133,.18), 0 0 50px var(--red); transition: left 2.2s cubic-bezier(.6,0,.3,1); z-index: 2; }
+.bug::after { content: "дефект в ТЗ"; position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); font: 600 18px/1 var(--mono); color: var(--red); white-space: nowrap; }
+.bug.on { left: 1720px; }
+.slide.active .bug { animation: bugin .7s var(--ease) .9s both; }
+@keyframes bugin { from { opacity: 0; transform: scale(.3); } to { opacity: 1; transform: none; } }
+.boom { position: absolute; left: 1720px; top: 522px; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; border: 3px solid var(--red); opacity: 0; }
+.boom.on { animation: boom 1.6s 2s var(--ease) both; }
+@keyframes boom { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(26); } }
+.example { left: 200px; right: 200px; top: 790px; height: 170px; display: flex; align-items: center; gap: 34px; padding: 0 40px; }
+.example .lab { font: 600 16px/1.4 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); width: 250px; flex: none; }
+.req { flex: 1; padding: 22px 26px; border-radius: 18px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.12); font-size: 25px; line-height: 1.35; }
+.req b { font-family: var(--mono); color: var(--amber); margin-right: 10px; }
+.vs { font: 800 44px/1 var(--display); color: var(--red); text-shadow: 0 0 30px var(--red); animation: zap 1.4s ease-in-out infinite; }
+@keyframes zap { 50% { opacity: .45; transform: scale(.9); } }
+
+/* ---------- 3. Отчёт ---------- */
+.chain { position: absolute; left: 140px; top: 330px; width: 780px; display: flex; flex-direction: column; gap: 18px; }
+.chain .it { display: flex; align-items: center; gap: 22px; padding: 20px 26px; border-radius: 20px; background: linear-gradient(90deg, rgba(255,255,255,.07), rgba(255,255,255,.015)); border: 1px solid rgba(255,255,255,.1); }
+.chain .n { width: 54px; height: 54px; flex: none; border-radius: 16px; display: grid; place-items: center; font: 700 24px/1 var(--display); color: #0b0a12; }
+.chain .it div b { display: block; font-size: 28px; font-weight: 700; }
+.chain .it div span { font-size: 20px; color: var(--muted); }
+.shot { position: absolute; left: 990px; top: 300px; width: 800px; perspective: 1600px; }
+.shot .frame { border-radius: 22px; overflow: hidden; border: 1px solid rgba(255,255,255,.16); transform: rotateY(-14deg) rotateX(4deg); transform-origin: left center; box-shadow: 0 60px 120px -40px rgba(0,0,0,.9), 0 0 120px -30px rgba(167,139,250,.7); transition: transform 1.2s var(--ease); }
+.shot.on .frame { transform: rotateY(-7deg) rotateX(2deg); }
+.shot img { display: block; width: 100%; }
+.shot .cap { margin-top: 26px; font-size: 20px; color: var(--muted); text-align: center; }
+.proof { position: absolute; left: 140px; top: 930px; font-size: 24px; color: var(--ink); }
+.proof b { color: var(--green); }
+
+/* ---------- 4. Архитектура ---------- */
+.phase { top: 330px; width: 380px; height: 470px; padding: 30px; }
+.phase .num { font: 800 84px/1 var(--display); opacity: .9; }
+.phase .pn { font: 700 30px/1.2 var(--display); margin-top: 14px; }
+.phase .pc { font: 600 17px/1 var(--mono); color: var(--muted); margin-top: 10px; letter-spacing: .08em; }
+.phase ul { list-style: none; margin: 26px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.phase li { display: flex; align-items: center; gap: 12px; font-size: 21px; line-height: 1.25; }
+.phase li .k { font: 600 15px/1 var(--mono); color: var(--muted); width: 40px; flex: none; }
+.phase li .tag { padding: 5px 8px; font-size: 12px; margin-left: auto; }
+.ph1 .num { color: var(--cyan); } .ph2 .num { color: var(--green); } .ph3 .num { color: var(--violet); } .ph4 .num { color: var(--amber); }
+.ph1 { border-top: 3px solid var(--cyan); } .ph2 { border-top: 3px solid var(--green); } .ph3 { border-top: 3px solid var(--violet); } .ph4 { border-top: 3px solid var(--amber); }
+.docline { position: absolute; left: 140px; right: 140px; top: 852px; height: 3px; background: rgba(255,255,255,.1); border-radius: 2px; }
+.docline i { position: absolute; top: -9px; width: 120px; height: 21px; border-radius: 12px; background: radial-gradient(closest-side, #fff, rgba(103,232,249,.6), transparent); animation: doc 5s cubic-bezier(.6,0,.4,1) infinite; }
+@keyframes doc { from { left: -60px; } to { left: calc(100% - 60px); } }
+.docline span { position: absolute; top: 20px; font: 600 16px/1 var(--mono); color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+.banner { position: absolute; left: 140px; right: 140px; top: 920px; padding: 22px 30px; border-radius: 18px; background: linear-gradient(90deg, rgba(34,211,238,.14), rgba(167,139,250,.14)); border: 1px solid rgba(167,139,250,.35); font-size: 25px; line-height: 1.4; }
+.banner b { color: #fff; }
+
+/* ---------- 5. Форматы ---------- */
+.pill { position: absolute; left: 140px; width: 260px; height: 54px; border-radius: 14px; display: flex; align-items: center; gap: 14px; padding: 0 18px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); font: 600 20px/1 var(--mono); }
+.pill i { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.reader { left: 620px; width: 540px; height: 112px; padding: 16px 22px; opacity: .38; filter: saturate(.3); transition: opacity .6s, filter .6s, box-shadow .6s; }
+.reader.on { opacity: 1; filter: none; }
+.reader .ct { font-size: 24px; display: flex; align-items: center; gap: 12px; }
+.reader .ct .tag { margin-left: auto; padding: 6px 9px; font-size: 12px; }
+.reader .cs { font-size: 18px; margin-top: 6px; }
+.merge { position: absolute; left: 1214px; top: 446px; width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; text-align: center; font: 600 14px/1.2 var(--mono); color: var(--ink); background: rgba(34,211,238,.1); border: 1px solid rgba(34,211,238,.45); opacity: .35; transition: opacity .6s, box-shadow .6s; }
+.merge.on { opacity: 1; box-shadow: 0 0 50px -6px rgba(34,211,238,.8); }
+.out { left: 1420px; top: 500px; width: 360px; height: 220px; padding: 28px; }
+.out .ct { font-size: 30px; }
+.out .file { font: 600 17px/1 var(--mono); color: var(--cyan); margin-top: 18px; }
+.callout { left: 1340px; top: 770px; width: 440px; padding: 22px 24px; font-size: 19px; line-height: 1.45; color: #E6E4F5; border-color: rgba(251,191,36,.4) !important; }
+.callout b { display: block; font: 600 14px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--amber); margin-bottom: 10px; }
+
+/* ---------- 6. База ---------- */
+.col { top: 330px; width: 500px; height: 560px; padding: 28px; }
+.col .ct { margin-top: 16px; }
+.viz { position: absolute; left: 28px; right: 28px; top: 150px; height: 290px; border-radius: 18px; background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.07); overflow: hidden; }
+.col .cap { position: absolute; left: 28px; right: 28px; bottom: 26px; font-size: 19px; line-height: 1.4; color: var(--muted); }
+.lines { padding: 24px 24px; display: flex; flex-direction: column; gap: 13px; }
+.ln { height: 13px; flex: none; border-radius: 7px; background: rgba(255,255,255,.2); position: relative; transition: background .5s, box-shadow .5s; }
+.ln.req { transition-delay: calc(var(--d) * 300ms + 600ms); }
+.on .ln.req, .ln.req.on { background: rgba(52,211,153,.55); box-shadow: 0 0 18px rgba(52,211,153,.6); }
+.ln.req::after { content: attr(data-r); position: absolute; right: -6px; top: 50%; transform: translate(100%, -50%); font: 600 13px/1 var(--mono); color: var(--green); opacity: 0; transition: opacity .5s; transition-delay: inherit; }
+.on .ln.req::after { opacity: 1; }
+.lines { padding-right: 60px; }
+.facts { width: 100%; border-collapse: collapse; font: 500 15px/1.3 var(--mono); }
+.facts th { text-align: left; font-weight: 600; color: var(--dim); padding: 14px 10px 10px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+.facts td { padding: 12px 10px; border-top: 1px solid rgba(255,255,255,.07); color: #DCD9F2; }
+.facts td.u { transition: color .5s, background .5s; border-radius: 6px; }
+.unit-alert .facts td.u.bad { color: #fff; background: rgba(251,113,133,.3); }
+.alert { position: absolute; left: 14px; right: 14px; bottom: 14px; padding: 10px 14px; border-radius: 12px; background: rgba(251,113,133,.14); border: 1px solid rgba(251,113,133,.45); font: 600 15px/1.35 var(--mono); color: #FFD0D9; }
+.cells { display: grid; grid-template-columns: repeat(8, 1fr); gap: 9px; padding: 24px; }
+.cells i { height: 34px; border-radius: 8px; background: rgba(255,255,255,.07); animation: wave 3.2s ease-in-out infinite; animation-delay: calc(var(--i) * 280ms); }
+.cells i.c1 { --cc: rgba(167,139,250,.85); } .cells i.c2 { --cc: rgba(244,114,182,.85); } .cells i.c3 { --cc: rgba(34,211,238,.85); }
+@keyframes wave { 0%, 60%, 100% { background: rgba(255,255,255,.07); box-shadow: none; } 20% { background: var(--cc); box-shadow: 0 0 16px var(--cc); } }
+.leg { display: flex; gap: 14px; flex-wrap: wrap; padding: 0 24px; font: 500 14px/1.3 var(--mono); color: var(--muted); }
+.leg span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; background: var(--cc); }
+.basecap { position: absolute; left: 140px; right: 140px; top: 940px; text-align: center; font: 700 30px/1.3 var(--display); }
+
+/* ---------- 7. Ячейка ---------- */
+.role { top: 450px; width: 280px; height: 180px; padding: 22px; }
+.role .ct { font-size: 27px; margin-top: 16px; }
+.role .cs { font-size: 17px; }
+.frame-n { position: absolute; left: 110px; top: 390px; width: 1480px; height: 340px; border-radius: 30px; border: 1.5px dashed rgba(167,139,250,.5); }
+.frame-n.copy { border-style: solid; border-color: rgba(167,139,250,.18); }
+.frame-n.c1 { transform: translate(14px, 14px); } .frame-n.c2 { transform: translate(28px, 28px); }
+.frame-n .nlab { position: absolute; right: 26px; top: -18px; padding: 6px 14px; border-radius: 999px; background: #1a1430; border: 1px solid rgba(167,139,250,.6); font: 600 17px/1 var(--mono); color: var(--violet); }
+.basepill { position: absolute; left: 160px; top: 318px; width: 240px; height: 50px; border-radius: 25px; display: grid; place-items: center; font: 700 20px/1 var(--body); color: var(--pink); background: rgba(244,114,182,.1); border: 1px solid rgba(244,114,182,.45); }
+.token { position: absolute; left: 0; top: 0; width: 140px; height: 40px; border-radius: 12px; display: grid; place-items: center; font: 600 16px/1 var(--mono); color: #06060b; background: var(--green); box-shadow: 0 0 30px rgba(52,211,153,.8); opacity: 0; }
+.slide.active .token.ta { animation: tokA 9s var(--ease) infinite; }
+.slide.active .token.tb { background: var(--red); box-shadow: 0 0 30px rgba(251,113,133,.8); animation: tokB 9s var(--ease) 4.5s infinite; }
+@keyframes tokA {
+  0% { transform: translate(210px, 652px); opacity: 0; } 5%, 13% { transform: translate(210px, 652px); opacity: 1; }
+  24%, 32% { transform: translate(590px, 652px); } 43%, 51% { transform: translate(970px, 652px); }
+  62%, 70% { transform: translate(1350px, 652px); } 84%, 94% { transform: translate(1640px, 520px); opacity: 1; } 100% { transform: translate(1640px, 520px); opacity: 0; }
+}
+@keyframes tokB {
+  0% { transform: translate(210px, 652px); opacity: 0; } 5%, 13% { transform: translate(210px, 652px); opacity: 1; }
+  24%, 32% { transform: translate(590px, 652px); } 43%, 51% { transform: translate(970px, 652px); }
+  62%, 70% { transform: translate(1350px, 652px); } 84%, 92% { transform: translate(1350px, 766px); opacity: 1; } 100% { transform: translate(1350px, 766px); opacity: 0; }
+}
+.exit { position: absolute; left: 1620px; top: 513px; width: 180px; height: 54px; border-radius: 27px; display: grid; place-items: center; font: 700 20px/1 var(--body); color: var(--green); border: 1px solid rgba(52,211,153,.5); background: rgba(52,211,153,.1); }
+.reject { position: absolute; left: 1300px; top: 760px; width: 260px; height: 52px; border-radius: 26px; display: grid; place-items: center; font: 600 18px/1 var(--body); color: var(--red); border: 1px solid rgba(251,113,133,.5); background: rgba(251,113,133,.1); }
+.lbl { position: absolute; font: 500 16px/1.2 var(--mono); color: var(--muted); }
+.calib { position: absolute; left: 140px; right: 140px; top: 860px; height: 110px; border-radius: 22px; display: flex; align-items: center; gap: 30px; padding: 0 34px; background: linear-gradient(90deg, rgba(52,211,153,.14), rgba(167,139,250,.1)); border: 1px solid rgba(52,211,153,.4); }
+.calib .ct { font-size: 26px; }
+.calib .cs { margin: 4px 0 0; font-size: 18px; }
+.calib .big { margin-left: auto; font: 800 44px/1 var(--display); white-space: nowrap; }
+.calib .big small { font: 500 18px/1 var(--mono); color: var(--muted); margin-right: 14px; }
+
+/* ---------- 8. Принцип ---------- */
+.half { top: 350px; width: 790px; height: 370px; padding: 36px 40px; }
+.half .hd { font: 800 46px/1 var(--display); }
+.half .hs { font: 600 18px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-top: 14px; }
+.half ul { list-style: none; padding: 0; margin: 30px 0 0; display: flex; flex-direction: column; gap: 16px; }
+.half li { font-size: 25px; display: flex; gap: 14px; align-items: baseline; }
+.half li::before { content: ""; width: 10px; height: 10px; border-radius: 50%; flex: none; transform: translateY(-3px); background: var(--bc); box-shadow: 0 0 12px var(--bc); }
+.hm { --bc: var(--violet); border-color: rgba(167,139,250,.35) !important; }
+.hc { --bc: var(--cyan); border-color: rgba(34,211,238,.35) !important; }
+.hm .hd { color: #C4B5FD; } .hc .hd { color: #67E8F9; }
+.qstrip { left: 140px; right: 140px; top: 760px; height: 190px; padding: 30px 36px; }
+.qstrip .doc { font: 500 23px/1.5 var(--mono); color: #CFCBE8; position: relative; }
+.mark { position: relative; padding: 2px 4px; border-radius: 6px; background-image: linear-gradient(90deg, rgba(52,211,153,.45), rgba(52,211,153,.45)); background-size: 0% 100%; background-repeat: no-repeat; transition: background-size 1.2s var(--ease) .6s; }
+.qstrip.on .mark { background-size: 100% 100%; }
+.verdicts { display: flex; gap: 20px; margin-top: 22px; }
+.vd { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-radius: 14px; font-size: 20px; border: 1px solid; }
+.vd.ok { color: #A7F3D0; border-color: rgba(52,211,153,.5); background: rgba(52,211,153,.08); }
+.vd.no { color: #FECDD3; border-color: rgba(251,113,133,.5); background: rgba(251,113,133,.08); }
+.vd code { font-family: var(--mono); font-size: 18px; }
+
+/* ---------- 9. Вопросы ---------- */
+.fcard { left: 140px; top: 330px; width: 560px; height: 230px; padding: 28px; }
+.qcard { left: 780px; top: 330px; width: 640px; height: 230px; padding: 28px; }
+.acard { left: 780px; top: 630px; width: 640px; height: 180px; padding: 26px 28px; border-color: rgba(244,114,182,.45) !important; }
+.rcard { left: 140px; top: 630px; width: 560px; height: 290px; padding: 26px 28px; }
+.qtext { font-size: 27px; line-height: 1.4; margin-top: 18px; }
+.metas { display: flex; gap: 10px; flex-wrap: wrap; }
+.channels { position: absolute; left: 780px; top: 832px; display: flex; gap: 10px; }
+.channels span { font: 600 16px/1 var(--mono); padding: 10px 14px; border-radius: 999px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.15); color: #DDD9F5; }
+.outs { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.outs div { font-size: 20px; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: var(--muted); }
+.outs div.act { color: #fff; background: rgba(52,211,153,.12); border-color: rgba(52,211,153,.5); }
+.stat { left: 1500px; width: 280px; height: 250px; padding: 28px; text-align: center; }
+.stat .v { font: 800 96px/1 var(--display); margin-top: 18px; }
+.stat .l { font-size: 20px; color: var(--muted); margin-top: 12px; line-height: 1.35; }
+
+/* ---------- 10. Цикл ---------- */
+.loop { position: absolute; left: 290px; top: 380px; width: 540px; height: 540px; }
+.loop svg { position: absolute; inset: -40px; width: 620px; height: 620px; overflow: visible; }
+.loop .spin { transform-origin: 310px 310px; animation: spin 7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.lnode { position: absolute; width: 240px; height: 76px; margin: -38px 0 0 -120px; border-radius: 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; font: 700 21px/1.15 var(--body); text-align: center; background: rgba(14,13,24,.85); border: 1px solid rgba(255,255,255,.16); backdrop-filter: blur(8px); }
+.lnode small { display: block; font: 500 14px/1.2 var(--mono); color: var(--muted); }
+.lcenter { position: absolute; left: 270px; top: 270px; transform: translate(-50%, -50%); text-align: center; width: 300px; }
+.lcenter .v { font: 800 110px/1 var(--display); }
+.lcenter .l { font-size: 21px; color: var(--muted); margin-top: 10px; line-height: 1.35; }
+.rules { position: absolute; left: 1010px; top: 330px; width: 770px; display: flex; flex-direction: column; gap: 16px; }
+.rule { display: flex; gap: 18px; align-items: flex-start; padding: 18px 22px; border-radius: 18px; background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.1); font-size: 22px; line-height: 1.4; }
+.rule i { width: 38px; height: 38px; flex: none; border-radius: 12px; display: grid; place-items: center; font: 700 17px/1 var(--display); font-style: normal; color: #06060b; }
+.rule b { color: #fff; }
+
+/* ---------- 11. Прогресс ---------- */
+.chartc { left: 140px; top: 320px; width: 960px; height: 640px; padding: 26px 30px; }
+.chartc svg { width: 900px; height: 504px; margin-top: 10px; overflow: visible; }
+.axis { stroke: rgba(255,255,255,.08); stroke-width: 1; }
+.axl { font: 500 15px var(--mono); fill: var(--dim); }
+.draw { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: var(--len, 2000); stroke-dashoffset: var(--len, 2000); transition: stroke-dashoffset 2.6s var(--ease) .4s; }
+.draw.on { stroke-dashoffset: 0; }
+.pt { opacity: 0; transition: opacity .4s; }
+.pts.on .pt { opacity: 1; transition-delay: calc(var(--i) * 210ms + 600ms); }
+.ann { opacity: 0; transition: opacity .6s 2.6s; }
+.ann.on { opacity: 1; }
+.annt { font: 600 16px var(--mono); }
+.legend2 { display: flex; gap: 26px; font: 600 17px/1 var(--mono); color: var(--muted); }
+.legend2 span::before { content: ""; display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin-right: 10px; vertical-align: middle; background: var(--lc); }
+.kpis { position: absolute; left: 1160px; top: 320px; width: 620px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.kpi { position: relative; height: 310px; padding: 26px; border-radius: 24px; background: linear-gradient(180deg, rgba(255,255,255,.075), rgba(255,255,255,.02)); border: 1px solid rgba(255,255,255,.11); overflow: hidden; }
+.kpi .l { font: 600 15px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.kpi .from { font: 600 28px/1 var(--display); color: var(--dim); margin-top: 26px; text-decoration: line-through; text-decoration-thickness: 2px; }
+.kpi .v { font: 800 64px/1 var(--display); margin-top: 12px; white-space: nowrap; }
+.kpi .s { font-size: 17px; color: var(--muted); margin-top: 14px; line-height: 1.35; }
+.kpi::after { content: ""; position: absolute; right: -60px; top: -60px; width: 180px; height: 180px; border-radius: 50%; background: radial-gradient(circle, var(--kc), transparent 65%); opacity: .45; }
+
+/* ---------- 12. Итог ---------- */
+.nums { position: absolute; left: 140px; right: 140px; top: 330px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+.num4 { height: 220px; padding: 26px 28px; border-radius: 24px; background: linear-gradient(180deg, rgba(255,255,255,.075), rgba(255,255,255,.02)); border: 1px solid rgba(255,255,255,.11); }
+.num4 .v { font: 800 92px/1 var(--display); }
+.num4 .l { font-size: 22px; color: var(--muted); margin-top: 14px; line-height: 1.3; }
+.verdict { position: absolute; left: 140px; right: 140px; top: 590px; padding: 30px 36px; border-radius: 24px; display: flex; align-items: center; gap: 34px; background: linear-gradient(90deg, rgba(52,211,153,.16), rgba(34,211,238,.1)); border: 1px solid rgba(52,211,153,.5); box-shadow: 0 0 80px -30px rgba(52,211,153,.8); }
+.verdict .big { font: 800 70px/1 var(--display); white-space: nowrap; }
+.verdict .t { font-size: 27px; line-height: 1.4; }
+.verdict .t span { color: var(--muted); }
+.cta { position: absolute; left: 140px; right: 140px; top: 790px; display: flex; gap: 22px; align-items: stretch; }
+.term { flex: 1; padding: 24px 28px; border-radius: 20px; background: #0b0a12; border: 1px solid rgba(255,255,255,.14); font: 500 18px/1.6 var(--mono); color: #E6E4F5; overflow: hidden; white-space: nowrap; }
+.term .p { color: var(--green); margin-right: 12px; }
+.term .typed { display: inline-block; overflow: hidden; vertical-align: bottom; max-width: 0; transition: max-width 2.8s steps(90, end) .5s; }
+.term.on .typed { max-width: 1400px; }
+.term .cur { display: inline-block; width: 11px; height: 24px; background: var(--green); vertical-align: middle; margin-left: 4px; animation: cur 1s steps(1) infinite; }
+@keyframes cur { 50% { opacity: 0; } }
+.term .repo { display: block; color: var(--muted); font-size: 18px; margin-top: 8px; }
+.thanks { width: 300px; flex: none; border-radius: 20px; display: grid; place-items: center; font: 800 46px/1 var(--display); background: linear-gradient(135deg, rgba(167,139,250,.25), rgba(244,114,182,.2)); border: 1px solid rgba(244,114,182,.45); }
+</style>
+</head>
+<body data-accent="0">
+<div class="aurora"><i></i><i></i><i></i></div>
+<div class="grid"></div>
+<div class="vignette"></div>
+
+<div class="viewport"><div class="stage" id="stage">
+
+<!-- 1 · Титул -->
+<section class="slide s-title" data-accent="0" data-notes="Привет! Мы — команда Specula. Наш агент читает документ требований и находит в нём дефекты до того, как по нему начнут писать код.">
+  <div class="a kicker" style="--d:0"><i></i>BCC-HUB × MNU FinTech Hackathon</div>
+  <h1 class="a mega" style="--d:1">Specula</h1>
+  <p class="a lead" style="--d:2">Агент, который находит дефекты в&nbsp;ТЗ<br><span class="grad">до&nbsp;того, как по&nbsp;нему начнут писать код</span></p>
+  <div class="a chips" style="--d:3"><span>ISO/IEC/IEEE 29148</span><span>IEEE 830</span><span>Gemini 3.1 Pro</span><span>PydanticAI</span></div>
+  <div class="a rail" style="--d:4">
+    <div class="pulse"></div>
+    <span class="st" style="left:0%;animation-delay:0s"><em>s0</em></span>
+    <span class="st" style="left:11.1%;animation-delay:.45s"><em>s1</em></span>
+    <span class="st" style="left:22.2%;animation-delay:.9s"><em>s2</em></span>
+    <span class="st" style="left:33.3%;animation-delay:1.35s"><em>s3</em></span>
+    <span class="st" style="left:44.4%;animation-delay:1.8s"><em>s4</em></span>
+    <span class="st" style="left:55.5%;animation-delay:2.25s"><em>s5</em></span>
+    <span class="st" style="left:66.6%;animation-delay:2.7s"><em>s6</em></span>
+    <span class="st" style="left:77.7%;animation-delay:3.15s"><em>s7</em></span>
+    <span class="st" style="left:88.8%;animation-delay:3.6s"><em>s8</em></span>
+    <span class="st" style="left:100%;animation-delay:4.05s"><em>s9</em></span>
+  </div>
+</section>
+
+<!-- 2 · Проблема -->
+<section class="slide" data-accent="1" data-notes="Противоречие между разделами ТЗ обычно всплывает на тестировании, когда код уже написан, и исправлять приходится код, тесты и сроки. Пример из документа организаторов: Ф-3 обещает один push в месяц, а Ф-4 — push после смены порога. Агент нашёл это до разработки.">
+  <div class="head">
+    <div class="a kicker" style="--d:0"><i></i>Проблема</div>
+    <h2 class="a" style="--d:1">Дефект в ТЗ дешевле всего поймать <span class="grad">до&nbsp;первой строки кода</span></h2>
+  </div>
+  <div class="a tl" style="--d:2"></div>
+  <div class="a station" style="left:200px;--d:3"><div class="dot"></div><div class="nm">ТЗ</div><div class="cost">исправить одну строку</div></div>
+  <div class="a station" style="left:960px;--d:4"><div class="dot"></div><div class="nm">Разработка</div><div class="cost">переписать код</div></div>
+  <div class="a station hot" style="left:1720px;--d:5"><div class="dot"></div><div class="nm">Тестирование</div><div class="cost">переписать код и тесты,<br>сдвинуть релиз</div></div>
+  <div class="bug" data-step="1"></div>
+  <div class="boom" data-step="1"></div>
+  <div class="a card example" data-step="2" style="--d:0">
+    <div class="lab">документ организаторов · найдено агентом</div>
+    <div class="req"><b>Ф-3</b>один push в&nbsp;месяц</div>
+    <div class="vs">↯</div>
+    <div class="req"><b>Ф-4</b>push после смены порога</div>
+  </div>
+</section>
+
+<!-- 3 · Что на выходе -->
+<section class="slide" data-accent="2" data-notes="На входе — документ в любом формате. На выходе — отчёт на русском: дефект, дословная цитата, пункт стандарта 29148 или 830, правка и вопрос автору. Каждая находка подкреплена цитатой, которую проверил код.">
+  <div class="head">
+    <div class="a kicker" style="--d:0"><i></i>Результат</div>
+    <h2 class="a" style="--d:1">Каждая находка — <span class="grad">с&nbsp;доказательством</span></h2>
+  </div>
+  <div class="chain">
+    <div class="a it left" style="--d:2"><div class="n" style="background:var(--red)">1</div><div><b>Дефект и критерий</b><span>19 критериев качества по 29148 и IEEE 830</span></div></div>
+    <div class="a it left" style="--d:3"><div class="n" style="background:var(--amber)">2</div><div><b>Дословная цитата</b><span>код проверяет, что она есть в документе</span></div></div>
+    <div class="a it left" style="--d:4"><div class="n" style="background:var(--cyan)">3</div><div><b>Пункт стандарта</b><span>29148 п. 5.2.5–5.2.6, IEEE 830 п. 4.3</span></div></div>
+    <div class="a it left" style="--d:5"><div class="n" style="background:var(--green)">4</div><div><b>Правка текста</b><span>что именно переписать в ТЗ</span></div></div>
+    <div class="a it left" style="--d:6"><div class="n" style="background:var(--pink)">5</div><div><b>Вопрос автору</b><span>с адресатом и флагом «блокирует разработку»</span></div></div>
+  </div>
+  <div class="a shot right" style="--d:3">
+    <div class="frame"><img src="img/report.png" alt="Отчёт Specula в веб-интерфейсе"></div>
+    <div class="cap">Отчёт в веб-интерфейсе · тот же отчёт в Markdown и одном HTML-файле</div>
+  </div>
+</section>
+
+<!-- 4 · Архитектура -->
+<section class="slide" data-accent="3" data-notes="Внутри десять этапов в четырёх фазах: чтение файла, база документа и план проверки, проверка ячейками агентов и выдача. Каждый этап пишет артефакт на диск, поэтому любой шаг можно перезапустить с середины и проверить отдельно.">
+  <div class="head">
+    <div class="a kicker" style="--d:0"><i></i>Архитектура</div>
+    <h2 class="a" style="--d:1">10 этапов, <span class="grad">4 фазы</span>, один путь документа</h2>
+  </div>
+  <div class="a card phase ph1 pop" style="left:140px;--d:2"><div class="num">01</div><div class="pn">Чтение файла</div><div class="pc">s0–s1</div>
+    <ul><li><span class="k">s0</span>Приёмка<span class="tag t-code">код</span></li><li><span class="k">s1</span>До трёх прочтений и сверка<span class="tag t-model">VLM</span></li></ul></div>
+  <div class="a card phase ph2 pop" style="left:560px;--d:3"><div class="num">02</div><div class="pn">База и план</div><div class="pc">s2–s4</div>
+    <ul><li><span class="k">s2</span>Профиль и нарезка<span class="tag t-model">модель</span></li><li><span class="k">s3</span>Таблица фактов<span class="tag t-model">модель</span></li><li><span class="k">s4</span>План ячеек<span class="tag t-code">код</span></li></ul></div>
+  <div class="a card phase ph3 pop" style="left:980px;--d:4"><div class="num">03</div><div class="pn">Проверка ячеек</div><div class="pc">s5–s6</div>
+    <ul><li><span class="k">s5</span>Аналитики по ячейкам<span class="tag t-agent">агенты</span></li><li><span class="k">s6</span>Оппонент и арбитр<span class="tag t-agent">агенты</span></li><li><span class="k">s6</span>Калибровка серьёзности<span class="tag t-model">модель</span></li></ul></div>
+  <div class="a card phase ph4 pop" style="left:1400px;--d:5"><div class="num">04</div><div class="pn">Доказательство и выдача</div><div class="pc">s7–s9</div>
+    <ul><li><span class="k">s7</span>Гейты цитат<span class="tag t-gate">гейт</span></li><li><span class="k">s8</span>Редактор и вопросы<span class="tag t-model">модель</span></li><li><span class="k">s8b</span>Перепроверка по ответам<span class="tag t-model">модель</span></li><li><span class="k">s9</span>Отчёт<span class="tag t-code">код</span></li></ul></div>
+  <div class="a docline" style="--d:6"><i></i><span style="left:0">документ</span><span style="right:0">отчёт</span></div>
+  <div class="a banner" data-step="1"><b>Каждый этап пишет артефакт на диск:</b> перезапуск с середины бесплатен, любой этап проверяется отдельно, кэш ответов модели делает повторный прогон почти бесплатным</div>
+</section>
+
+<!-- 5 · Любой формат -->
+<section class="slide" data-accent="4" data-notes="Формат заранее неизвестен. PDF читаем тремя способами: текстовый слой через PyMuPDF, структуру через Docling и зрением — VLM для сканов и картинок. Прочтения сверяются между собой. Markdown, TXT, HTML и RTF идут построчным читателем, DOCX — через XML документа.">
+  <div class="head">
+    <div class="a kicker" style="--d:0"><i></i>s0–s1 · Чтение</div>
+    <h2 class="a" style="--d:1">Любой формат: <span class="grad">у&nbsp;каждого свой путь</span></h2>
+  </div>
+  <svg class="wires" viewBox="0 0 1920 1080">
+    <path class="route" style="--rc:var(--cyan)" data-step="1" d="M400 357 C510 357, 510 370, 616 370"/>
+    <path class="route" style="--rc:var(--cyan)" data-step="1" d="M400 357 C510 357, 510 492, 616 492"/>
+    <path class="route" style="--rc:var(--green)" data-step="1" d="M400 357 C510 357, 510 614, 616 614"/>
+    <path class="route" style="--rc:var(--green)" data-step="1" d="M400 425 C510 425, 510 614, 616 614"/>
+    <path class="route" style="--rc:var(--green)" data-step="1" d="M400 493 C510 493, 510 614, 616 614"/>
+    <path class="route" style="--rc:var(--cyan)" data-step="1" d="M1160 370 C1190 370, 1190 480, 1214 486"/>
+    <path class="route" style="--rc:var(--cyan)" data-step="1" d="M1160 492 L1212 492"/>
+    <path class="route" style="--rc:var(--green)" data-step="1" d="M1160 614 C1190 614, 1190 504, 1214 498"/>
+    <path class="route" style="--rc:var(--cyan)" data-step="1" d="M1306 492 C1360 492, 1360 590, 1416 590"/>
+    <path class="route" style="--rc:var(--blue)" data-step="2" d="M400 561 C510 561, 510 736, 616 736"/>
+    <path class="route" style="--rc:var(--green)" data-step="2" d="M400 561 C500 561, 520 640, 616 640" stroke-dasharray="2 8"/>
+    <path class="route" style="--rc:var(--violet)" data-step="2" d="M400 629 C510 629, 510 858, 616 858"/>
+    <path class="route" style="--rc:var(--violet)" data-step="2" d="M400 697 C510 697, 510 858, 616 858"/>
+    <path class="route" style="--rc:var(--violet)" data-step="2" d="M400 765 C510 765, 510 858, 616 858"/>
+    <path class="route" style="--rc:var(--violet)" data-step="2" d="M400 833 C510 833, 510 858, 616 858"/>
+    <path class="route" style="--rc:var(--blue)" data-step="2" d="M1160 736 C1300 736, 1300 630, 1416 630"/>
+    <path class="route" style="--rc:var(--violet)" data-step="2" d="M1160 858 C1320 858, 1320 660, 1416 660"/>
+  </svg>
+  <div class="a pill left" style="top:330px;--d:2"><i style="background:var(--cyan)"></i>PDF</div>
+  <div class="a pill left" style="top:398px;--d:2.5"><i style="background:var(--green)"></i>Скан</div>
+  <div class="a pill left" style="top:466px;--d:3"><i style="background:var(--green)"></i>Картинка</div>
+  <div class="a pill left" style="top:534px;--d:3.5"><i style="background:var(--blue)"></i>DOCX</div>
+  <div class="a pill left" style="top:602px;--d:4"><i style="background:var(--violet)"></i>Markdown</div>
+  <div class="a pill left" style="top:670px;--d:4.5"><i style="background:var(--violet)"></i>TXT</div>
+  <div class="a pill left" style="top:738px;--d:5"><i style="background:var(--violet)"></i>HTML</div>
+  <div class="a pill left" style="top:806px;--d:5.5"><i style="background:var(--violet)"></i>RTF</div>
+
+  <div class="card reader" data-step="1" style="top:314px"><div class="ct">Текстовый слой · PyMuPDF<span class="tag t-code">код</span></div><div class="cs">точные символы: кириллица, ₸, цифры; скрытый текст становится находкой</div></div>
+  <div class="card reader" data-step="1" style="top:436px"><div class="ct">Структура · Docling<span class="tag t-code">код</span></div><div class="cs">заголовки, таблицы, порядок чтения; постранично сверяется с текстовым слоем</div></div>
+  <div class="card reader" data-step="1" style="top:558px"><div class="ct">Зрение · VLM<span class="tag t-model">модель</span></div><div class="cs">сканы и картинки; скан читается дважды разными способами, код сверяет по словам</div></div>
+  <div class="card reader" data-step="2" style="top:680px"><div class="ct">DOCX · XML документа<span class="tag t-code">код</span></div><div class="cs">текст в порядке документа, картинки внутри — через VLM</div></div>
+  <div class="card reader" data-step="2" style="top:802px"><div class="ct">Построчный читатель<span class="tag t-code">код</span></div><div class="cs">Markdown, TXT, HTML, RTF: карта строк и якорь на каждую строку</div></div>
+  <div class="merge" data-step="1">сверка<br>прочтений</div>
+  <div class="a card out pop glow-code" style="--d:6"><span class="tag t-code">s1 · выход</span><div class="ct" style="margin-top:18px">Блоки с якорями</div><div class="cs">страница или строка, раздел, уверенность блока</div><div class="file">s1_blocks.json</div></div>
+  <div class="a card callout" data-step="3"><b>Пример из практики</b>У PDF-презентации текстовый слой отдал кириллицу, но молча потерял латиницу и цифры. Поймала только сверка с картинкой страницы.</div>
+</section>
+
+<!-- 6 · База и план -->
+<section class="slide" data-accent="5" data-notes="Дальше модель строит профиль документа и нарезает его на требования — даже там, где нет нумерации. Извлекает таблицу фактов, а код сверяет значения и единицы. Из профиля код строит план ячеек проверки.">
+  <div class="head">
+    <div class="a kicker" style="--d:0"><i></i>s2–s4 · База и план</div>
+    <h2 class="a" style="--d:1">Сначала <span class="grad">база документа</span>, потом проверка</h2>
+  </div>
+  <svg class="wires" viewBox="0 0 1920 1080">
+    <path class="flow" stroke="var(--green)" d="M646 610 L700 610"/>
+    <path class="flow" stroke="var(--cyan)" d="M1216 610 L1270 610"/>
+  </svg>
+  <div class="a card col pop" style="left:140px;--d:2"><span class="tag t-model">s2 · модель</span><div class="ct">Профиль и нарезка</div>
+    <div class="viz"><div class="lines">
+      <div class="ln" style="width:92%"></div><div class="ln req" data-r="R-1" style="width:78%;--d:0"></div><div class="ln" style="width:64%"></div>
+      <div class="ln req" data-r="R-2" style="width:88%;--d:1"></div><div class="ln" style="width:70%"></div><div class="ln req" data-r="R-3" style="width:56%;--d:2"></div>
+      <div class="ln" style="width:84%"></div><div class="ln req" data-r="R-4" style="width:74%;--d:3"></div><div class="ln" style="width:48%"></div>
+    </div></div>
+    <div class="cap">Находит требования и без нумерации: user stories, сплошной текст, таблицы</div></div>
+  <div class="a card col pop unit-alert-host" style="left:710px;--d:3"><span class="tag t-model">s3 · модель + код</span><div class="ct">Таблица фактов</div>
+    <div class="viz" id="factsviz"><table class="facts">
+      <tr><th>Сущность</th><th>Значение</th><th>Ед.</th></tr>
+      <tr><td>Порог уведомления</td><td>10 000</td><td class="u bad">₸</td></tr>
+      <tr><td>Поле порога в БД</td><td>integer</td><td class="u bad">тиыны</td></tr>
+      <tr><td>Повторные попытки</td><td>3</td><td class="u">раз</td></tr>
+      <tr><td>Срок ответа</td><td>24</td><td class="u">часа</td></tr>
+    </table><div class="a alert" data-step="1">код: один параметр в разных единицах — описан ли пересчёт?</div></div>
+    <div class="cap">Сущность, атрибут, значение, единица — с цитатой. Код сверяет значения и единицы</div></div>
+  <div class="a card col pop" style="left:1280px;--d:4"><span class="tag t-code">s4 · код</span><div class="ct">План ячеек</div>
+    <div class="viz"><div class="cells" id="cellgrid"></div>
+      <div class="leg"><span style="--cc:rgba(167,139,250,.85)">требование × критерии</span><span style="--cc:rgba(244,114,182,.85)">пара в противоречие</span><span style="--cc:rgba(34,211,238,.85)">набор целиком</span></div></div>
+    <div class="cap">Датчик допущений: если профиль плохо покрыл документ, план добавляет общий путь</div></div>
+  <div class="a basecap" style="--d:6">База готова: дальше агенты не ищут по файлу, <span class="grad2">а проверяют и доказывают</span></div>
+</section>
+
+<!-- 7 · Ячейка -->
+<section class="slide" data-accent="6" data-notes="Каждая ячейка — маленький спор. Аналитик ищет дефект, код проверяет схему ответа и цитату, оппонент пытается находку опровергнуть, арбитр решает спорное. Ячейки идут параллельно, а в конце одна калибровка выставляет серьёзность всем находкам сразу.">
+  <div class="head">
+    <div class="a kicker" style="--d:0"><i></i>s5–s6 · Агенты</div>
+    <h2 class="a" style="--d:1">Каждая находка <span class="grad">проходит спор</span></h2>
+  </div>
+  <div class="frame-n copy c2" data-step="1" style="opacity:0;transition:opacity .6s"></div>
+  <div class="frame-n copy c1" data-step="1" style="opacity:0;transition:opacity .6s"></div>
+  <div class="a frame-n" data-step="1"><span class="nlab">× N ячеек параллельно</span></div>
+  <svg class="wires" viewBox="0 0 1920 1080">
+    <path class="flow" stroke="var(--pink)" d="M240 446 L240 374"/>
+    <path class="flow" stroke="var(--pink)" d="M310 372 L310 444"/>
+    <path class="flow" stroke="var(--violet)" d="M420 540 L516 540"/>
+    <path class="flow" stroke="var(--amber)" d="M800 540 L896 540"/>
+    <path class="flow" stroke="var(--violet)" d="M1180 540 L1276 540"/>
+    <path class="flow" stroke="var(--green)" d="M1560 540 L1616 540"/>
+    <path class="flow" stroke="var(--red)" d="M1420 630 L1420 756"/>
+    <path class="wire" stroke-dasharray="6 8" d="M660 450 V414 H370 V446"/>
+    <path class="wire" stroke-dasharray="4 10" d="M190 672 H1560"/>
+  </svg>
+  <div class="a basepill" style="--d:2">База документа</div>
+  <div class="lbl" style="left:400px;top:421px;font-size:15px">претензия: что исправить, одна попытка</div>
+  <div class="a card role glow-agent" style="left:140px;--d:2"><span class="tag t-agent">s5 · агент</span><div class="ct">Аналитик</div><div class="cs">ищет дефект по карточкам критериев</div></div>
+  <div class="a card role glow-gate" style="left:520px;--d:3"><span class="tag t-gate">гейт · код</span><div class="ct">Инварианты</div><div class="cs">схема ответа, цитата есть в блоке</div></div>
+  <div class="a card role glow-agent" style="left:900px;--d:4"><span class="tag t-agent">s6 · агент</span><div class="ct">Оппонент</div><div class="cs">ищет контекст против находки</div></div>
+  <div class="a card role glow-model" style="left:1280px;--d:5"><span class="tag t-model">s6 · модель</span><div class="ct">Арбитр</div><div class="cs">решает спорное по доказательствам</div></div>
+  <div class="a exit" style="--d:6">в отчёт ✓</div>
+  <div class="a reject" style="--d:6">отклонено · след в трассе</div>
+  <div class="token ta">находка</div>
+  <div class="token tb">придирка</div>
+  <div class="a calib" data-step="2"><span class="tag t-model">s6 · модель</span><div><div class="ct">Калибровка: серьёзность всех находок одним вызовом</div><div class="cs">вслепую, по ответам о пути и вреде; уровень ставит таблица в коде</div></div><div class="big"><small>совпадение</small>77% → <span class="grad2">85.5%</span></div></div>
+</section>
+
+<!-- 8 · Принцип -->
+<section class="slide" data-accent="7" data-notes="Главный принцип: гибкость даёт модель, инварианты держит код. Модель читает и судит, а код проверяет то, что можно проверить без суждения. Если цитаты нет в документе дословно — находка в отчёт не попадёт.">
+  <div class="head">
+    <div class="a kicker" style="--d:0"><i></i>Принцип</div>
+    <h2 class="a" style="--d:1">Гибкость даёт модель.<br><span class="grad">Инварианты держит код.</span></h2>
+  </div>
+  <div class="a card half hm left" style="left:140px;--d:2"><div class="hd">Модель</div><div class="hs">читает · судит · формулирует</div>
+    <ul><li>читает сканы, картинки, диаграммы</li><li>находит требования без нумерации</li><li>решает, дефект это или нет</li><li>пишет правку и вопрос автору</li></ul></div>
+  <div class="a card half hc right" style="left:990px;--d:3"><div class="hd">Код</div><div class="hs">проверяет без суждения</div>
+    <ul><li>цитата есть в документе дословно</li><li>каждый блок и пункт чек-листа учтён</li><li>серьёзность не спорит с ответами модели</li><li>числа отчёта пересчитаны, отчёт пишется всегда</li></ul></div>
+  <div class="a card qstrip" data-step="1"><div class="doc">…уведомление отправляется <span class="mark">не позднее 3 рабочих дней</span> после изменения порога…</div>
+    <div class="verdicts"><div class="vd ok">✓ <code>«не позднее 3 рабочих дней»</code> найдено — находка идёт дальше</div><div class="vd no">✗ <code>«в течение 24 часов»</code> такого текста нет — в отчёт не попадёт</div></div></div>
+</section>
+
+<!-- 9 · Вопросы -->
+<section class="slide" data-accent="8" data-notes="Агент не додумывает за автора, а задаёт вопросы: с адресатом по роли и флагом «блокирует разработку». Автор отвечает в интерфейсе, файлом или в терминале, и агент перепроверяет затронутые находки: дефект остаётся с конкретной правкой, снимается или меняет серьёзность.">
+  <div class="head">
+    <div class="a kicker" style="--d:0"><i></i>s8–s8b · Вопросы автору</div>
+    <h2 class="a" style="--d:1">Агент <span class="grad">спрашивает</span>, а не додумывает</h2>
+  </div>
+  <svg class="wires" viewBox="0 0 1920 1080">
+    <path class="flow" stroke="var(--red)" d="M704 445 L776 445"/>
+    <path class="route" style="--rc:var(--pink)" data-step="1" d="M1100 564 L1100 626"/>
+    <path class="route" style="--rc:var(--green)" data-step="2" d="M776 720 L704 720"/>
+  </svg>
+  <div class="a card fcard left" style="--d:2"><div class="metas"><span class="tag t-red">критично</span><span class="tag t-agent">противоречие</span></div>
+    <div class="qtext">Раздел 4: <b>3</b> повторные попытки.<br>Спецификация API: <b>2</b> попытки.</div></div>
+  <div class="a card qcard glow-ext" style="--d:3"><div class="metas"><span class="tag t-ext">кому: аналитику</span><span class="tag t-red">блокирует разработку</span></div>
+    <div class="qtext">Сколько повторных попыток верно — 3&nbsp;или&nbsp;2? Если 2, раздел 4 нужно исправить.</div></div>
+  <div class="a card acard" data-step="1"><span class="tag t-ext">ответ автора</span><div class="qtext" style="margin-top:14px">«Верно 2, раздел 4 устарел».</div></div>
+  <div class="a channels" data-step="1"><span>веб-интерфейс</span><span>файл *.answers.md</span><span>терминал</span></div>
+  <div class="a card rcard glow-model" data-step="2"><span class="tag t-model">s8b · перепроверка</span>
+    <div class="outs"><div class="act">дефект остаётся → правка: в разделе 4 заменить 3 на 2</div><div>находка снята как ошибочная</div><div>серьёзность изменена</div></div></div>
+  <div class="a card stat" style="top:330px;--d:4"><div class="l">вопросов автору в отчёте по документу организаторов</div><div class="v grad" data-count="18">18</div></div>
+  <div class="a card stat" style="top:610px;--d:5"><div class="l">из них блокируют разработку</div><div class="v" style="color:var(--red)" data-count="7">7</div></div>
+</section>
+
+<!-- 10 · Цикл улучшения -->
+<section class="slide" data-accent="9" data-notes="Качество мы не угадывали, а мерили. Собрали корпус из восьми документов с эталоном и ловушками. Дальше цикл: прогон, замер, разбор трассы, гипотеза и одна общая правка. Неудачные правки откатываем и записываем в журнал.">
+  <div class="head">
+    <div class="a kicker" style="--d:0"><i></i>Self-improvement</div>
+    <h2 class="a" style="--d:1">Как агент <span class="grad">становился лучше</span></h2>
+  </div>
+  <div class="a loop pop" style="--d:2">
+    <svg viewBox="0 0 620 620">
+      <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#34D399"/><stop offset=".5" stop-color="#22D3EE"/><stop offset="1" stop-color="#FBBF24"/></linearGradient></defs>
+      <circle cx="310" cy="310" r="270" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="3"/>
+      <g class="spin"><circle cx="310" cy="310" r="270" fill="none" stroke="url(#lg)" stroke-width="6" stroke-linecap="round" stroke-dasharray="380 1317" style="filter:drop-shadow(0 0 12px #22D3EE)"/><circle cx="580" cy="310" r="9" fill="#fff" style="filter:drop-shadow(0 0 10px #fff)"/></g>
+    </svg>
+    <div class="lnode" style="left:270px;top:0px">Корпус<small>8 документов</small></div>
+    <div class="lnode" style="left:504px;top:135px">Прогон</div>
+    <div class="lnode" style="left:504px;top:405px">Замер<small>reqaudit-eval</small></div>
+    <div class="lnode" style="left:270px;top:540px">Разбор трассы<small>reqaudit-diagnose</small></div>
+    <div class="lnode" style="left:36px;top:405px">Гипотеза</div>
+    <div class="lnode" style="left:36px;top:135px">Одна правка<small>общая, не под текст</small></div>
+    <div class="lcenter"><div class="v grad2">14</div><div class="l">шагов цикла<br>в журнале</div></div>
+  </div>
+  <div class="rules">
+    <div class="a rule right" style="--d:3"><i style="background:var(--green)">1</i><div><b>Корпус с эталоном и ловушками:</b> шаблон, user stories, ГОСТ 34, большой документ, не-спецификация, инъекция для ИИ, PDF со скрытым текстом</div></div>
+    <div class="a rule right" style="--d:4"><i style="background:var(--cyan)">2</i><div><b>Замер без вызовов модели:</b> полнота, точность, ловушки и серьёзность по сохранённым прогонам</div></div>
+    <div class="a rule right" data-step="1" style="--d:0"><i style="background:var(--violet)">3</i><div><b>Эталон тоже проверяют:</b> независимые экземпляры Claude видят только документ и шкалу</div></div>
+    <div class="a rule right" data-step="1" style="--d:1"><i style="background:var(--amber)">4</i><div><b>Повторяющаяся ошибка модели</b> становится проверкой в коде, а не ещё одним абзацем промпта</div></div>
+    <div class="a rule right" data-step="1" style="--d:2"><i style="background:var(--pink)">5</i><div><b>Неудачная правка откатывается</b> и остаётся в журнале; документ организаторов — отложенный, под него не настраивали</div></div>
+  </div>
+</section>
+
+<!-- 11 · Прогресс -->
+<section class="slide" data-accent="10" data-notes="За четырнадцать шагов цикла полнота на тестовом документе выросла с 65 до 78 процентов строго по цитатам, а по смыслу — до 91; точность — с 52 до 72, по смыслу — 84. Критичных находим 10 из 12, а калибровка подняла совпадение серьёзности до 85,5 процента.">
+  <div class="head">
+    <div class="a kicker" style="--d:0"><i></i>Прогресс</div>
+    <h2 class="a" style="--d:1">Числа, <span class="grad">а не ощущения</span></h2>
+  </div>
+  <div class="a card chartc" style="--d:2">
+    <div class="legend2"><span style="--lc:var(--cyan)">полнота N1</span><span style="--lc:var(--violet)">точность N1</span><span style="--lc:rgba(255,255,255,.4)">строго по цитатам, шаг за шагом</span></div>
+    <svg viewBox="0 0 1000 560">
+      <g class="axis-g">
+        <line class="axis" x1="60" y1="403" x2="980" y2="403"/><line class="axis" x1="60" y1="337" x2="980" y2="337"/><line class="axis" x1="60" y1="270" x2="980" y2="270"/><line class="axis" x1="60" y1="203" x2="980" y2="203"/><line class="axis" x1="60" y1="137" x2="980" y2="137"/><line class="axis" x1="60" y1="70" x2="980" y2="70"/>
+        <text class="axl" x="40" y="408" text-anchor="end">50%</text><text class="axl" x="40" y="275" text-anchor="end">70%</text><text class="axl" x="40" y="142" text-anchor="end">90%</text>
+        <text class="axl" x="80" y="500" text-anchor="middle">база</text><text class="axl" x="168" y="500" text-anchor="middle">1</text><text class="axl" x="256" y="500" text-anchor="middle">2</text><text class="axl" x="344" y="500" text-anchor="middle">3</text><text class="axl" x="432" y="500" text-anchor="middle">4</text><text class="axl" x="520" y="500" text-anchor="middle">5</text><text class="axl" x="608" y="500" text-anchor="middle">6</text><text class="axl" x="696" y="500" text-anchor="middle">7</text><text class="axl" x="784" y="500" text-anchor="middle">8</text><text class="axl" x="872" y="500" text-anchor="middle">9–10</text><text class="axl" x="960" y="500" text-anchor="middle">итог</text>
+      </g>
+      <polyline class="draw" stroke="#22D3EE" style="filter:drop-shadow(0 0 8px #22D3EE)" points="80,303 168,357 256,330 344,330 432,303 520,330 608,357 696,157 784,217 872,243 960,217"/>
+      <polyline class="draw" stroke="#A78BFA" style="filter:drop-shadow(0 0 8px #A78BFA)" points="80,390 168,197 256,290 344,150 432,183 520,290 608,357 696,277 784,277 872,223 960,257"/>
+      <g class="pts" fill="#22D3EE"><circle class="pt" style="--i:0" cx="80" cy="303" r="6"/><circle class="pt" style="--i:1" cx="168" cy="357" r="6"/><circle class="pt" style="--i:2" cx="256" cy="330" r="6"/><circle class="pt" style="--i:3" cx="344" cy="330" r="6"/><circle class="pt" style="--i:4" cx="432" cy="303" r="6"/><circle class="pt" style="--i:5" cx="520" cy="330" r="6"/><circle class="pt" style="--i:6" cx="608" cy="357" r="6"/><circle class="pt" style="--i:7" cx="696" cy="157" r="6"/><circle class="pt" style="--i:8" cx="784" cy="217" r="6"/><circle class="pt" style="--i:9" cx="872" cy="243" r="6"/><circle class="pt" style="--i:10" cx="960" cy="217" r="6"/></g>
+      <g class="pts" fill="#A78BFA"><circle class="pt" style="--i:0" cx="80" cy="390" r="6"/><circle class="pt" style="--i:1" cx="168" cy="197" r="6"/><circle class="pt" style="--i:2" cx="256" cy="290" r="6"/><circle class="pt" style="--i:3" cx="344" cy="150" r="6"/><circle class="pt" style="--i:4" cx="432" cy="183" r="6"/><circle class="pt" style="--i:5" cx="520" cy="290" r="6"/><circle class="pt" style="--i:6" cx="608" cy="357" r="6"/><circle class="pt" style="--i:7" cx="696" cy="277" r="6"/><circle class="pt" style="--i:8" cx="784" cy="277" r="6"/><circle class="pt" style="--i:9" cx="872" cy="223" r="6"/><circle class="pt" style="--i:10" cx="960" cy="257" r="6"/></g>
+      <g class="ann"><line x1="696" y1="140" x2="696" y2="100" stroke="#22D3EE" stroke-dasharray="3 4"/><text class="annt" x="696" y="90" text-anchor="middle" fill="#67E8F9">все роли на pro</text></g>
+      <g class="ann"><line x1="344" y1="134" x2="344" y2="112" stroke="#A78BFA" stroke-dasharray="3 4"/><text class="annt" x="344" y="102" text-anchor="middle" fill="#C4B5FD">каждый критерий явно</text></g>
+      <g class="ann"><circle cx="960" cy="130" r="8" fill="none" stroke="#22D3EE" stroke-width="2.5"/><circle cx="960" cy="177" r="8" fill="none" stroke="#A78BFA" stroke-width="2.5"/><text class="annt" x="944" y="135" text-anchor="end" fill="#67E8F9">91% по смыслу</text><text class="annt" x="944" y="182" text-anchor="end" fill="#C4B5FD">84% по смыслу</text></g>
+    </svg>
+  </div>
+  <div class="kpis">
+    <div class="a kpi pop" style="--d:3;--kc:#22D3EE"><div class="l">Полнота N1</div><div class="from">65%</div><div class="v" style="color:#67E8F9"><span data-count="78">78</span>%</div><div class="s">строго по цитатам; по смыслу 91%</div></div>
+    <div class="a kpi pop" style="--d:4;--kc:#A78BFA"><div class="l">Точность N1</div><div class="from">52%</div><div class="v" style="color:#C4B5FD"><span data-count="72">72</span>%</div><div class="s">строго по цитатам; по смыслу 84%</div></div>
+    <div class="a kpi pop" style="--d:5;--kc:#FB7185"><div class="l">Критичных найдено</div><div class="from">8 из 12</div><div class="v" style="color:#FDA4AF"><span data-count="10">10</span><small style="font-size:34px;color:var(--muted)"> из 12</small></div><div class="s">N1, шаблон организаторов на незнакомом содержании</div></div>
+    <div class="a kpi pop" style="--d:6;--kc:#34D399"><div class="l">Серьёзность совпала</div><div class="from">77%</div><div class="v" style="color:#6EE7B7"><span data-count="85.5" data-dec="1">85.5</span>%</div><div class="s">калибровка вслепую, 131 пара «находка — эталон»</div></div>
+  </div>
+</section>
+
+<!-- 12 · Итог -->
+<section class="slide" data-accent="11" data-notes="На документе организаторов агент нашёл 20 дефектов, из них 7 критичных, и задал автору 18 вопросов, 7 из них блокируют разработку. Независимая проверка подтвердила 12 настоящих дефектов и ни одного ошибочного. Агент запускается одной командой. Спасибо!">
+  <div class="head">
+    <div class="a kicker" style="--d:0"><i></i>Итог · документ организаторов</div>
+    <h2 class="a" style="--d:1">Готов к работе <span class="grad">на&nbsp;настоящем ТЗ</span></h2>
+  </div>
+  <div class="nums">
+    <div class="a num4 pop" style="--d:2"><div class="v grad" data-count="36">36</div><div class="l">требований нарезано</div></div>
+    <div class="a num4 pop" style="--d:3"><div class="v" style="color:#FDA4AF" data-count="20">20</div><div class="l">дефектов,<br>из них 7 критичных</div></div>
+    <div class="a num4 pop" style="--d:4"><div class="v" style="color:#F9A8D4" data-count="18">18</div><div class="l">вопросов автору,<br>7 блокируют разработку</div></div>
+    <div class="a num4 pop" style="--d:5"><div class="v" style="color:#6EE7B7">≈30</div><div class="l">минут на прогон с нуля,<br>около $5</div></div>
+  </div>
+  <div class="a verdict" style="--d:6"><div class="big"><span data-count="12">12</span> / <span style="color:#6EE7B7">0</span></div><div class="t">Независимая проверка находок: <b>12 настоящих дефектов, ошибочных — 0</b><br><span>в том числе противоречия Ф-3 ↔ Ф-4 и Ф-2 ↔ критерий приёмки</span></div></div>
+  <div class="cta">
+    <div class="a term" style="--d:7"><span class="p">$</span><span class="typed">uvx --from git+https://github.com/VllSunday/hackathon-fintech-bcc-hub reqaudit требования.pdf отчёт.md</span><span class="cur"></span><span class="repo">github.com/VllSunday/hackathon-fintech-bcc-hub</span></div>
+    <div class="a thanks pop" style="--d:8"><span class="grad">Спасибо!</span></div>
+  </div>
+</section>
+
+</div></div>
+
+<div class="chrome">
+  <div class="progress" id="progress"></div>
+  <div class="brand">Specula</div>
+  <div class="counter" id="counter"></div>
+</div>
+<div class="hint" id="hint">← → листать · F полный экран · N текст для озвучки · H скрыть интерфейс</div>
+<div class="notes" id="notes"><b>Текст для озвучки</b><span></span></div>
+
+<script>
+(() => {
+  const stage = document.getElementById('stage');
+  const slides = [...document.querySelectorAll('.slide')];
+  const progress = document.getElementById('progress');
+  const counter = document.getElementById('counter');
+  const notes = document.querySelector('#notes span');
+  let idx = 0, cur = 0;
+
+  const fit = () => {
+    const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    stage.style.transform = `translate(-50%, -50%) scale(${s})`;
+  };
+  addEventListener('resize', fit); fit();
+
+  // s4: сетка ячеек
+  const grid = document.getElementById('cellgrid');
+  const kinds = 'c1 c1 c1 c2 c1 c1 c3 c1 c1 c2 c1 c1 c1 c1 c2 c3 c1 c1 c2 c1 c1 c1 c3 c1 c2 c1 c1 c1 c1 c2 c1 c3'.split(' ');
+  kinds.forEach((k, i) => { const e = document.createElement('i'); e.className = k; e.style.setProperty('--i', i % 8 + Math.floor(i / 8)); grid.appendChild(e); });
+
+  // длины линий графика
+  document.querySelectorAll('.draw').forEach(p => p.style.setProperty('--len', Math.ceil(p.getTotalLength())));
+
+  const steps = s => Math.max(0, ...[...s.querySelectorAll('[data-step]')].map(e => +e.dataset.step));
+  const fmt = (v, dec) => dec ? v.toFixed(dec) : String(Math.round(v));
+
+  const countUp = el => {
+    const end = parseFloat(el.dataset.count), dec = +(el.dataset.dec || 0);
+    const t0 = performance.now(), dur = 1400;
+    const delay = 500;
+    const tick = now => {
+      const p = Math.min(1, Math.max(0, (now - t0 - delay) / dur));
+      const e = 1 - Math.pow(1 - p, 3);
+      el.textContent = fmt(end * e, dec);
+      if (p < 1 && el.isConnected) requestAnimationFrame(tick);
+    };
+    el.textContent = fmt(0, dec);
+    requestAnimationFrame(tick);
+  };
+
+  function render() {
+    slides.forEach((s, i) => {
+      s.classList.toggle('active', i === idx);
+      s.classList.toggle('past', i < idx);
+      if (i !== idx) s.querySelectorAll('.on').forEach(e => e.classList.remove('on'));
+    });
+    const s = slides[idx];
+    s.querySelectorAll('.a, [data-step], .draw, .pts, .ann, .shot, .term, .qstrip').forEach(e => {
+      const st = +(e.dataset.step || 0);
+      const was = e.classList.contains('on');
+      const on = st <= cur;
+      e.classList.toggle('on', on);
+      if (on && !was) e.querySelectorAll('[data-count]').forEach(countUp);
+      if (on && !was && e.dataset.count) countUp(e);
+    });
+    // копии рамок «× N» в слайде с ячейками
+    s.querySelectorAll('.frame-n.copy').forEach(e => e.style.opacity = cur >= 1 ? 1 : 0);
+    // таблица фактов: подсветка единиц на шаге 1
+    const fv = s.querySelector('#factsviz');
+    if (fv) fv.classList.toggle('unit-alert', cur >= 1);
+    document.body.dataset.accent = s.dataset.accent || 0;
+    const total = slides.length;
+    progress.style.width = `${((idx + (steps(s) ? cur / (steps(s) + 1) : 0)) + 1) / total * 100}%`;
+    counter.textContent = `${String(idx + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}`;
+    notes.textContent = s.dataset.notes || '';
+    history.replaceState(null, '', `#${idx + 1}`);
+  }
+
+  const go = (i, atEnd) => {
+    idx = Math.max(0, Math.min(slides.length - 1, i));
+    cur = atEnd ? steps(slides[idx]) : 0;
+    render();
+  };
+  const next = () => { if (cur < steps(slides[idx])) { cur++; render(); } else if (idx < slides.length - 1) go(idx + 1); };
+  const prev = () => { if (cur > 0) { cur--; render(); } else if (idx > 0) go(idx - 1, true); };
+
+  addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = e.key;
+    if (['ArrowRight', 'ArrowDown', ' ', 'PageDown', 'Enter'].includes(k)) { e.preventDefault(); next(); }
+    else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(k)) { e.preventDefault(); prev(); }
+    else if (k === 'Home') go(0);
+    else if (k === 'End') go(slides.length - 1, true);
+    else if (k === 'f' || k === 'F' || k === 'а' || k === 'А') { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.(); }
+    else if (k === 'n' || k === 'N' || k === 'т' || k === 'Т') document.body.classList.toggle('show-notes');
+    else if (k === 'h' || k === 'H' || k === 'р' || k === 'Р') document.body.classList.toggle('clean');
+    else return;
+    hide();
+  });
+  addEventListener('click', e => { if (e.target.closest('a')) return; (e.clientX < innerWidth * 0.25 ? prev : next)(); hide(); });
+  let tx = null;
+  addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
+  addEventListener('touchend', e => { if (tx === null) return; const dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 40) (dx < 0 ? next : prev)(); tx = null; });
+
+  const hintEl = document.getElementById('hint');
+  let hidden = false;
+  const hide = () => { if (!hidden) { hidden = true; hintEl.classList.add('gone'); } };
+  setTimeout(hide, 6000);
+
+  const start = parseInt(location.hash.slice(1), 10);
+  go(Number.isFinite(start) ? start - 1 : 0);
+})();
+</script>
+</body>
+</html>

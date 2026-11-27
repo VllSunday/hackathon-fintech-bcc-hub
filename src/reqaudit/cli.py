@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ask", action="store_true",
                         help="задать вопросы агента в терминале и перепроверить находки "
                              "по ответам")
-    parser.add_argument("--version", action="version", version=f"reqaudit {__version__}")
+    parser.add_argument("--version", action="version", version=f"Specula (reqaudit) {__version__}")
     return parser
 
 

@@ -165,9 +165,9 @@ def tour(css: str, body: str, width: int, height: int) -> str:
                f'<rect class="prog" x="0" y="{BAR - 2}" width="{FRAME_W}" height="2"/>\n'
                + "\n".join(chip_svg) + "\n"
                f'<text class="brand" x="{FRAME_W - 16}" y="29" text-anchor="end">'
-               f"reqaudit · путь документа до отчёта</text>")
+               f"Specula · путь документа до отчёта</text>")
     return svg((0, 0, FRAME_W, FRAME_H), tour_css, content,
-               "Облёт схемы агента reqaudit: весь поток, затем каждая фаза по очереди")
+               "Облёт схемы агента Specula: весь поток, затем каждая фаза по очереди")
 
 
 def main() -> None:

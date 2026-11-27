@@ -65,11 +65,11 @@ def spend_line(p: Passport) -> str:
 
 def _passport(p: Passport) -> str:
     if p.git_commit:
-        version = f"{p.agent_version}, коммит `{p.git_commit[:12]}`"
+        version = f"Specula {p.agent_version}, коммит `{p.git_commit[:12]}`"
         if p.git_dirty:
             version += " (есть незакоммиченные изменения)"
     else:
-        version = f"{p.agent_version}, коммит неизвестен"
+        version = f"Specula {p.agent_version}, коммит неизвестен"
     if p.models_used:
         models = ", ".join(f"`{m}`" for m in p.models_used)
         models += f"; запросов к модели: {p.llm_calls}, ответов из кэша: {p.llm_cache_hits}"

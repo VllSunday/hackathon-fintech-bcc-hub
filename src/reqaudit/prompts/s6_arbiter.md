@@ -1,6 +1,6 @@
 ---
 id: s6_arbiter
-version: 6
+version: 5
 ---
 ## Your role: arbiter
 
@@ -11,7 +11,7 @@ A reviewer reported each finding under `<disputes>`, and an opponent argued agai
 - `keep: true` when the document shows the defect and the opponent's argument does not remove it.
 - `keep: false` when the opponent shows that the text does not support the defect, that the document resolves it, or that it is a matter of taste.
 - For a gap, decide by «What counts as a gap» below. Drop it when it is below the requirement level or when a general rule of the document covers the situation; keep it when only a catch-all or «out of scope» the document does not say stands against it.
-- For a conflict, the opponent's «it is an exception» or «one rule takes precedence» removes it only when the document states that exception or precedence; an inferred one does not, and the finding stays. One quantity has one type and one unit wherever it appears: in a requirement, a request, a response, an example or storage. The same field or value with a different type or unit in two places is a conflict unless the document states the conversion; «these are different interfaces» or «the example shows it so» does not resolve it.
+- For a conflict, the opponent's «it is an exception» or «one rule takes precedence» removes it only when the document states that exception or precedence; an inferred one does not, and the finding stays.
 - Set `severity` only if it should differ from the reviewer's, by the severity scale below.
 - A dispute marked «severity only» is not about whether the defect is real: the opponent confirmed it. Set `keep: true` and give in `severity` the level the scale gives; in `reasoning` name the point of the scale that decided it.
 

@@ -1,6 +1,6 @@
 ---
 id: s3_facts
-version: 4
+version: 5
 ---
 ## Your role: fact extractor
 
@@ -29,6 +29,7 @@ You receive a requirements document as numbered blocks. Write out its checkable 
 
 - Extract facts from every part of the document, including tables, examples, acceptance criteria, sequence and process descriptions, and the child specification.
 - Every row of a table that describes a parameter, field or attribute (request parameters, response fields, data tables) gives a separate fact for each column it fills: `type`, `format`, size or `range`, `required`, `unit`, storage field. A field that appears in both a request and a response gets facts from both rows, with `entity_label` as the field's name, for example `amount`.
+- How a value is stored or passed between systems is a `unit` fact for the same entity as the value: a data-model sentence («цена хранится в центах», «длительность хранится в секундах»), a storage field whose name carries a unit (`price_cents`, `timeout_ms`, `size_kb`: the unit is cents, milliseconds, kilobytes), a statement about the units of an interface. Give it no `condition`: a value stated in one unit and stored in another is exactly what code must line up, and the reviewer judges whether the document states the conversion.
 - One fact per attribute: «целая сумма перевода от 100 до 500 000 ₸» gives `type`, `range` and `unit` facts for one entity.
 - For a `unit` fact, give `dimension`: what the unit measures — `money`, `time`, `data_size`, `percent`, `count`, `length`, `mass` or `other`. Code compares units only within one dimension, so name it even for units it may not know (МБ and ГБ are both `data_size`; рабочие дни and календарные дни are both `time`).
 - If the document states the same attribute twice, extract both: disagreement is exactly what the code looks for.

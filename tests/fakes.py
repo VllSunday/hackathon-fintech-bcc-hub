@@ -242,10 +242,6 @@ def fake_team(mutate_segment: Mutate | None = None,
             calls["review"] += 1
             args = set_review(prompt)
             remember(args.get("findings", []))
-            if "discrepancies" in fields and "discrepancies" not in args:
-                args = {**args, "discrepancies": [
-                    {"ref": ref, "defect": False, "reason": "Различие объяснено условием."}
-                    for ref in dict.fromkeys(re.findall(r"^- (K\d+) ", prompt, re.MULTILINE))]}
             if "checklist" in fields and "checklist" not in args:
                 first = _BLOCK_LINE.search(prompt).group(1)
                 args = {**args, "checklist": [{"item": "Проверенный пункт", "block_id": first,

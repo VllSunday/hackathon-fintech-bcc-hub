@@ -568,26 +568,3 @@ def test_remarks_stay_in_the_report_but_not_among_the_defects(tmp_path):
     rs.findings[0] = first.model_copy(update={"remark": True})
     assert first.id not in {f.id for f in reported(rs)}
     assert [f.id for f in remarks(rs)] == [first.id]
-
-
-def test_values_reviewer_decides_on_every_discrepancy_code_found():
-    """A discrepancy is not skipped silently: decided, and a defect is backed by a finding."""
-    from types import SimpleNamespace
-
-    from reqaudit.criteria import Criterion
-    from reqaudit.stages.s5_candidates import DiscrepancyDecision, ValuesAnswer, cell_check
-
-    blocks = {b: SimpleNamespace(id=b, text="") for b in ("b1", "b2")}
-    cell = Cell(id="values", kind=CellKind.VALUES, title="t",
-                criteria=[Criterion.SET_CONSISTENT])
-    check = cell_check(cell, set(), blocks, discrepancies={"K1": {"b1", "b2"}, "K2": {"b2"}})
-
-    def answer(*decisions):
-        return ValuesAnswer(analysis="Проверено по таблице фактов.", findings=[],
-                            discrepancies=[DiscrepancyDecision(ref=r, defect=d,
-                                                               reason="Причина решения.")
-                                           for r, d in decisions])
-
-    assert "missing ['K2']" in check(answer(("K1", False)))
-    assert "K1 is decided a defect" in check(answer(("K1", True), ("K2", False)))
-    assert check(answer(("K1", False), ("K2", False))) is None

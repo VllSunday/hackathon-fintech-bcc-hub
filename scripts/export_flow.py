@@ -38,7 +38,8 @@ RULE = re.compile(
 
 def read_page() -> tuple[str, str, str, int, int]:
     html = PAGE.read_text(encoding="utf-8")
-    m = re.search(r'<div class="scroll flow"[^>]*>\s*<svg viewBox="0 0 (\d+) (\d+)"[^>]*>(.*?)</svg>',
+    m = re.search(r'<div class="scroll flow"[^>]*>\s*'
+                  r'<svg viewBox="0 0 (\d+) (\d+)"[^>]*>(.*?)</svg>',
                   html, re.S)
     if not m:
         raise SystemExit("flow diagram not found in docs/agent-flow.html")
@@ -128,7 +129,7 @@ def tour(css: str, body: str, width: int, height: int) -> str:
     chips = [("Весь поток", "")] + [(name, codes) for _, name, codes, _ in PHASES]
     widths = [104, 172, 160, 180, 252]
     chip_svg, x = [], 16
-    for i, ((name, codes), w) in enumerate(zip(chips, widths)):
+    for i, ((name, codes), w) in enumerate(zip(chips, widths, strict=False)):
         label = (f'<text class="chip" x="{x + 14}" y="29">{name}'
                  + (f'<tspan class="chipk" dx="6">{codes}</tspan>' if codes else "") + "</text>")
         hl_label = label.replace('class="chip"', 'class="chip on"')
@@ -139,7 +140,8 @@ def tour(css: str, body: str, width: int, height: int) -> str:
         x += w + 8
 
     tour_css = css + f"""
-.cam {{ transform: translate({tx0}px, {ty0}px) scale({s0}); animation: cam {total}s ease-in-out infinite; }}
+.cam {{ transform: translate({tx0}px, {ty0}px) scale({s0});
+  animation: cam {total}s ease-in-out infinite; }}
 @keyframes cam {{
 {chr(10).join(frames)}
 }}

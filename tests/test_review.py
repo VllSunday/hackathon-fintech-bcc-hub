@@ -557,6 +557,31 @@ def test_only_a_gap_that_changes_nothing_becomes_a_remark():
                          none.model_copy(update={"consequence": "detail"}))
 
 
+def test_a_harmless_visible_note_is_a_remark_but_hidden_text_stays_a_defect():
+    from reqaudit.stages.s6_calibrate import Rating, is_remark
+
+    none = Rating(ref="C1", path="secondary", consequence="none", kind="other",
+                  branch="success", harm=False, reason="Служебная пометка составителя.")
+    note = _f("D-1", ["b1"], criterion="suspicious_content")
+    assert is_remark(note, none)
+    hidden = note.model_copy(update={"trail": ["reader"]})
+    assert not is_remark(hidden, none)
+    assert not is_remark(note, none.model_copy(update={"consequence": "outcome"}))
+
+
+def test_a_declined_wording_of_a_kept_defect_names_the_kept_finding():
+    from reqaudit.report.views import kept_alongside
+
+    kept = [_f("D-1", ["b1", "b2"]), _f("D-2", ["b3"]), _f("D-3", ["b9"], criterion="complete")]
+    assert [k.id for k in kept_alongside(_f("x", ["b2"]), kept)] == ["D-1"]
+    assert [k.id for k in kept_alongside(_f("y", ["b1", "b3"]), kept)] == ["D-1", "D-2"]
+    assert kept_alongside(_f("z", ["b2", "b5"]), kept) == []  # b5 is quoted by nothing kept
+    assert kept_alongside(_f("w", ["b9"]), kept) == []  # same place, other criterion
+    # One requirement can hold two different gaps: a shared requirement alone is not enough.
+    assert kept_alongside(_f("v", ["b7"], criterion="complete", units=["R-1"]),
+                          [_f("D-4", ["b8"], criterion="complete", units=["R-1"])]) == []
+
+
 def test_remarks_stay_in_the_report_but_not_among_the_defects(tmp_path):
     model, _ = fake_team()
     _, state, report, _ = run(tmp_path, lambda _id: model)

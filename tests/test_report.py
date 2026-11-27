@@ -30,6 +30,24 @@ def requirement_rows(report: str) -> dict[str, str]:
     return {m.group(1): m.group(0) for m in _ROW.finditer(section)}
 
 
+# --- the answer first -------------------------------------------------------------------
+
+
+def test_report_opens_with_the_verdict_and_what_to_fix_first(tmp_path):
+    model, _ = fake_team()
+    state, report, _ = run(tmp_path, model)
+
+    head = report.split("## Паспорт прогона")[0]
+    assert "> **Можно ли начинать разработку:" in head
+    assert f"Вопросов автору: {len(state['questions'])}" in head
+    blocking = [q["id"] for q in state["questions"] if q["blocks_development"]]
+    if blocking:
+        assert ", ".join(blocking) in head
+    assert "> 1. D-" in head
+    # The task's own sections keep their order: the verdict is still in «Итог».
+    assert report.index("## Сводка") < report.index("## Итог")
+
+
 # --- the per-requirement table ----------------------------------------------------------
 
 

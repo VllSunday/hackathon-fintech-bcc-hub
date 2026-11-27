@@ -24,11 +24,15 @@ def test_organizers_document_types_differ_between_query_and_response():
 def test_finding_quotes_both_rows_and_is_a_confirmed_fact():
     doc = md(ORGANIZERS_DOC.read_text(encoding="utf-8"))
     findings = contract_findings(doc.blocks, [])
-    assert len(findings) == 2
+    # amount and enabled differ the same way between the same two tables: one finding,
+    # one question, not a near-identical pair.
+    assert len(findings) == 1
     for f in findings:
         assert f.status == FindingStatus.CONFIRMED and f.severity == Severity.MAJOR
         assert f.criterion == "set_consistent" and f.question and f.trail == ["code:contract"]
-        assert len({e.block_id for e in f.evidence}) == 2
+        assert len({e.block_id for e in f.evidence}) == 4
+        assert f.title.startswith("Поля «amount», «enabled»: integer")
+        assert "«amount», «enabled»" in f.question
         blocks = {b.id: b for b in doc.blocks}
         for e in f.evidence:  # the report and the UI find the quote in the document
             assert quote_in(e.quote, [blocks[e.block_id]])
@@ -123,8 +127,8 @@ def test_type_conflict_reaches_the_report_past_the_opponent(tmp_path):
     report = (tmp_path / "report.md").read_text(encoding="utf-8")
 
     contract = [f for f in state["findings"] if f["trail"][:1] == ["code:contract"]]
-    assert sorted(f["title"].split("»")[0] for f in contract) == ["Поле «amount", "Поле «enabled"]
+    assert [f["title"].split(":")[0] for f in contract] == ["Поля «amount», «enabled»"]
     assert all(f["unit_ids"] for f in contract)  # tied to the API requirements
     asked = {i for q in state["questions"] for i in q["finding_ids"]}
     assert {f["id"] for f in contract} <= asked
-    assert "Поле «amount»" in report
+    assert "Поля «amount», «enabled»" in report

@@ -84,7 +84,9 @@ class CriterionInfo:
 
 # The task asks the summary to list critical defects of three kinds: unverifiable,
 # contradictory and incomplete wording. These are the criteria behind each kind.
-TZ_TYPES = {"contradictory": "противоречивые", "unverifiable": "непроверяемые",
+# Ambiguous wording sits with the unverifiable: a requirement read two ways cannot be tested,
+# and the label says so, so that an ambiguity finding does not look misfiled.
+TZ_TYPES = {"contradictory": "противоречивые", "unverifiable": "неоднозначные и непроверяемые",
             "incomplete": "неполные"}
 
 _C = Criterion

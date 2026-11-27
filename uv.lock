@@ -2889,13 +2889,16 @@ wheels = [
 
 [[package]]
 name = "reqaudit"
-version = "0.2.2"
+version = "0.2.3"
 source = { editable = "." }
 dependencies = [
+    { name = "anthropic" },
     { name = "beautifulsoup4" },
     { name = "charset-normalizer" },
     { name = "fastapi" },
     { name = "genai-prices" },
+    { name = "google-genai" },
+    { name = "openai" },
     { name = "pydantic" },
     { name = "pydantic-ai-slim", extra = ["anthropic", "google", "openai"] },
     { name = "pymupdf" },
@@ -2919,19 +2922,22 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "beautifulsoup4", specifier = ">=4.12" },
-    { name = "charset-normalizer", specifier = ">=3.3" },
+    { name = "anthropic", specifier = ">=2.14,<2.15" },
+    { name = "beautifulsoup4", specifier = ">=4.12,<5" },
+    { name = "charset-normalizer", specifier = ">=3.3,<4" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.150" },
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "genai-prices", specifier = ">=0.2" },
-    { name = "pydantic", specifier = ">=2.9" },
-    { name = "pydantic-ai-slim", extras = ["anthropic", "google", "openai"], specifier = ">=2.75.0" },
+    { name = "fastapi", specifier = ">=0.115,<0.166" },
+    { name = "genai-prices", specifier = ">=0.2.5,<0.3" },
+    { name = "google-genai", specifier = ">=2.34,<2.35" },
+    { name = "openai", specifier = ">=3.59,<3.60" },
+    { name = "pydantic", specifier = ">=2.9,<3" },
+    { name = "pydantic-ai-slim", extras = ["anthropic", "google", "openai"], specifier = ">=2.75.0,<2.76" },
     { name = "pymupdf", specifier = ">=1.26,<2" },
-    { name = "python-docx", specifier = ">=1.1" },
-    { name = "python-dotenv", specifier = ">=1.0" },
-    { name = "pyyaml", specifier = ">=6" },
-    { name = "striprtf", specifier = ">=0.0.26" },
-    { name = "uvicorn", specifier = ">=0.30" },
+    { name = "python-docx", specifier = ">=1.1,<2" },
+    { name = "python-dotenv", specifier = ">=1.0,<2" },
+    { name = "pyyaml", specifier = ">=6,<7" },
+    { name = "striprtf", specifier = ">=0.0.26,<0.1" },
+    { name = "uvicorn", specifier = ">=0.30,<0.55" },
 ]
 provides-extras = ["docling"]
 

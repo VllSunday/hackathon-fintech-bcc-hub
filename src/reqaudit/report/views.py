@@ -136,6 +136,20 @@ def rejected_by_gate(f: Finding) -> bool:
     return any(t.startswith("gate:") for t in f.trail)
 
 
+def kept_alongside(rejected: Finding, kept: list[Finding]) -> list[Finding]:
+    """Findings in the report by the same criterion that quote every place the rejected
+    candidate quotes. Two reviewers often raise one defect in different words; one wording
+    is upheld and the other declined. Listing the declined one bare reads as if the report
+    contradicted itself, so it names the kept ones. A shared requirement alone is not
+    enough: a requirement can hold two different gaps."""
+    blocks = {e.block_id for e in rejected.evidence}
+    same = [k for k in kept if k.criterion == rejected.criterion
+            and blocks & {e.block_id for e in k.evidence}]
+    if not blocks or not blocks <= {e.block_id for k in same for e in k.evidence}:
+        return []
+    return same
+
+
 # --- acceptance coverage ----------------------------------------------------------------
 
 ACCEPTANCE_STATUS_RU = {"ok": "результат следует из правил",

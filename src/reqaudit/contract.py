@@ -161,36 +161,53 @@ def _where(row: FieldRow) -> str:
     return f"«{row.section[-1]}»" if row.section else "таблица параметров"
 
 
-def conflict_finding(conflict: TypeConflict, units: list[Unit], number: int) -> Finding:
-    """A confirmed set_consistent finding for one type conflict; the code is its evidence."""
-    a, b = conflict.first, conflict.second
-    blocks = {a.block.id, b.block.id}
+def _fields(names: list[str]) -> str:
+    quoted = ", ".join(f"«{n}»" for n in names)
+    return f"Поле {quoted}" if len(names) == 1 else f"Поля {quoted}"
+
+
+def conflict_finding(group: list[TypeConflict], units: list[Unit], number: int) -> Finding:
+    """One confirmed set_consistent finding for the fields that two tables type differently
+    in the same way: one fix (align the two tables) and one question to the author, not a
+    near-identical pair per field. The code is its evidence."""
+    a, b = group[0].first, group[0].second
+    names = [c.field for c in group]
+    evidence = [Evidence(block_id=row.block.id, quote=row_quote(row.block), verified=True)
+                for c in group for row in (c.first, c.second)]
+    blocks = {e.block_id for e in evidence}
     unit_ids = sorted(u.id for u in units if blocks & set(u.block_ids))
     type_a, type_b = TYPE_RU.get(a.family, a.family), TYPE_RU.get(b.family, b.family)
+    one = len(names) == 1
+    subject = _fields(names)
     return Finding(
         id=f"contract#{number}", scope=scope_of(Criterion.SET_CONSISTENT, unit_ids),
         criterion=Criterion.SET_CONSISTENT, unit_ids=unit_ids,
-        title=f"Поле «{conflict.field}»: {a.format_text} в {_where(a)}, {b.format_text} "
-              f"в {_where(b)}",
+        title=f"{subject}: {a.format_text} в {_where(a)}, {b.format_text} в {_where(b)}",
         explanation=(
-            f"Одно и то же поле описано с разными типами данных: в разделе {_where(a)} — "
-            f"{a.format_text} ({type_a}), в разделе {_where(b)} — {b.format_text} ({type_b}). "
+            ("Одно и то же поле описано" if one else "Одни и те же поля описаны")
+            + f" с разными типами данных: в разделе {_where(a)} — {a.format_text} "
+            f"({type_a}), в разделе {_where(b)} — {b.format_text} ({type_b}). "
             "Клиент и сервер, сделанные по разным таблицам, разойдутся в формате: один "
             "отправит или будет ждать число, другой строку, и разбор ответа или сравнение "
             "значений сломается. Расхождение найдено сверкой таблиц параметров кодом, без "
             "суждения модели."),
-        evidence=[Evidence(block_id=a.block.id, quote=row_quote(a.block), verified=True),
-                  Evidence(block_id=b.block.id, quote=row_quote(b.block), verified=True)],
+        evidence=evidence,
         severity=Severity.MAJOR, status=FindingStatus.CONFIRMED, trail=["code:contract"],
-        suggestion=(f"Выбрать один тип для поля «{conflict.field}» и указать его во всех "
-                    "таблицах и примерах JSON; если различие намеренное, прямо написать, "
-                    "в каком виде поле передаётся в запросе и в ответе."),
-        question=(f"Какой тип у поля «{conflict.field}» — {a.format_text} или "
+        suggestion=(f"Выбрать один тип для {'поля' if one else 'полей'} "
+                    f"{', '.join(f'«{n}»' for n in names)} и указать его во всех таблицах и "
+                    "примерах JSON; если различие намеренное, прямо написать, в каком виде "
+                    "поле передаётся в запросе и в ответе."),
+        question=(f"Какой тип у {'поля' if one else 'полей'} "
+                  f"{', '.join(f'«{n}»' for n in names)} — {a.format_text} или "
                   f"{b.format_text}, и одинаков ли он в запросе и в ответе?"),
         question_to="analyst",
     )
 
 
 def contract_findings(blocks: list[Block], units: list[Unit]) -> list[Finding]:
-    return [conflict_finding(c, units, n)
-            for n, c in enumerate(find_type_conflicts(blocks), 1)]
+    """Type conflicts grouped by the two tables and the two types they disagree on."""
+    groups: dict[tuple, list[TypeConflict]] = {}
+    for c in find_type_conflicts(blocks):
+        key = (_where(c.first), _where(c.second), c.first.family, c.second.family)
+        groups.setdefault(key, []).append(c)
+    return [conflict_finding(g, units, n) for n, g in enumerate(groups.values(), 1)]

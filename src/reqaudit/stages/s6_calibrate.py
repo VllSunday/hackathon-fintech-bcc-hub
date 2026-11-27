@@ -84,8 +84,16 @@ def level(r: Rating) -> Severity:
 
 
 def is_remark(f: Finding, r: Rating) -> bool:
-    """A gap that changes nothing observable: listed apart from the defects, never dropped."""
-    return f.criterion in REMARK_CRITERIA and r.consequence == "none" and not r.harm
+    """A finding that changes nothing observable: listed apart from the defects, never
+    dropped. A gap of that kind; or a visible note the model raised as suspicious content
+    and then rated as changing nothing: suspicious content is text that can sway a review
+    (criteria card), so a harmless visible note is an editorial remark. Hidden text found by
+    the reader stays a defect whatever the rating."""
+    if r.consequence != "none" or r.harm:
+        return False
+    if f.criterion in REMARK_CRITERIA:
+        return True
+    return f.criterion == Criterion.SUSPICIOUS_CONTENT and "reader" not in f.trail
 
 
 def _view(ref: str, f: Finding) -> str:

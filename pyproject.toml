@@ -1,22 +1,28 @@
 [project]
 name = "reqaudit"
-version = "0.2.2"
+version = "0.2.3"
 description = "Агент проверки качества требований по ISO/IEC/IEEE 29148 и IEEE 830"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "beautifulsoup4>=4.12",
-    "charset-normalizer>=3.3",
-    "fastapi>=0.115",
-    "genai-prices>=0.2",
-    "pydantic>=2.9",
-    "pydantic-ai-slim[anthropic,google,openai]>=2.75.0",
+    # Upper bounds keep `uvx --from git+…` (which does not read uv.lock) on the versions the
+    # tests and the published reports ran on: a new pydantic-ai or provider SDK release can
+    # change model calls. Raise them together with uv.lock after a test run.
+    "beautifulsoup4>=4.12,<5",
+    "charset-normalizer>=3.3,<4",
+    "fastapi>=0.115,<0.166",
+    "genai-prices>=0.2.5,<0.3",
+    "pydantic>=2.9,<3",
+    "pydantic-ai-slim[anthropic,google,openai]>=2.75.0,<2.76",
+    "google-genai>=2.34,<2.35",
+    "openai>=3.59,<3.60",
+    "anthropic>=2.14,<2.15",
     "pymupdf>=1.26,<2",
-    "python-docx>=1.1",
-    "python-dotenv>=1.0",
-    "pyyaml>=6",
-    "striprtf>=0.0.26",
-    "uvicorn>=0.30",
+    "python-docx>=1.1,<2",
+    "python-dotenv>=1.0,<2",
+    "pyyaml>=6,<7",
+    "striprtf>=0.0.26,<0.1",
+    "uvicorn>=0.30,<0.55",
 ]
 
 [project.optional-dependencies]

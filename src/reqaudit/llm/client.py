@@ -126,6 +126,13 @@ class LLMClient:
         self.output_tokens = 0
         self.cost_usd = 0.0
         self.unpriced_calls = 0
+        # Answers taken from the cache: what they cost when first asked, and when that was.
+        self.replayed_requests = 0
+        self.replayed_input_tokens = 0
+        self.replayed_output_tokens = 0
+        self.replayed_cost_usd = 0.0
+        self.replayed_from: str | None = None
+        self.replayed_to: str | None = None
 
     # --- public -------------------------------------------------------------------------
 
@@ -264,6 +271,7 @@ class LLMClient:
                 cached = self._from_cache(keys[model_id], output_type)
                 if cached is not None:
                     self.cache_hits += 1
+                    self._note_replay(model_id, keys[model_id])
                     self._note_model(model_id)
                     self.trace.event("llm_call", step=step, role=role, model=model_id,
                                      cache_hit=True, key=keys[model_id][:16],
@@ -328,6 +336,28 @@ class LLMClient:
         except (ValidationError, KeyError):
             return None
 
+    def _note_replay(self, model_id: str, key: str) -> None:
+        """Add a cached answer's original usage to the run's «replayed» totals. Records
+        written before usage was stored, or damaged ones, add nothing."""
+        record = self.cache.get(key) or {}
+        usage = record.get("usage")
+        if not isinstance(usage, dict):
+            return
+        try:
+            requests = int(usage.get("requests") or 1)
+            tokens_in = int(usage.get("input_tokens") or 0)
+            tokens_out = int(usage.get("output_tokens") or 0)
+        except (TypeError, ValueError):
+            return
+        self.replayed_requests += max(requests, 1)
+        self.replayed_input_tokens += tokens_in
+        self.replayed_output_tokens += tokens_out
+        self.replayed_cost_usd += price_usd(model_id, tokens_in, 0, tokens_out) or 0.0
+        created = record.get("created")
+        if isinstance(created, str) and created:
+            self.replayed_from = min(self.replayed_from or created, created)
+            self.replayed_to = max(self.replayed_to or created, created)
+
     def _note_model(self, model_id: str) -> None:
         if model_id not in self.models_used:
             self.models_used.append(model_id)
@@ -350,7 +380,12 @@ class LLMClient:
         return {"llm_calls": self.requests, "llm_cache_hits": self.cache_hits,
                 "llm_input_tokens": self.input_tokens, "llm_cached_tokens": self.cached_tokens,
                 "llm_output_tokens": self.output_tokens, "llm_cost_usd": round(self.cost_usd, 4),
-                "llm_unpriced_calls": self.unpriced_calls, "models_used": list(self.models_used)}
+                "llm_unpriced_calls": self.unpriced_calls, "models_used": list(self.models_used),
+                "llm_replayed_requests": self.replayed_requests,
+                "llm_replayed_input_tokens": self.replayed_input_tokens,
+                "llm_replayed_output_tokens": self.replayed_output_tokens,
+                "llm_replayed_cost_usd": round(self.replayed_cost_usd, 4),
+                "llm_replayed_from": self.replayed_from, "llm_replayed_to": self.replayed_to}
 
     async def _throttle(self, model_id: str) -> None:
         rpm = self.settings.requests_per_minute

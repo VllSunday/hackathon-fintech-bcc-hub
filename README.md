@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/img/banner.png" width="100%" alt="Specula — находит дефекты в ТЗ до первой строки кода · ISO/IEC/IEEE 29148 · IEEE 830">
+
 # Specula
 
 ### Агент, который до начала разработки находит дефекты в документе требований по ISO/IEC/IEEE 29148 · IEEE 830

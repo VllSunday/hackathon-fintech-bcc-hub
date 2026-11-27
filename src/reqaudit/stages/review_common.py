@@ -130,8 +130,8 @@ def fact_table_view(table: FactTable) -> str:
         for f in facts:
             cond = f" [условие: {f.condition}]" if f.condition else ""
             lines.append(f"  {f.id} {f.attribute} = {f.value}{cond} · [{f.block_id}] «{f.quote}»")
-    conflicts = "\n".join(f"- K{n} {c.kind}: {c.summary} (facts {', '.join(c.fact_ids)})"
-                          for n, c in enumerate(table.conflicts, 1)) or "- none"
+    conflicts = "\n".join(f"- {c.kind}: {c.summary} (facts {', '.join(c.fact_ids)})"
+                          for c in table.conflicts) or "- none"
     return ("<fact_table>\n" + "\n".join(lines) + "\n</fact_table>\n\n"
             f"<code_found_discrepancies>\n{conflicts}\n</code_found_discrepancies>")
 

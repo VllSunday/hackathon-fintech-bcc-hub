@@ -36,10 +36,14 @@ from reqaudit.models import (
 from reqaudit.stages.s3_facts import UNIT_DIMENSION, unit_sources
 
 UNIT_RU = {"kzt": "тенге", "tiyn": "тиынах", "rub": "рублях", "usd": "долларах"}
-# Any of these in the visible text means the document speaks about conversion.
+# Any of these in the visible text means the document speaks about converting money units.
+# A conversion word counts only next to a money unit in the same sentence: «пересчёт
+# расходов» in a process diagram means recounting the total, not converting tiyn to tenge.
+_MONEY = r"(?:тиын\w*|тенге|₸|копе\w*|рубл\w*|цент\w*|доллар\w*|kzt|tiyn)"
+_CONVERT = r"(?:пересч[её]т\w*|пересчит\w*|конверт\w*|перевод\w*|привод\w*)"
 _CONVERSION = re.compile(
-    r"пересч[её]т|пересчит|конверт|привод\w+ к (?:тиын|тенге|копе|рубл|цент)|"
-    r"умнож\w+ на|дел\w+ на 100|[×x*/]\s*100\b|100 (?:тиын|копе|цент)", re.IGNORECASE)
+    rf"{_CONVERT}[^.\n]{{0,60}}{_MONEY}|{_MONEY}[^.\n]{{0,60}}{_CONVERT}|"
+    r"умнож\w+ на 100|дел\w+ на 100|[×x*/]\s*100\b|100 (?:тиын|копе|цент)", re.IGNORECASE)
 
 
 def _money(facts: list[Fact]) -> list[Fact]:

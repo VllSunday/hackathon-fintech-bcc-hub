@@ -84,6 +84,17 @@ def test_a_conversion_mentioned_in_the_document_leaves_the_case_to_the_reviewer(
     assert unit_findings(table(*SPEND), doc.blocks, []) == []
     plain = read_text_document("Расходы сравниваются с порогом.\n", SourceFormat.MARKDOWN)
     assert len(unit_findings(table(*SPEND), plain.blocks, [])) == 1
+    stated = read_text_document("Сумма пересчитывается из тиынов в тенге.\n",
+                                SourceFormat.MARKDOWN)
+    assert unit_findings(table(*SPEND), stated.blocks, []) == []
+
+
+def test_recounting_a_total_is_not_a_unit_conversion():
+    """«Пересчёт расходов» in a process step is recounting, not converting units: it must
+    not silence the check."""
+    doc = read_text_document("Проведение покупки → пересчёт расходов → проверка порога.\n",
+                             SourceFormat.MARKDOWN)
+    assert len(unit_findings(table(*SPEND), doc.blocks, [])) == 1
 
 
 def test_finding_reaches_the_report_even_when_the_reviewer_reports_nothing(tmp_path):

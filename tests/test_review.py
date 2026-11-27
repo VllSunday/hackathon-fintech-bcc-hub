@@ -591,3 +591,31 @@ def test_values_reviewer_decides_on_every_discrepancy_code_found():
     assert "missing ['K2']" in check(answer(("K1", False)))
     assert "K1 is decided a defect" in check(answer(("K1", True), ("K2", False)))
     assert check(answer(("K1", False), ("K2", False))) is None
+
+
+def test_settings_and_computations_are_checklist_anchors():
+    """A setting with a default and a computed or compared quantity each need a checklist
+    item: what happens in each state, and whether the inputs a computation needs are kept."""
+    from types import SimpleNamespace
+
+    from reqaudit.criteria import Criterion
+    from reqaudit.models import Fact, FactTable
+    from reqaudit.stages.s5_candidates import coverage_anchors
+
+    def fact(fid, entity, attribute, value, block):
+        return Fact(id=fid, entity=entity, entity_label=entity, attribute=attribute,
+                    value=value, normalized=value, block_id=block, quote=value)
+
+    facts = FactTable(conflicts=[], facts=[
+        fact("F-1", "alert_enabled", "default", "выключено", "b1"),
+        fact("F-2", "monthly_total", "derived_from", "purchase_amount", "b2"),
+        fact("F-3", "monthly_total", "compared_with", "threshold", "b3"),
+        fact("F-4", "currency", "value", "тенге", "b4"),
+    ])
+    blocks = {b: SimpleNamespace(id=b, text="") for b in ("b1", "b2", "b3", "b4")}
+    cell = Cell(id="completeness", kind=CellKind.COMPLETENESS, title="t",
+                criteria=[Criterion.COMPLETE])
+    labels = [a.label for a in coverage_anchors(SimpleNamespace(facts=facts), cell, blocks)]
+    assert any(label.startswith("настройка: alert_enabled") for label in labels)
+    assert sum(label.startswith("вычисление: monthly_total") for label in labels) == 2
+    assert not any("currency" in label for label in labels)

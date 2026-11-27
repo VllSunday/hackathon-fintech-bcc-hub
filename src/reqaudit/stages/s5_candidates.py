@@ -180,10 +180,12 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
                 if skipped:
                     shown = "; ".join(f"{a.label} [{', '.join(a.blocks)}]" for a in skipped[:15])
                     complaints.append(
-                        "`checklist` must have an item for every limit, period and status under "
-                        "<limits_and_states>, with one of its blocks: its boundaries and what "
-                        "happens past them; for a status, how it is entered and left, including "
-                        f"when no one acts. Missing {len(skipped)}: {shown}")
+                        "`checklist` must have an item for every entry under "
+                        "<limits_and_states>, with one of its blocks: for a limit, its boundaries "
+                        "and what happens past them; for a status, how it is entered and left, "
+                        "including when no one acts; for a computation, whether every input it "
+                        "needs is kept and linked; for a setting, each value and switching. "
+                        f"Missing {len(skipped)}: {shown}")
         if isinstance(answer, ValuesAnswer) and discrepancies:
             decided = {d.ref: d for d in answer.discrepancies}
             undecided = [k for k in discrepancies if k not in decided]
@@ -245,11 +247,14 @@ class CoverageAnchor(BaseModel):
 
 
 _LIMIT_ATTRIBUTES = ("timing", "range", "count")
+_COMPUTATION_ATTRIBUTES = ("derived_from", "compared_with")
+_RELATION_RU = {"derived_from": "вычисляется из", "compared_with": "сравнивается с"}
 _MAX_ANCHORS = 80  # beyond this the list is shown but not enforced: one answer cannot hold it
 
 
 def coverage_anchors(state, cell: Cell, blocks: dict) -> list[CoverageAnchor]:
-    """Every limit or period (one per entity) and every status the fact table holds."""
+    """Every limit or period (one per entity), every status, every computation or comparison
+    and every setting with a default that the fact table holds."""
     if cell.kind != CellKind.COMPLETENESS or state.facts is None:
         return []
     limits: dict[str, list] = {}
@@ -262,6 +267,14 @@ def coverage_anchors(state, cell: Cell, blocks: dict) -> list[CoverageAnchor]:
         elif f.attribute == "status":
             anchors.append(CoverageAnchor(label=f"{f.entity_label}: «{f.value}»",
                                           blocks=[f.block_id]))
+        elif f.attribute in _COMPUTATION_ATTRIBUTES:
+            anchors.append(CoverageAnchor(
+                label=f"вычисление: {f.entity_label} — {_RELATION_RU[f.attribute]} {f.value}"[:120],
+                blocks=[f.block_id]))
+        elif f.attribute == "default":
+            anchors.append(CoverageAnchor(
+                label=f"настройка: {f.entity_label}, по умолчанию «{f.value}»"[:120],
+                blocks=[f.block_id]))
     for facts in limits.values():
         values = ", ".join(dict.fromkeys(f.value for f in facts))
         anchors.append(CoverageAnchor(label=f"{facts[0].entity_label}: {values}"[:120],
@@ -271,8 +284,9 @@ def coverage_anchors(state, cell: Cell, blocks: dict) -> list[CoverageAnchor]:
 
 def _anchors_view(anchors: list[CoverageAnchor]) -> str:
     lines = "\n".join(f"- {a.label} [{', '.join(a.blocks)}]" for a in anchors)
-    return ("<limits_and_states>\nLimits, periods and statuses the document states. The "
-            "checklist needs an item for each, with one of its blocks.\n" + lines
+    return ("<limits_and_states>\nLimits, periods, statuses, computations and settings the "
+            "document states. The checklist needs an item for each, with one of its blocks.\n"
+            + lines
             + "\n</limits_and_states>")
 
 

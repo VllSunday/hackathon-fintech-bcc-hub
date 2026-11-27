@@ -36,6 +36,13 @@ class Passport(BaseModel):
     llm_output_tokens: int = 0
     llm_cost_usd: float = 0.0
     llm_unpriced_calls: int = 0
+    # What the answers taken from the cache cost when a model first gave them, and when.
+    llm_replayed_requests: int = 0
+    llm_replayed_input_tokens: int = 0
+    llm_replayed_output_tokens: int = 0
+    llm_replayed_cost_usd: float = 0.0
+    llm_replayed_from: str | None = None
+    llm_replayed_to: str | None = None
     setup_notes: list[str] = Field(default_factory=list)
     prompts_fingerprint: str
     python: str = platform.python_version()

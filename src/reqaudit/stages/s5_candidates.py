@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from reqaudit import criteria, prompt_store
 from reqaudit.criteria import Criterion
@@ -19,6 +19,7 @@ from reqaudit.llm.checks import Check, combine, require_russian
 from reqaudit.llm.client import LLMError
 from reqaudit.markers import MarkerHit, find_markers
 from reqaudit.models import (
+    AcceptanceCheck,
     Cell,
     CellKind,
     CheckFailure,
@@ -97,6 +98,19 @@ class ChecklistAnswer(BaseModel):
     findings: list[CandidateDraft]
 
 
+class AcceptanceItem(ChecklistItem):
+    tests: list[str] = Field(default_factory=list, description="Report ids (R-…) of the "
+                             "requirements whose rules this acceptance criterion exercises.")
+
+
+class AcceptanceAnswer(ChecklistAnswer):
+    """The acceptance check only: its checklist also says what each criterion tests, so the
+    report can show which requirements have a criterion. The other checklist checks keep
+    the plain schema and send exactly the request they sent before."""
+
+    checklist: list[AcceptanceItem]
+
+
 # Checks whose defects are things missing from a list the document itself implies.
 _CHECKLIST_KINDS = {CellKind.PARENT_CHILD, CellKind.COMPLETENESS, CellKind.ACCEPTANCE}
 
@@ -110,6 +124,8 @@ class CandidateSet(BaseModel):
 
 
 def _answer_type(cell: Cell, markers: list[MarkerHit]) -> type[BaseModel]:
+    if cell.kind == CellKind.ACCEPTANCE:
+        return AcceptanceAnswer
     if cell.kind in _CHECKLIST_KINDS:
         return ChecklistAnswer
     if cell.kind != CellKind.REQUIREMENTS:
@@ -144,6 +160,11 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
                             "`violated` if the requirement meets the criterion")
         if isinstance(answer, ChecklistAnswer):
             complaints += _checklist_complaints(answer, blocks)
+            for n, item in enumerate(answer.checklist):
+                unknown = [u for u in getattr(item, "tests", []) if u not in unit_ids]
+                if unknown:
+                    complaints.append(f"checklist[{n}] ({item.item[:40]!r}): `tests` names "
+                                      f"unknown requirement ids {unknown}")
             if trace_units:
                 listed = {i.unit_id for i in answer.checklist}
                 missing = [u for u in trace_units if u not in listed]
@@ -404,6 +425,7 @@ class CandidatesStage(Stage):
         reviewed: dict[str, RequirementReview] = {}
         known_codes = {c.value for c in Criterion}
         errors: dict[str, LLMError] = {}
+        acceptance: list[AcceptanceCheck] = []
         for (cell, n), result in zip(owners, ctx.llm.many(requests), strict=True):
             if isinstance(result, LLMError):
                 errors.setdefault(cell.id, result)
@@ -415,6 +437,12 @@ class CandidatesStage(Stage):
                 ctx.trace.event("checklist", step=f"s5[{cell.id}]", items=[
                     {"unit": i.unit_id, "item": i.item, "block": i.block_id,
                      "status": i.status, "note": i.note} for i in result.checklist])
+            if isinstance(result, AcceptanceAnswer) and not acceptance:
+                acceptance = [AcceptanceCheck(
+                    unit_id=i.unit_id if i.unit_id in unit_ids else None, item=i.item.strip(),
+                    block_id=i.block_id, status=i.status, note=i.note.strip(),
+                    tests=[u for u in dict.fromkeys(i.tests) if u in unit_ids])
+                    for i in result.checklist if i.block_id in blocks]
             for r in getattr(result, "reviewed", []):
                 if r.unit_id in unit_ids and r.unit_id not in reviewed:
                     reviewed[r.unit_id] = RequirementReview(
@@ -434,6 +462,7 @@ class CandidatesStage(Stage):
 
         state.candidates = candidates
         state.reviews = [reviewed[u.id] for u in state.units if u.id in reviewed]
+        state.acceptance = acceptance
         state.check_failures.extend(failures)
         state.markers = [MarkerRecord(
             id=h.id, unit_id=h.unit_id, category=h.category_ru, word=h.word,

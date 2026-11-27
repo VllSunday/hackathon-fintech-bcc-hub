@@ -13,12 +13,14 @@ from dataclasses import dataclass, field
 
 from reqaudit.criteria import CRITERIA, TZ_TYPES, Criterion
 from reqaudit.models import (
+    AcceptanceCheck,
     Block,
     BlockSource,
     Finding,
     PartRole,
     RunState,
     Severity,
+    Unit,
     UnitKind,
 )
 
@@ -132,6 +134,31 @@ def remarks(state: RunState) -> list[Finding]:
 def rejected_by_gate(f: Finding) -> bool:
     """Dropped by the code gates (s7), not by the opponent and the arbiter (s6)."""
     return any(t.startswith("gate:") for t in f.trail)
+
+
+# --- acceptance coverage ----------------------------------------------------------------
+
+ACCEPTANCE_STATUS_RU = {"ok": "результат следует из правил",
+                        "conflict": "результат расходится с правилами",
+                        "gap": "критерий неполный", "n/a": "не оценивался"}
+# Requirements the acceptance check expects a criterion for; other kinds are listed only
+# when some criterion does test them.
+_NEEDS_CRITERION = frozenset({UnitKind.FUNCTIONAL, UnitKind.NON_FUNCTIONAL})
+_NEVER_LISTED = frozenset({UnitKind.ACCEPTANCE_CRITERION, UnitKind.API_CONTRACT})
+
+
+def acceptance_coverage(state: RunState) -> list[tuple[Unit, list[AcceptanceCheck]]]:
+    """Each requirement with the acceptance criteria that exercise its rules. Empty when
+    the acceptance check did not run or did not say what the criteria test: an empty table
+    would then read as «nothing is covered», which nobody checked."""
+    if not any(a.tests for a in state.acceptance):
+        return []
+    rows = []
+    for unit in state.units:
+        mine = [a for a in state.acceptance if unit.id in a.tests]
+        if unit.kind not in _NEVER_LISTED and (mine or unit.kind in _NEEDS_CRITERION):
+            rows.append((unit, mine))
+    return rows
 
 
 # --- the verdict ------------------------------------------------------------------------

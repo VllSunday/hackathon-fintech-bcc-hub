@@ -493,6 +493,18 @@ class RequirementReview(BaseModel):
     note: str = ""
 
 
+class AcceptanceCheck(BaseModel):
+    """One acceptance criterion as the acceptance check (s5) judged it: which requirements'
+    rules it exercises and whether its expected result follows from them."""
+
+    unit_id: str | None = None
+    item: str
+    block_id: str
+    status: str
+    tests: list[str] = Field(default_factory=list)
+    note: str = ""
+
+
 class RunState(BaseModel):
     """Everything the stages have produced so far. Serialised to runs/<id>/state.json."""
 
@@ -507,6 +519,7 @@ class RunState(BaseModel):
     candidates: list[Finding] = Field(default_factory=list)
     markers: list[MarkerRecord] = Field(default_factory=list)
     reviews: list[RequirementReview] = Field(default_factory=list)
+    acceptance: list[AcceptanceCheck] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
     rejected: list[Finding] = Field(default_factory=list)
     check_failures: list[CheckFailure] = Field(default_factory=list)

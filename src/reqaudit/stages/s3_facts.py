@@ -59,6 +59,11 @@ _SYNONYMS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 
+_QUOTE_MARKS = re.compile(r"[«»\"'`]")
+_LEADING_PREPOSITION = re.compile(r"^(?:в|по|на)\s+(?=\S)")
+_FROM_TO = re.compile(r"^от (\S+) до (\S+?)(?: включительно)?$")
+
+
 class FactDraft(BaseModel):
     entity: str
     entity_label: str
@@ -84,6 +89,11 @@ def normalize(value: str) -> str:
     v = re.sub(r"(?<=\d)[\s  ](?=\d{3}\b)", "", v)  # 1 000 000 -> 1000000
     v = re.sub(r"[‐-―−]", "-", v)
     v = v.strip(" .,;«»\"'`")
+    # The same value written another way is not a discrepancy: «0» или «1» / 0 или 1,
+    # в тенге / тенге, по Алматы / в Алматы, от 1000 до 1000000 / 1000-1000000.
+    v = _QUOTE_MARKS.sub("", v)
+    v = _LEADING_PREPOSITION.sub("", v)
+    v = _FROM_TO.sub(r"\1-\2", v)
     for pattern, canonical in _SYNONYMS:
         if pattern.match(v):
             return canonical
@@ -136,6 +146,27 @@ def _units(facts: list[Fact]) -> dict[str, set[str]]:
     return {e: resolve(e) for e in {f.entity for f in facts} | set(parents)}
 
 
+def unit_sources(entity: str, facts: list[Fact]) -> list[Fact]:
+    """The unit facts that give the entity its unit: its own, otherwise those of the nearest
+    quantities it is derived from. The same rule as `_units`, but with the facts kept, so a
+    finding can quote where each unit is stated."""
+    own: dict[str, list[Fact]] = defaultdict(list)
+    parents: dict[str, list[str]] = defaultdict(list)
+    for f in facts:
+        if f.attribute == "unit":
+            own[f.entity].append(f)
+        elif f.attribute == "derived_from":
+            parents[f.entity].append(f.value)
+
+    def resolve(name: str, seen: frozenset[str]) -> list[Fact]:
+        if own.get(name):
+            return own[name]
+        return [f for parent in parents.get(name, ()) if parent not in seen
+                for f in resolve(parent, seen | {name})]
+
+    return resolve(entity, frozenset())
+
+
 def _lineage(entity: str, facts: list[Fact]) -> set[str]:
     """The entity and everything it is derived from, directly or through other entities."""
     parents: dict[str, set[str]] = defaultdict(set)
@@ -152,16 +183,16 @@ def _lineage(entity: str, facts: list[Fact]) -> set[str]:
 
 
 # Units code recognises itself; any other unit is placed by the dimension the model named.
-_DIMENSION = {"kzt": "money", "tiyn": "money", "rub": "money", "usd": "money",
+UNIT_DIMENSION = {"kzt": "money", "tiyn": "money", "rub": "money", "usd": "money",
               "second": "time", "minute": "time", "hour": "time"}
-_DIMENSION_RU = {"money": "деньги", "time": "время", "data_size": "объём данных",
+DIMENSION_RU = {"money": "деньги", "time": "время", "data_size": "объём данных",
                  "percent": "доли и проценты", "length": "длина", "mass": "масса"}
 # Counting units («штук», «попыток») and unknown ones never form a mixed-units candidate.
 _NOT_COMPARED = {None, "", "count", "other"}
 
 
 def _dimension(f: Fact) -> str | None:
-    return _DIMENSION.get(f.normalized) or (f.dimension or "").strip().lower() or None
+    return UNIT_DIMENSION.get(f.normalized) or (f.dimension or "").strip().lower() or None
 
 
 def _label_key(label: str) -> str:
@@ -217,7 +248,7 @@ def find_conflicts(facts: list[Fact], table_of: dict[str, str] | None = None
                 kind="mixed_units", entity=group[0].entity, attribute="unit",
                 fact_ids=[f.id for f in group],
                 summary=f"В документе разные единицы измерения "
-                        f"({_DIMENSION_RU.get(dimension, dimension)}: "
+                        f"({DIMENSION_RU.get(dimension, dimension)}: "
                         f"{', '.join(units)}): {shown}"))
 
     units = _units(facts)

@@ -12,12 +12,14 @@ from reqaudit.models import (
 )
 from reqaudit.passport import Passport
 from reqaudit.report.views import (
+    ACCEPTANCE_STATUS_RU,
     DECISION_RU,
     KIND_RU,
     PART_ROLE_RU,
     SEVERITY_RU,
     SKIP_RU,
     STATUS_RU,
+    acceptance_coverage,
     by_task_type,
     criterion_ref,
     display_quote,
@@ -53,14 +55,33 @@ def _not_done(stage: str, state: RunState) -> str:
 def spend_line(p: Passport) -> str:
     """Tokens and catalogue cost of the run, in one line for the passport and the console."""
     if p.llm_calls == 0:
-        return "запросов к модели не было" + (
-            f" (все {p.llm_cache_hits} ответов из кэша)" if p.llm_cache_hits else "")
+        if not p.llm_cache_hits:
+            return "запросов к модели не было"
+        return (f"в этом прогоне запросов к модели не было: все {p.llm_cache_hits} ответов "
+                "взяты из кэша" + _replayed(p))
     line = (f"вход {p.llm_input_tokens / 1000:.1f} тыс. токенов (из кэша провайдера "
             f"{p.llm_cached_tokens / 1000:.1f} тыс.), выход {p.llm_output_tokens / 1000:.1f} "
             f"тыс.; стоимость ≈ ${p.llm_cost_usd:.2f} по справочнику цен genai-prices")
     if p.llm_unpriced_calls:
         line += f", без учёта {p.llm_unpriced_calls} вызовов моделей, которых нет в справочнике"
+    if p.llm_cache_hits:
+        line += f"; ещё {p.llm_cache_hits} ответов взяты из кэша" + _replayed(p)
     return line
+
+
+def _replayed(p: Passport) -> str:
+    """What the answers taken from the cache cost when the model first gave them: a report
+    replayed from the cache must still say that a model produced it, when and for how much."""
+    if not p.llm_replayed_requests:
+        return ""
+    when = p.llm_replayed_from or ""
+    if p.llm_replayed_to and p.llm_replayed_to != when:
+        when += f" — {p.llm_replayed_to}"
+    cost = f", ≈ ${p.llm_replayed_cost_usd:.2f}" if p.llm_replayed_cost_usd else ""
+    return (f". Первично эти ответы получены от модели {p.llm_replayed_requests} запросами"
+            + (f" ({when})" if when else "")
+            + f": вход {p.llm_replayed_input_tokens / 1000:.1f} тыс. токенов, выход "
+              f"{p.llm_replayed_output_tokens / 1000:.1f} тыс.{cost}")
 
 
 def _passport(p: Passport) -> str:
@@ -207,7 +228,9 @@ def _facts_note(state: RunState) -> str:
     if not table.conflicts:
         return head + "Расхождений между ними код не нашёл."
     lines = [head + "Расхождения, найденные кодом; решение по каждому принимал рецензент, "
-                    "подтверждённые вошли в находки ниже:", ""]
+                    "подтверждённые вошли в находки ниже. Исключение — денежные величины, "
+                    "которые документ сравнивает в разных единицах без правила пересчёта: "
+                    "такую находку выносит сам код.", ""]
     lines += [f"- {c.summary}" for c in table.conflicts]
     return "\n".join(lines)
 
@@ -222,6 +245,16 @@ def _per_requirement(state: RunState, confirmed: list[Finding],
             target.setdefault(u, []).append(f.id)
     by_id = {f.id: f for f in confirmed}
     reviews = {r.unit_id: r for r in state.reviews}
+    noted: dict[str, list[Finding]] = {}
+    for f in remarks(state):
+        if f.scope == Scope.REQUIREMENT:
+            for u in f.unit_ids:
+                noted.setdefault(u, []).append(f)
+    declined: dict[str, list[Finding]] = {}
+    for f in state.rejected:
+        if f.scope == Scope.REQUIREMENT:
+            for u in f.unit_ids:
+                declined.setdefault(u, []).append(f)
 
     def outcome(unit_id: str) -> str:
         ids = own.get(unit_id, [])
@@ -233,17 +266,70 @@ def _per_requirement(state: RunState, confirmed: list[Finding],
         r = reviews.get(unit_id)
         return ", ".join(criteria.label(c) for c in r.criteria) if r else "—"
 
+    def comment(unit_id: str) -> str:
+        """Why the row says what it says. The reviewer's own note is written before the
+        opponent and the gates, so it is shown only when nothing was raised against the
+        requirement; otherwise the row names what was confirmed, noted or declined."""
+        parts = [f"{i}: {by_id[i].title}" for i in own.get(unit_id, [])]
+        parts += [f"замечание {f.id} (в дефекты не входит): {f.title}"
+                  for f in noted.get(unit_id, [])]
+        parts += [f"кандидат «{f.title}» отклонён "
+                  + ("проверкой цитат" if rejected_by_gate(f) else "оппонентом и арбитром")
+                  for f in declined.get(unit_id, [])]
+        if parts:
+            return "; ".join(parts)
+        return reviews[unit_id].note if unit_id in reviews else "—"
+
+    # One list of criteria for every requirement is said once, not in every row.
+    lists = {checked(u.id) for u in state.units}
+    shared = lists.pop() if len(lists) == 1 else None
+    header = ["ID", "ID в документе", "Требование", "Проверено по критериям", "Нарушено",
+              "Участвует в дефектах набора", "Комментарий"]
     rows = [[u.id, u.doc_label or "—", u.summary, checked(u.id), outcome(u.id),
-             ", ".join(in_set.get(u.id, [])) or "—",
-             reviews[u.id].note if u.id in reviews else "—"] for u in state.units]
+             ", ".join(in_set.get(u.id, [])) or "—", comment(u.id)] for u in state.units]
+    if shared:
+        header.pop(3)
+        for row in rows:
+            row.pop(3)
     out = ["Каждое требование проверено отдельно по критериям ISO/IEC/IEEE 29148 (п. 5.2.5) и "
            "IEEE 830 (п. 4.3). «Нарушено» — только то, что подтвердили оппонент и проверка "
-           "цитат; комментарий рецензента объясняет решение.", "",
-           _table(["ID", "ID в документе", "Требование", "Проверено по критериям",
-                   "Нарушено", "Участвует в дефектах набора", "Комментарий рецензента"], rows)]
+           "цитат. Комментарий называет подтверждённые дефекты, замечания и кандидатов, "
+           "которых рецензент предложил, а оппонент или проверка цитат отклонили (они "
+           "перечислены в приложении); где ничего не предлагалось — вывод рецензента.", ""]
+    if shared:
+        out += [f"Проверено по критериям (каждое требование): {shared}.", ""]
+    out += [_table(header, rows)]
     details = [_finding(f, blocks) for f in confirmed if f.scope == Scope.REQUIREMENT]
     if details:
         out += ["", "### Замечания к отдельным требованиям", "", "\n\n".join(details)]
+    return "\n".join(out)
+
+
+def _acceptance(state: RunState, blocks: dict[str, Block]) -> str:
+    """Which requirements have an acceptance criterion: a reference table built by code
+    from what the acceptance check said each criterion tests. Empty when it said nothing."""
+    coverage = acceptance_coverage(state)
+    if not coverage:
+        return ""
+
+    def criterion(a) -> str:
+        name = a.unit_id or place([a.block_id], blocks)
+        return f"{name} — {ACCEPTANCE_STATUS_RU.get(a.status, a.status)}"
+
+    rows = [[u.id, u.doc_label or "—", u.summary,
+             "; ".join(criterion(a) for a in mine) or "нет"] for u, mine in coverage]
+    bare = [u for u, mine in coverage if not mine]
+    out = ["### Покрытие требований критериями приёмки", "",
+           "Справочная таблица: рецензент проверки «Критерии приёмки» указал, правила каких "
+           "требований проверяет каждый критерий, строки собрал код. Требование без критерия "
+           "само по себе дефектом не считается: находку о непокрытом правиле выносит рецензент "
+           "и проверяет оппонент.", "",
+           _table(["ID", "ID в документе", "Требование", "Критерии приёмки"], rows), ""]
+    if bare:
+        listed = ", ".join(u.id + (f" ({u.doc_label})" if u.doc_label else "") for u in bare)
+        out += [f"Без критерия приёмки: {len(bare)} из {len(coverage)} — {listed}.", ""]
+    else:
+        out += ["У каждого из перечисленных требований есть критерий приёмки.", ""]
     return "\n".join(out)
 
 
@@ -343,6 +429,8 @@ def render_markdown(p: Passport, state: RunState, plan: list[tuple[str, str]]) -
     out += ["## Проверка всего набора требований", ""]
     if checks_ran:
         out += [_facts_note(state), ""]
+        if coverage := _acceptance(state, blocks):
+            out.append(coverage)
         out.append("\n\n".join(_finding(f, blocks) for f in set_level)
                    or "Дефектов набора требований не найдено.")
     else:

@@ -1,6 +1,6 @@
 [project]
 name = "reqaudit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Агент проверки качества требований по ISO/IEC/IEEE 29148 и IEEE 830"
 readme = "README.md"
 requires-python = ">=3.11"

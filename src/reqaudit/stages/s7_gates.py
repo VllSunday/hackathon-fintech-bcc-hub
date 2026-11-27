@@ -11,13 +11,16 @@ The same checks already ran before the opponent (s6), so the opponent was not pa
 judge unfound quotes and duplicates; here they run once more on what the review kept.
 A conflict with one side left is dropped only here, after the reviewer and the opponent
 had the chance to quote the other side or to file it as a gap.
-- defects of the file itself found while reading (hidden text, broken markup) are added.
+- defects of the file itself found while reading (hidden text, broken markup) are added;
+- the same API field with two data types in two parameter tables is added (contract.py):
+  a fact of the text that the opponent must not argue away, so it never goes to the model.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel
 
+from reqaudit.contract import contract_findings
 from reqaudit.criteria import Criterion
 from reqaudit.models import Evidence, Finding, FindingStatus, Severity, scope_of
 from reqaudit.stages.base import RunContext, Stage
@@ -66,7 +69,11 @@ class GatesStage(Stage):
                   for f in screened.passed]
         rejected, stats = screened.rejected, {"in": len(state.findings), **screened.stats}
 
-        merged, stats["merged"] = merge_duplicates(passed)
+        # Code findings join before the merge: a reviewer who quoted the same two rows
+        # filed the same defect, and the code's version (with its fact) is kept.
+        contract = contract_findings([b for b in document.blocks if not b.hidden], state.units)
+        stats["contract"] = len(contract)
+        merged, stats["merged"] = merge_duplicates([*contract, *passed])
         merged.extend(self._file_defects(ctx))
         merged.sort(key=lambda f: (f.severity.rank,
                                    min(order.get(e.block_id, 10**6) for e in f.evidence)))

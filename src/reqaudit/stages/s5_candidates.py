@@ -80,6 +80,25 @@ class SetAnswer(BaseModel):
     findings: list[CandidateDraft]
 
 
+class DiscrepancyDecision(BaseModel):
+    ref: str  # K1, K2… as listed under <code_found_discrepancies>
+    defect: bool
+    reason: str  # in Russian: why it is or is not a defect
+
+
+class ValuesAnswer(SetAnswer):
+    discrepancies: list[DiscrepancyDecision]
+
+
+def discrepancy_blocks(state) -> dict[str, set[str]]:
+    """K-ref of each discrepancy code found -> blocks of the facts it lines up."""
+    if state.facts is None:
+        return {}
+    block_of = {f.id: f.block_id for f in state.facts.facts}
+    return {f"K{n}": {block_of[i] for i in c.fact_ids if i in block_of}
+            for n, c in enumerate(state.facts.conflicts, 1)}
+
+
 class ChecklistItem(BaseModel):
     unit_id: str | None = None  # the requirement the item traces, when it is one
     item: str  # what is checked, in Russian: an operation, a rule, a system and its failure
@@ -112,6 +131,8 @@ class CandidateSet(BaseModel):
 def _answer_type(cell: Cell, markers: list[MarkerHit]) -> type[BaseModel]:
     if cell.kind in _CHECKLIST_KINDS:
         return ChecklistAnswer
+    if cell.kind == CellKind.VALUES:
+        return ValuesAnswer
     if cell.kind != CellKind.REQUIREMENTS:
         return SetAnswer
     return RequirementsWithMarkersAnswer if markers else RequirementsAnswer
@@ -120,7 +141,8 @@ def _answer_type(cell: Cell, markers: list[MarkerHit]) -> type[BaseModel]:
 def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
                markers: list[MarkerHit] | None = None,
                trace_units: list[str] | None = None,
-               anchors: list[CoverageAnchor] | None = None) -> Check:
+               anchors: list[CoverageAnchor] | None = None,
+               discrepancies: dict[str, set[str]] | None = None) -> Check:
     # A cell names the criteria it is about, but a defect found on the way is filed under the
     # criterion that fits it, whichever that is: duplicates across cells are merged before
     # the opponent, and sending the answer back for a «foreign» criterion only cost a call.
@@ -162,6 +184,18 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
                         "<limits_and_states>, with one of its blocks: its boundaries and what "
                         "happens past them; for a status, how it is entered and left, including "
                         f"when no one acts. Missing {len(skipped)}: {shown}")
+        if isinstance(answer, ValuesAnswer) and discrepancies:
+            decided = {d.ref: d for d in answer.discrepancies}
+            undecided = [k for k in discrepancies if k not in decided]
+            if undecided:
+                complaints.append("`discrepancies` must decide on every discrepancy under "
+                                  f"<code_found_discrepancies>; missing {undecided}")
+            quoted = {e.block_id for f in answer.findings for e in f.evidence}
+            for ref, d in decided.items():
+                if d.defect and ref in discrepancies and not discrepancies[ref] & quoted:
+                    complaints.append(f"{ref} is decided a defect, but no finding quotes the "
+                                      "statements it lines up: report it, or decide it is not "
+                                      "a defect and say why")
         if isinstance(answer, RequirementsWithMarkersAnswer):
             decided = {m.marker_id: m for m in answer.markers}
             undecided = [m.id for m in markers if m.id not in decided]
@@ -200,7 +234,7 @@ def cell_check(cell: Cell, unit_ids: set[str], blocks: dict,
                 + (f"\n- and {more} more of the same kind" if more > 0 else ""))
 
     return combine(check, require_russian(*_RUSSIAN_FIELDS, "markers.reason",
-                                          "checklist.note"))
+                                          "checklist.note", "discrepancies.reason"))
 
 
 class CoverageAnchor(BaseModel):
@@ -393,7 +427,8 @@ class CandidatesStage(Stage):
                     output_type=_answer_type(cell, mine),
                     prompt_ids=ids, check=cell_check(
                         cell, unit_ids, blocks, mine, _main_units(state, cell),
-                        coverage_anchors(state, cell, blocks))))
+                        coverage_anchors(state, cell, blocks),
+                        discrepancy_blocks(state) if cell.kind == CellKind.VALUES else None)))
                 owners.append((cell, n))
 
         candidates: list[Finding] = []
@@ -415,6 +450,9 @@ class CandidatesStage(Stage):
                 ctx.trace.event("checklist", step=f"s5[{cell.id}]", items=[
                     {"unit": i.unit_id, "item": i.item, "block": i.block_id,
                      "status": i.status, "note": i.note} for i in result.checklist])
+            if isinstance(result, ValuesAnswer):
+                ctx.trace.event("discrepancies", step=f"s5[{cell.id}]", decisions=[
+                    d.model_dump(mode="json") for d in result.discrepancies])
             for r in getattr(result, "reviewed", []):
                 if r.unit_id in unit_ids and r.unit_id not in reviewed:
                     reviewed[r.unit_id] = RequirementReview(
